@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { Auth, sendPasswordResetEmail } from '@angular/fire/auth';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
@@ -13,7 +13,10 @@ export class ForgotPasswordComponent {
 
   isSending = false;
 
-  constructor(private auth: Auth) {}
+  constructor(
+    private auth: Auth,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   async resetPassword(event: Event) {
     event.preventDefault();
@@ -27,20 +30,36 @@ export class ForgotPasswordComponent {
 
     const email = (form.querySelector('#email') as HTMLInputElement).value.trim();
 
+
     this.isSending = true;
+    this.cdr.detectChanges();
 
     try {
       await sendPasswordResetEmail(this.auth, email);
-      alert('Password reset link sent. Please check your email.');
-      form.reset();
+
+  
+      this.isSending = false;
+      this.cdr.detectChanges();
+
+      setTimeout(() => {
+        alert('Password reset link sent. Please check your email.');
+        form.reset();
+      }, 100);
+
     } catch (err: any) {
+
+    
+      this.isSending = false;
+      this.cdr.detectChanges();
+
       let message = 'Failed to send reset email.';
       if (err.code === 'auth/user-not-found') {
         message = 'No account found with this email.';
       }
-      alert(message);
-    } finally {
-      this.isSending = false;
+
+      setTimeout(() => {
+        alert(message);
+      }, 100);
     }
   }
 }
