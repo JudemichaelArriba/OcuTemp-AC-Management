@@ -50,6 +50,7 @@ export class LoginComponent implements OnInit {
 
     try {
       await signInWithEmailAndPassword(this.auth, email, password);
+
       this.loginAttempts = 0;
       
       this.isLoggingIn = false;
@@ -57,7 +58,7 @@ export class LoginComponent implements OnInit {
       
       setTimeout(() => {
         alert('Login successful!');
-   
+         this.router.navigate(['/app']);
       }, 100);
       
     } catch (err: any) {
