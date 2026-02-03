@@ -2,12 +2,14 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Auth, signInWithEmailAndPassword } from '@angular/fire/auth';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
+
 
 @Component({
   selector: 'app-login',
   templateUrl: './login.html',
   standalone: true,
-  imports: [CommonModule]
+  imports: [CommonModule, RouterModule]
 })
 export class LoginComponent implements OnInit {
 
