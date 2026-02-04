@@ -5,7 +5,7 @@ import { ForgotPasswordComponent } from './pages/forgot-password/forgot-password
 import { Dashboard } from './pages/dashboard/dashboard';
 import { LayoutComponent } from './layout/layout/layout';
 import { AuthGuard } from './guards/auth.guard';
-
+import { RoomManagement } from './pages/room-management/room-management';
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
@@ -17,7 +17,9 @@ export const routes: Routes = [
     canActivate: [AuthGuard],
     children: [
         { path: 'dashboard', component: Dashboard },
-      { path: '', redirectTo: 'dashboard', pathMatch: 'full' } 
+        { path: 'room-management', component: RoomManagement },
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
+      
     ]
   },
 
