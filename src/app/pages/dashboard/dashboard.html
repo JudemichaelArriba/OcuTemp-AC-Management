@@ -1,0 +1,231 @@
+<main class="flex-1 flex flex-col font-sans min-h-0">
+  
+
+  <header class="px-4 py-4">
+    <div class="max-w-[1800px] mx-auto">
+      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div>
+          <h2 class="text-xl font-black tracking-tight text-gray-900">Room Status Dashboard</h2>
+          <p class="text-xs text-gray-600 font-medium mt-1">Live sensor data from active building zones</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-3 text-xs font-bold text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+            <span class="flex items-center gap-1.5">
+              <span class="size-2 rounded-full bg-green-500 shadow-lg shadow-green-500/30"></span> 
+              Occupied
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="size-2 rounded-full bg-gray-300"></span> 
+              Vacant
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+
+  <div class="px-4 pb-3">
+    <div class="max-w-[1800px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3">
+      
+  
+      <div class="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-300 shadow-sm transition-all">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <p class="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">Energy Hours</p>
+            <div class="flex items-baseline gap-1.5">
+              <span class="text-xl font-black text-gray-900">1,240</span>
+              <span class="text-xs font-bold text-gray-500">hrs</span>
+            </div>
+          </div>
+          <div class="bg-blue-50 p-2 rounded-lg">
+            <span class="material-symbols-outlined text-blue-600 text-lg">bolt</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 pt-2 mt-2 border-t border-gray-100">
+          <span class="inline-flex items-center gap-0.5 text-emerald-600 text-[10px] font-black bg-emerald-50 px-1.5 py-0.5 rounded">
+            <span class="material-symbols-outlined text-xs">trending_down</span> 
+            12%
+          </span>
+          <span class="text-[10px] font-semibold text-gray-500">vs last month</span>
+        </div>
+      </div>
+
+   
+      <div class="bg-white p-4 rounded-xl border border-gray-200 hover:border-orange-300 shadow-sm transition-all">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <p class="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">Avg Temp</p>
+            <div class="flex items-baseline gap-1">
+              <span class="text-xl font-black text-gray-900">22.8°C</span>
+            </div>
+          </div>
+          <div class="bg-orange-50 p-2 rounded-lg">
+            <span class="material-symbols-outlined text-orange-600 text-lg">device_thermostat</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 pt-2 mt-2 border-t border-gray-100">
+          <span class="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+            <span class="size-1 rounded-full bg-emerald-500"></span>
+            OPTIMAL
+          </span>
+          <span class="text-[10px] font-semibold text-gray-500">22-24°C</span>
+        </div>
+      </div>
+
+    
+      <div class="bg-white p-4 rounded-xl border border-gray-200 hover:border-emerald-300 shadow-sm transition-all">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <p class="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">Active Rooms</p>
+            <div class="flex items-baseline gap-1.5">
+              <span class="text-xl font-black text-gray-900">18</span>
+              <span class="text-sm font-bold text-gray-400">/24</span>
+            </div>
+          </div>
+          <div class="bg-emerald-50 p-2 rounded-lg">
+            <span class="material-symbols-outlined text-emerald-600 text-lg">meeting_room</span>
+          </div>
+        </div>
+        <div class="pt-2 mt-2 border-t border-gray-100">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] font-bold text-gray-500">Usage</span>
+            <span class="text-[10px] font-black text-gray-900">75%</span>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-full rounded-full" style="width: 75%"></div>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-300 shadow-sm transition-all">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <p class="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-1">System Health</p>
+            <div class="flex items-baseline gap-1">
+              <span class="text-xl font-black text-gray-900">99.2%</span>
+            </div>
+          </div>
+          <div class="bg-blue-50 p-2 rounded-lg">
+            <span class="material-symbols-outlined text-blue-600 text-lg">check_circle</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 pt-2 mt-2 border-t border-gray-100">
+          <span class="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+            <span class="size-1 rounded-full bg-emerald-500 status-pulse"></span>
+            ALL NORMAL
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <div class="px-4 pb-3 flex-1 min-h-0">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
+          <h3 class="font-black text-gray-900 text-base">Real-time Room Status</h3>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+    
+          <div class="border border-gray-200 rounded-xl p-3 flex flex-col gap-2 bg-white hover:border-blue-400 hover:shadow-sm transition-all cursor-pointer">
+            <div class="flex justify-between items-start">
+              <p class="text-[10px] font-black uppercase text-gray-600 tracking-wider">Room 101</p>
+              <span class="size-2 rounded-full bg-green-500 shadow-lg shadow-green-500/40 status-pulse"></span>
+            </div>
+            <div class="flex items-center justify-between my-1">
+              <span class="text-2xl font-black text-gray-900 tracking-tight">22.0°</span>
+              <div class="bg-blue-100 p-1.5 rounded-lg">
+                <span class="material-symbols-outlined text-blue-600 text-lg">ac_unit</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+              <div class="flex flex-col">
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Humidity</span>
+                <span class="text-xs font-black text-gray-700">45%</span>
+              </div>
+              <div class="flex flex-col items-end">
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Mode</span>
+                <span class="text-xs font-black text-blue-600">Cooling</span>
+              </div>
+            </div>
+          </div>
+
+
+          <div class="border border-gray-200 rounded-xl p-3 flex flex-col gap-2 bg-white hover:border-blue-400 hover:shadow-sm transition-all cursor-pointer">
+            <div class="flex justify-between items-start">
+              <p class="text-[10px] font-black uppercase text-gray-600 tracking-wider">Room 102</p>
+              <span class="size-2 rounded-full bg-gray-300"></span>
+            </div>
+            <div class="flex items-center justify-between my-1">
+              <span class="text-2xl font-black text-gray-900 tracking-tight">23.5°</span>
+              <div class="bg-gray-100 p-1.5 rounded-lg">
+                <span class="material-symbols-outlined text-gray-400 text-lg">ac_unit</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+              <div class="flex flex-col">
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Humidity</span>
+                <span class="text-xs font-black text-gray-700">48%</span>
+              </div>
+              <div class="flex flex-col items-end">
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Mode</span>
+                <span class="text-xs font-black text-gray-500">Idle</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="px-4 pb-4">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
+          <h3 class="font-black text-slate-900 text-sm flex items-center gap-2">
+      
+            Recent ML Adjustments
+          </h3>
+          <span class="inline-flex items-center gap-1 text-[9px] font-black text-blue-600 ">
+            See more
+          </span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="flex items-start gap-3 p-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg border border-amber-200">
+            <div class="bg-amber-500 p-1.5 rounded-lg shadow-sm shrink-0">
+              <span class="material-symbols-outlined text-white text-base">trending_up</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-bold text-slate-900 mb-0.5">Room 101: Cooling increased due to 15+ occupants</p>
+              <p class="text-[10px] text-slate-600 font-semibold flex items-center gap-1.5">
+                <span>2 minutes ago</span>
+                <span class="text-slate-400">•</span>
+                <span class="text-amber-700">Automated</span>
+              </p>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 p-3 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg border border-emerald-200">
+            <div class="bg-emerald-500 p-1.5 rounded-lg shadow-sm shrink-0">
+              <span class="material-symbols-outlined text-white text-base">eco</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-bold text-slate-900 mb-0.5">Conf. Room B: Switched to Eco-Mode (Vacant &gt; 30m)</p>
+              <p class="text-[10px] text-slate-600 font-semibold flex items-center gap-1.5">
+                <span>15 minutes ago</span>
+                <span class="text-slate-400">•</span>
+                <span class="text-emerald-700">Policy</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>

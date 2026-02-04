@@ -2,7 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { LoginComponent } from './pages/login/login';
 import { ForgotPasswordComponent } from './pages/forgot-password/forgot-password';
-
+import { Dashboard } from './pages/dashboard/dashboard';
 import { LayoutComponent } from './layout/layout/layout';
 import { AuthGuard } from './guards/auth.guard';
 
@@ -16,7 +16,8 @@ export const routes: Routes = [
     component: LayoutComponent, 
     canActivate: [AuthGuard],
     children: [
-      // future child routes go here
+        { path: 'dashboard', component: Dashboard },
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' } 
     ]
   },
 
