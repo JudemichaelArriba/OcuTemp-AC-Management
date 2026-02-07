@@ -1,0 +1,198 @@
+<main class="flex-1 flex flex-col font-sans min-h-0 bg-gradient-to-br from-slate-50 to-blue-50/30">
+
+  <header class="px-6 py-2">
+    <div class="max-w-[1800px] mx-auto">
+      <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 px-6 py-5 border border-slate-200/60 bg-white/90 backdrop-blur-xl rounded-xl shadow-sm">
+        <div>
+          <h2 class="text-xl font-black tracking-tight text-slate-900">User Management</h2>
+          <p class="text-xs text-slate-600 font-medium mt-1 flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-blue-600 text-[16px]">group</span>
+            Manage system administrators and technical staff
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="#user-modal" class="flex items-center gap-2 bg-gradient-to-br from-blue-600 to-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 duration-200">
+            <span class="material-symbols-outlined text-[18px]">add</span> Add New User
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="px-6 py-2">
+    <div class="max-w-[1800px] mx-auto">
+      <div class="flex items-center gap-3">
+        <div class="relative flex-1 max-w-md">
+          <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+          <input type="text" placeholder="Search by name, email or role..."
+            class="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 shadow-sm transition-all">
+        </div>
+        <button class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+          <span class="material-symbols-outlined text-[18px]">filter_list</span>
+          Filter
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="px-6 pb-6 flex-1 overflow-y-auto">
+    <div class="max-w-[1800px] mx-auto bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <table class="w-full text-left border-collapse">
+        <thead class="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
+          <tr>
+            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">User Name</th>
+            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Role</th>
+            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Email</th>
+            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Last Login</th>
+            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
+            <td class="px-6 py-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm uppercase shadow-lg shadow-blue-500/30">AJ</div>
+                <span class="text-sm font-bold text-slate-900">Alex Johnson</span>
+              </div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="inline-flex items-center px-3 py-1 rounded-lg text-[11px] font-bold bg-blue-100 text-blue-700 uppercase">Staff</span>
+            </td>
+            <td class="px-6 py-4 text-sm text-slate-600 font-medium">alex.j@ocutemp.com</td>
+            <td class="px-6 py-4">
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-sm text-slate-500 font-medium">2 mins ago</span>
+              </div>
+            </td>
+            <td class="px-6 py-4 text-right">
+              <div class="flex justify-end gap-2">
+                <button class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                  <span class="material-symbols-outlined text-[20px]">edit</span>
+                </button>
+                <button class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                  <span class="material-symbols-outlined text-[20px]">delete</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+
+          <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
+            <td class="px-6 py-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-bold text-sm uppercase shadow-lg shadow-emerald-500/30">SR</div>
+                <span class="text-sm font-bold text-slate-900">Sarah Richardson</span>
+              </div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="inline-flex items-center px-3 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-700 uppercase">Staff</span>
+            </td>
+            <td class="px-6 py-4 text-sm text-slate-600 font-medium">s.richardson@ocutemp.com</td>
+            <td class="px-6 py-4 text-sm text-slate-500 font-medium">3 hours ago</td>
+            <td class="px-6 py-4 text-right">
+              <div class="flex justify-end gap-2">
+                <button class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                  <span class="material-symbols-outlined text-[20px]">edit</span>
+                </button>
+                <button class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                  <span class="material-symbols-outlined text-[20px]">delete</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+
+          <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
+            <td class="px-6 py-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm uppercase shadow-lg shadow-purple-500/30">MK</div>
+                <span class="text-sm font-bold text-slate-900">Michael Kim</span>
+              </div>
+            </td>
+            <td class="px-6 py-4">
+              <span class="inline-flex items-center px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-100 text-amber-700 uppercase">Staff</span>
+            </td>
+            <td class="px-6 py-4 text-sm text-slate-600 font-medium">m.kim@ocutemp.com</td>
+            <td class="px-6 py-4 text-sm text-slate-500 font-medium">1 day ago</td>
+            <td class="px-6 py-4 text-right">
+              <div class="flex justify-end gap-2">
+                <button class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                  <span class="material-symbols-outlined text-[20px]">edit</span>
+                </button>
+                <button class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+                  <span class="material-symbols-outlined text-[20px]">delete</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100/50 border-t border-slate-200 flex items-center justify-between">
+        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Showing 3 of 24 users</p>
+        <div class="flex gap-2">
+          <button class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all shadow-sm">
+            <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+          </button>
+          <button class="w-9 h-9 flex items-center justify-center border border-blue-600 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xs font-bold shadow-lg shadow-blue-500/30">1</button>
+          <button class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 text-xs font-bold transition-all shadow-sm">2</button>
+          <button class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 text-xs font-bold transition-all shadow-sm">3</button>
+          <button class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all shadow-sm">
+            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hidden fixed inset-0 z-50 overflow-hidden bg-slate-900/60 backdrop-blur-sm flex justify-end" id="user-modal">
+    <a class="absolute inset-0 cursor-default" href="#"></a>
+    <div class="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div class="p-8 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white rounded-t-xl">
+        <div>
+          <h3 class="text-xl font-black text-slate-900">Add New User</h3>
+          <p class="text-sm text-slate-500 font-medium mt-1">Create a new staff account</p>
+        </div>
+        <a href="#" class="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all">
+          <span class="material-symbols-outlined">close</span>
+        </a>
+      </div>
+      <div class="flex-1 overflow-y-auto p-8">
+        <form class="space-y-6">
+          <div>
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">Full Name</label>
+            <input type="text" placeholder="e.g. John Doe" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
+          </div>
+          <div>
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">Email Address</label>
+            <input type="email" placeholder="john.doe@ocutemp.com" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
+          </div>
+          <div>
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">System Role</label>
+            <select class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
+              <option value="">Select a role</option>
+              <option value="staff">Staff</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">Password</label>
+            <div class="relative">
+              <input type="password" placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
+              <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                <span class="material-symbols-outlined text-xl">visibility</span>
+              </button>
+            </div>
+            <p class="mt-2.5 text-[11px] text-slate-500 flex items-start gap-1.5">
+              <span class="material-symbols-outlined text-[14px] text-slate-400 mt-0.5">info</span>
+              Minimum 8 characters with at least one number and special symbol.
+            </p>
+          </div>
+        </form>
+      </div>
+      <div class="p-8 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white flex gap-4 rounded-b-xl">
+        <a href="#" class="flex-1 px-6 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 text-center hover:bg-white hover:border-slate-300 transition-all shadow-sm">Cancel</a>
+        <button class="flex-1 px-6 py-3 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl text-sm font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30">Save User</button>
+      </div>
+    </div>
+  </div>
+
+</main>

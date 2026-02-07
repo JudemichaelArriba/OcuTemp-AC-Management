@@ -29,10 +29,7 @@
       <span class="text-[13px] font-semibold" routerLinkActive="!font-bold">
         Dashboard
       </span>
-      <span
-        class="ml-auto w-2 h-2 rounded-full bg-blue-600 animate-pulse hidden"
-        routerLinkActive="!block"
-      ></span>
+      <span class="ml-auto w-2 h-2 rounded-full bg-blue-600 animate-pulse hidden" routerLinkActive="!block"></span>
       <span
         class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
         routerLinkActive="!block"
@@ -81,11 +78,34 @@
       ></span>
     </a>
 
+ 
+    <a
+      class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
+            hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
+            hover:text-blue-700 rounded-lg transition-all group"
+      [routerLink]="['/app/user-management']"
+      routerLinkActive="bg-gradient-to-r from-blue-50 to-blue-100/50 !text-blue-700 font-medium"
+    >
+      <span class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform">
+        group
+      </span>
+      <span class="text-[13px] font-semibold" routerLinkActive="!font-bold">
+        User Management
+      </span>
+      <span class="ml-auto w-2 h-2 rounded-full bg-blue-600 animate-pulse hidden" routerLinkActive="!block"></span>
+      <span
+        class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
+        routerLinkActive="!block"
+      ></span>
+    </a>
+
+
+   
     <div class="pt-3 pb-2">
       <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent"></div>
     </div>
 
-
+ 
     <a
       class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
              hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
@@ -108,7 +128,10 @@
   </nav>
 
   <div class="border-t border-gray-100 p-4">
-    <div class="flex items-center gap-3 p-2.5 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50 rounded-lg cursor-pointer transition-transform hover:translate-x-1">
+    <div
+      class="flex items-center gap-3 p-2.5 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
+             rounded-lg cursor-pointer transition-transform hover:translate-x-1"
+    >
       <div class="relative">
         <div
           class="w-9 h-9 rounded-full border-2 border-blue-100 bg-cover bg-center"

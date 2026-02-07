@@ -7,6 +7,7 @@ import { LayoutComponent } from './layout/layout/layout';
 import { AuthGuard } from './guards/auth.guard';
 import { RoomManagement } from './pages/room-management/room-management';
 import { EnergyReports } from './pages/energy-reports/energy-reports';
+import { UserManagement } from './pages/user-management/user-management';
 import {  } from './pages/room-management/room-management';
 
 
@@ -24,6 +25,7 @@ export const routes: Routes = [
         { path: 'dashboard', component: Dashboard },
         { path: 'room-management', component: RoomManagement },
           { path: 'energy-reports', component: EnergyReports },
+            { path: 'user-management', component: UserManagement },
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
       
     ]
