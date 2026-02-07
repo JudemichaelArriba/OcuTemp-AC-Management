@@ -1,0 +1,198 @@
+<main class="flex-1 flex flex-col font-sans min-h-0 bg-gradient-to-br from-slate-50 to-blue-50/30 overflow-hidden">
+
+  <header class="px-6 pt-4 shrink-0">
+    <div class="max-w-[1600px] mx-auto">
+      <div class="px-6 py-3.5 flex justify-between items-center border border-slate-200/60 bg-white/90 backdrop-blur-xl shadow-sm rounded-xl">
+        <div>
+          <h2 class="text-lg font-black tracking-tight text-slate-900">
+            Monthly Energy Consumption
+          </h2>
+          <p class="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1.5">
+            Facility-wide AC usage insights
+          </p>
+        </div>
+
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-white
+                 bg-gradient-to-br from-blue-600 to-blue-700
+                 hover:from-blue-700 hover:to-blue-800
+                 shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30
+                 transition-all duration-200 hover:-translate-y-0.5"
+        >
+          <span class="material-symbols-outlined text-[16px]">download</span>
+          Export
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex-1 overflow-y-auto custom-scrollbar px-6 py-4">
+    <div class="max-w-[1600px] mx-auto space-y-4">
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-400 shadow-sm transition-all duration-200">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <p class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                Total Runtime
+              </p>
+              <p class="text-2xl font-black text-slate-900 tracking-tight">
+                4,120<span class="text-sm text-slate-600 font-semibold ml-1">hrs</span>
+              </p>
+            </div>
+            <div class="bg-gradient-to-br from-blue-500 to-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
+              <span class="material-symbols-outlined text-white text-[20px]">timer</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pt-2.5 border-t border-slate-100">
+            <span class="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+              <span class="material-symbols-outlined text-[14px]">trending_down</span>
+              8.4%
+            </span>
+            <span class="text-[10px] text-slate-500">vs last month</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 hover:border-amber-400 shadow-sm transition-all duration-200">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <p class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                Energy Consumed
+              </p>
+              <p class="text-2xl font-black text-slate-900 tracking-tight">
+                1,240<span class="text-sm text-slate-600 font-semibold ml-1">kWh</span>
+              </p>
+            </div>
+            <div class="bg-gradient-to-br from-amber-500 to-amber-600 p-2 rounded-lg shadow-lg shadow-amber-500/20">
+              <span class="material-symbols-outlined text-white text-[20px]">bolt</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pt-2.5 border-t border-slate-100">
+            <span class="text-[10px] text-slate-500">≈ $186 estimated cost</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 hover:border-emerald-400 shadow-sm transition-all duration-200">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <p class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                Peak Usage Time
+              </p>
+              <p class="text-2xl font-black text-slate-900 tracking-tight">2–4 PM</p>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 p-2 rounded-lg shadow-lg shadow-emerald-500/20">
+              <span class="material-symbols-outlined text-white text-[20px]">schedule</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pt-2.5 border-t border-slate-100">
+            <span class="text-[10px] text-slate-500">Highest demand period</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-300 shadow-sm transition-all duration-200">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-900 mb-0.5">Top Rooms by Runtime</h3>
+            <p class="text-[10px] text-slate-500">Highest AC runtime this month</p>
+          </div>
+
+          <div class="flex items-end justify-between gap-4 h-[180px] px-2">
+            <div class="flex-1 flex flex-col items-center gap-1.5 group">
+              <div class="relative w-full h-[90%] bg-gradient-to-t from-blue-600 to-blue-500 rounded-t-lg shadow-lg group-hover:shadow-xl transition-all duration-200 group-hover:from-blue-700 group-hover:to-blue-600">
+                <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-2.5 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                  720 hours
+                </div>
+              </div>
+              <div class="text-center">
+                <span class="text-[11px] font-bold text-slate-900 block">Server</span>
+                <span class="text-[9px] text-slate-500 font-medium">720h</span>
+              </div>
+            </div>
+
+            <div class="flex-1 flex flex-col items-center gap-1.5 group">
+              <div class="relative w-full h-[70%] bg-gradient-to-t from-blue-600 to-blue-500 rounded-t-lg shadow-lg group-hover:shadow-xl transition-all duration-200 group-hover:from-blue-700 group-hover:to-blue-600">
+                <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-2.5 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                  540 hours
+                </div>
+              </div>
+              <div class="text-center">
+                <span class="text-[11px] font-bold text-slate-900 block">IT Lab</span>
+                <span class="text-[9px] text-slate-500 font-medium">540h</span>
+              </div>
+            </div>
+
+            <div class="flex-1 flex flex-col items-center gap-1.5 group">
+              <div class="relative w-full h-[55%] bg-gradient-to-t from-blue-600 to-blue-500 rounded-t-lg shadow-lg group-hover:shadow-xl transition-all duration-200 group-hover:from-blue-700 group-hover:to-blue-600">
+                <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-2.5 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                  412 hours
+                </div>
+              </div>
+              <div class="text-center">
+                <span class="text-[11px] font-bold text-slate-900 block">Executive</span>
+                <span class="text-[9px] text-slate-500 font-medium">412h</span>
+              </div>
+            </div>
+
+            <div class="flex-1 flex flex-col items-center gap-1.5 group">
+              <div class="relative w-full h-[40%] bg-gradient-to-t from-blue-600 to-blue-500 rounded-t-lg shadow-lg group-hover:shadow-xl transition-all duration-200 group-hover:from-blue-700 group-hover:to-blue-600">
+                <div class="absolute -top-7 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-2.5 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                  308 hours
+                </div>
+              </div>
+              <div class="text-center">
+                <span class="text-[11px] font-bold text-slate-900 block">Conference</span>
+                <span class="text-[9px] text-slate-500 font-medium">308h</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-300 shadow-sm transition-all duration-200">
+          <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-900 mb-0.5">Daily Energy Trend</h3>
+            <p class="text-[10px] text-slate-500">Last 30 days kWh consumption</p>
+          </div>
+
+          <div class="relative">
+            <svg viewBox="0 0 400 180" class="w-full h-[180px]">
+              <line x1="0" y1="150" x2="400" y2="150" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4"/>
+              <line x1="0" y1="112" x2="400" y2="112" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4"/>
+              <line x1="0" y1="75" x2="400" y2="75" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4"/>
+              <line x1="0" y1="37" x2="400" y2="37" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4"/>
+
+              <defs>
+                <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.2"/>
+                  <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
+                </linearGradient>
+              </defs>
+
+              <path d="M0,150 Q40,115 80,130 T160,80 T240,95 T320,65 T400,72 L400,180 L0,180 Z" fill="url(#areaGradient)"/>
+              <path d="M0,150 Q40,115 80,130 T160,80 T240,95 T320,65 T400,72" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+              <circle cx="80" cy="130" r="4" fill="#2563EB"/>
+              <circle cx="160" cy="80" r="4" fill="#2563EB"/>
+              <circle cx="240" cy="95" r="4" fill="#2563EB"/>
+              <circle cx="320" cy="65" r="4" fill="#2563EB"/>
+              <circle cx="400" cy="72" r="4" fill="#2563EB"/>
+            </svg>
+
+            <div class="absolute left-0 top-0 h-full flex flex-col justify-between text-[9px] text-slate-400 font-medium -translate-x-1">
+              <span>60</span>
+              <span>45</span>
+              <span>30</span>
+              <span>15</span>
+              <span>0</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</main>
