@@ -1,0 +1,122 @@
+<main class="flex-1 flex flex-col font-sans min-h-0 bg-background-main">
+
+  <header class="px-4 pt-6 shrink-0">
+    <div class="max-w-[1800px] mx-auto">
+      <div class="px-8 py-6 flex justify-between items-center border border-gray-100 bg-white/80 backdrop-blur-xl shadow-sm rounded-2xl">
+        <div>
+          <h2 class="text-lg font-black tracking-tight text-gray-900">Create New Schedule</h2>
+          <p class="text-sm text-gray-600 mt-0.5">Define automated climate settings for a recurring class</p>
+        </div>
+        <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">School Year 2023–24</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="px-4 pb-8 flex-1 overflow-y-auto custom-scrollbar">
+    <div class="max-w-[900px] mx-auto mt-6">
+
+      <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-8 space-y-8">
+
+        <div class="space-y-2">
+          <label class="text-sm font-bold text-gray-700">Room Selection</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[20px]">search</span>
+            <select class="pl-11 pr-4 h-11 w-full border border-gray-200 rounded-xl text-sm bg-gray-50/50 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+              <option value="">Search or select a room...</option>
+              <option>Room 101 (Zone A-1)</option>
+              <option>Room 102 (Zone A-1)</option>
+              <option>Room 201 (Zone B-1)</option>
+              <option>IT Lab A</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-700">Class Name</label>
+            <input class="h-11 w-full rounded-xl border border-gray-200 bg-gray-50/50 text-sm px-4 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="Advanced Physics">
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-700">Instructor</label>
+            <input class="h-11 w-full rounded-xl border border-gray-200 bg-gray-50/50 text-sm px-4 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" placeholder="Dr. Sarah Miller">
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <label class="text-sm font-bold text-gray-700">Days</label>
+          <div class="flex gap-2 flex-wrap">
+            <button class="size-11 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-600 font-bold">M</button>
+            <button class="size-11 rounded-xl border border-gray-200 text-gray-500 font-bold">T</button>
+            <button class="size-11 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-600 font-bold">W</button>
+            <button class="size-11 rounded-xl border border-gray-200 text-gray-500 font-bold">Th</button>
+            <button class="size-11 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-600 font-bold">F</button>
+            <button class="size-11 rounded-xl border border-gray-200 text-gray-500 font-bold">S</button>
+            <button class="size-11 rounded-xl border border-gray-200 text-gray-500 font-bold">Su</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-700">Start Time</label>
+            <input type="time" class="h-11 w-full rounded-xl border border-gray-200 bg-gray-50/50 text-sm px-4 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" value="09:00">
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-700">End Time</label>
+            <input type="time" class="h-11 w-full rounded-xl border border-gray-200 bg-gray-50/50 text-sm px-4 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" value="10:30">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-gray-100">
+
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <p class="text-sm font-bold text-gray-700">Pre-cooling</p>
+                <p class="text-xs text-gray-500">Prepare room before class</p>
+              </div>
+              <input type="checkbox" checked class="toggle toggle-primary">
+            </div>
+            <div class="flex items-center gap-3">
+              <input type="number" min="5" max="60" value="15" class="w-20 text-center h-10 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold">
+              <span class="text-sm text-gray-400">minutes before</span>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <p class="text-sm font-bold text-gray-700">Target Temperature</p>
+                <p class="text-xs text-gray-500">Desired setpoint</p>
+              </div>
+              <span class="text-xl font-extrabold text-blue-600">22°C</span>
+            </div>
+            <input type="range" min="16" max="30" value="22" class="w-full">
+          </div>
+
+        </div>
+
+        <div class="pt-6 border-t border-gray-100 flex gap-4">
+          <button class="flex-1 bg-gradient-to-b from-blue-600 to-blue-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30">
+            Save Schedule
+          </button>
+          <button class="flex-1 bg-gray-50 border border-gray-200 py-3 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100">
+            Cancel
+          </button>
+        </div>
+
+      </div>
+
+      <div class="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-5 flex gap-3">
+        <span class="material-symbols-outlined text-blue-600">lightbulb</span>
+        <div>
+          <p class="text-sm font-bold text-blue-600">Scheduling Tip</p>
+          <p class="text-xs text-blue-700 mt-0.5">
+            22°C is recommended for optimal comfort and energy efficiency. Pre-cooling adapts automatically to ambient conditions.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
