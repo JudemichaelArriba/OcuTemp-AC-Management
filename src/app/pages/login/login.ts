@@ -38,16 +38,14 @@ export class LoginComponent implements OnInit {
   this.cdr.detectChanges();
 
   try {
-    // Get the target route from AuthService
+
     const redirectTo = await this.authService.login(email, password);
 
     this.isLoggingIn = false;
     this.cdr.detectChanges();
-
-    // Show alert first
+    
     alert('Login successful!');
 
-    // Redirect AFTER user clicks OK
     this.router.navigate([redirectTo]);
 
   } catch (err: any) {

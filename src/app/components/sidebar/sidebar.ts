@@ -16,7 +16,6 @@ export class SidebarComponent implements OnInit {
   currentUser: User | null = null;
 
   ngOnInit() {
-  
     this.authState.currentUser$.subscribe(user => {
       this.currentUser = user;
     });
