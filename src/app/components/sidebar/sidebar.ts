@@ -24,4 +24,13 @@ export class SidebarComponent implements OnInit {
   isAdmin(): boolean {
     return this.currentUser?.role === 'admin';
   }
+
+  getUserInitials(): string {
+    if (!this.currentUser?.fullName) return '';
+    // Split name by space, take first letters
+    const parts = this.currentUser.fullName.trim().split(' ');
+    const initials = parts.map(part => part.charAt(0).toUpperCase());
+    // Take first two letters (e.g., Jude Michael -> JM)
+    return initials.slice(0, 2).join('');
+  }
 }
