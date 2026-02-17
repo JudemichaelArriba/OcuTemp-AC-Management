@@ -1,0 +1,55 @@
+<!-- user-card.component.html -->
+<ng-container>
+  <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
+    <!-- User Name -->
+    <td class="px-6 py-4">
+      <div class="flex items-center gap-3">
+        <div
+          class="w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white font-bold text-sm uppercase shadow-lg"
+          [ngClass]="getAvatarGradient(user.fullName)"
+        >
+          {{ getInitials(user.fullName) }}
+        </div>
+        <span class="text-sm font-bold text-slate-900">{{ user.fullName || 'Unknown' }}</span>
+      </div>
+    </td>
+
+    <!-- Role -->
+    <td class="px-6 py-4">
+      <span
+        class="inline-flex items-center px-3 py-1 rounded-lg text-[11px] font-bold uppercase"
+        [ngClass]="getRoleBadgeClass(user.role)"
+      >
+        {{ user.role || 'N/A' }}
+      </span>
+    </td>
+
+    <!-- Email -->
+    <td class="px-6 py-4 text-sm text-slate-600 font-medium">{{ user.email || '—' }}</td>
+
+    <!-- Last Login -->
+    <td class="px-6 py-4">
+      <ng-container *ngIf="formatLastLogin(user.lastLoginAt) as login">
+        <div class="flex items-center gap-1.5">
+          <span
+            *ngIf="login.isRecent"
+            class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+          ></span>
+          <span class="text-sm text-slate-500 font-medium">{{ login.text }}</span>
+        </div>
+      </ng-container>
+    </td>
+
+    <!-- Actions -->
+    <td class="px-6 py-4 text-right">
+      <div class="flex justify-end gap-2">
+        <button class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+          <span class="material-symbols-outlined text-[20px]">edit</span>
+        </button>
+        <button class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
+          <span class="material-symbols-outlined text-[20px]">delete</span>
+        </button>
+      </div>
+    </td>
+  </tr>
+</ng-container>
