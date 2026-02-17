@@ -1,5 +1,6 @@
-import { Component, OnInit, NgZone, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { UserService } from '../../services/user';
 import { User } from '../../models/user.model';
 import { UserCardComponent } from '../../components/user-card/user-card';
@@ -7,12 +8,14 @@ import { UserCardComponent } from '../../components/user-card/user-card';
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, UserCardComponent],
+  imports: [CommonModule, FormsModule, UserCardComponent],
   templateUrl: './user-management.html',
   styleUrls: ['./user-management.css'],
 })
 export class UserManagement implements OnInit {
   users: User[] = [];
+  filteredUsers: User[] = [];
+  searchQuery = '';
   isLoading = true;
   isSuccess = false;
   skeletonRows = Array(4);
@@ -22,15 +25,28 @@ export class UserManagement implements OnInit {
   async ngOnInit() {
     try {
       const data = await this.userService.getStaffUsers();
-      console.log('Users fetched:', data);
       this.users = data;
+      this.filteredUsers = data;
       this.isSuccess = true;
     } catch (error) {
       console.error('Failed to load staff users:', error);
       this.isSuccess = false;
     } finally {
       this.isLoading = false;
-      this.cdr.detectChanges(); 
+      this.cdr.detectChanges();
     }
+  }
+
+  onSearch() {
+    const query = this.searchQuery.trim().toLowerCase();
+    if (!query) {
+      this.filteredUsers = this.users;
+      return;
+    }
+    this.filteredUsers = this.users.filter(user =>
+      user.fullName?.toLowerCase().includes(query) ||
+      user.email?.toLowerCase().includes(query) ||
+      user.role?.toLowerCase().includes(query)
+    );
   }
 }

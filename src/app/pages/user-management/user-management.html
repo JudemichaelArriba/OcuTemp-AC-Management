@@ -26,13 +26,22 @@
       <div class="flex items-center gap-3">
         <div class="relative flex-1 max-w-md">
           <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
-          <input type="text" placeholder="Search by name, email or role..."
-            class="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 shadow-sm transition-all">
+          <input
+            type="text"
+            placeholder="Search by name, email or role..."
+            [(ngModel)]="searchQuery"
+            (ngModelChange)="onSearch()"
+          class="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-sm transition-all"
+          />
+    
+          <button
+            *ngIf="searchQuery"
+            (click)="searchQuery = ''; onSearch()"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
         </div>
-        <button class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-          <span class="material-symbols-outlined text-[18px]">filter_list</span>
-          Filter
-        </button>
       </div>
     </div>
   </div>
@@ -52,7 +61,7 @@
         </thead>
         <tbody class="divide-y divide-slate-100">
 
-      
+         
           <ng-container *ngIf="isLoading">
             <tr *ngFor="let _ of skeletonRows" class="animate-pulse">
               <td class="px-6 py-4">
@@ -61,15 +70,9 @@
                   <div class="h-4 bg-slate-200 rounded-lg w-32"></div>
                 </div>
               </td>
-              <td class="px-6 py-4">
-                <div class="h-6 bg-slate-200 rounded-lg w-16"></div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="h-4 bg-slate-200 rounded-lg w-44"></div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="h-4 bg-slate-200 rounded-lg w-24"></div>
-              </td>
+              <td class="px-6 py-4"><div class="h-6 bg-slate-200 rounded-lg w-16"></div></td>
+              <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded-lg w-44"></div></td>
+              <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded-lg w-24"></div></td>
               <td class="px-6 py-4 text-right">
                 <div class="flex justify-end gap-2">
                   <div class="w-9 h-9 bg-slate-200 rounded-lg"></div>
@@ -79,32 +82,48 @@
             </tr>
           </ng-container>
 
-        
-<ng-container *ngIf="!isLoading">
-  <ng-container *ngFor="let user of users">
-    <app-user-card [user]="user"></app-user-card>
-  </ng-container>
 
+          <ng-container *ngIf="!isLoading">
+            <ng-container *ngFor="let user of filteredUsers">
+              <app-user-card [user]="user"></app-user-card>
+            </ng-container>
 
-  <tr *ngIf="users.length === 0">
-    <td colspan="5" class="px-6 py-16 text-center">
-      <div class="flex flex-col items-center gap-3">
-        <span class="material-symbols-outlined text-slate-300 text-5xl">person_off</span>
-        <p class="text-sm font-bold text-slate-400">No staff users found</p>
-        <p class="text-xs text-slate-400">Add a new user using the button above.</p>
-      </div>
-    </td>
-  </tr>
-</ng-container>
+            <tr *ngIf="filteredUsers.length === 0 && searchQuery">
+              <td colspan="5" class="px-6 py-16 text-center">
+                <div class="flex flex-col items-center gap-3">
+                  <span class="material-symbols-outlined text-slate-300 text-5xl">search_off</span>
+                  <p class="text-sm font-bold text-slate-400">No results for "{{ searchQuery }}"</p>
+                  <p class="text-xs text-slate-400">Try searching by a different name, email or role.</p>
+                </div>
+              </td>
+            </tr>
+
+   
+            <tr *ngIf="users.length === 0 && !searchQuery">
+              <td colspan="5" class="px-6 py-16 text-center">
+                <div class="flex flex-col items-center gap-3">
+                  <span class="material-symbols-outlined text-slate-300 text-5xl">person_off</span>
+                  <p class="text-sm font-bold text-slate-400">No staff users found</p>
+                  <p class="text-xs text-slate-400">Add a new user using the button above.</p>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
 
         </tbody>
       </table>
 
- 
+   
       <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100/50 border-t border-slate-200 flex items-center justify-between">
         <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">
-          <ng-container *ngIf="!isLoading">Showing {{ users.length }} staff user{{ users.length !== 1 ? 's' : '' }}</ng-container>
-          <ng-container *ngIf="isLoading"><span class="inline-block w-24 h-3 bg-slate-200 rounded animate-pulse"></span></ng-container>
+          <ng-container *ngIf="!isLoading">
+            Showing {{ filteredUsers.length }}
+            <ng-container *ngIf="searchQuery"> of {{ users.length }}</ng-container>
+            staff user{{ filteredUsers.length !== 1 ? 's' : '' }}
+          </ng-container>
+          <ng-container *ngIf="isLoading">
+            <span class="inline-block w-24 h-3 bg-slate-200 rounded animate-pulse"></span>
+          </ng-container>
         </p>
         <div class="flex gap-2">
           <button class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all shadow-sm">
