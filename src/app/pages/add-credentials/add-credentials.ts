@@ -25,6 +25,7 @@ export class AddCredentialsComponent {
 
     const form = event.target as HTMLFormElement;
 
+
     if (!form.checkValidity()) {
       form.reportValidity();
       return;
@@ -36,7 +37,7 @@ export class AddCredentialsComponent {
     const currentUser = this.auth.currentUser;
 
     if (!currentUser) {
-      alert('User not authenticated.');
+      alert('User not authenticated. Please log in again.');
       return;
     }
 
@@ -45,20 +46,30 @@ export class AddCredentialsComponent {
 
       await this.userService.createUser({
         uid: currentUser.uid,
-        email: currentUser.email,
+        email: currentUser.email ?? '',
         fullName: `${firstName} ${lastName}`,
         role: 'staff',
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       });
 
+      this.isSaving = false;
+      alert('Account successfully created!');
       this.router.navigate(['/app/dashboard']); 
 
-    } catch (error) {
-      console.error(error);
-      alert('Failed to save account.');
-    } finally {
+    } catch (err: any) {
       this.isSaving = false;
+
+  
+      if (err.code === 'auth/email-already-in-use') {
+        alert('This email is already in use.');
+      } else if (err.code === 'auth/invalid-email') {
+        alert('The email is invalid.');
+      } else {
+        alert('Failed to save account. Please try again.');
+      }
+
+      console.error('AddCredentials error:', err);
     }
   }
 }
