@@ -10,14 +10,13 @@ import { EnergyReports } from './pages/energy-reports/energy-reports';
 import { UserManagement } from './pages/user-management/user-management';
 import {  } from './pages/room-management/room-management';
 import { AddCredentialsComponent } from './pages/add-credentials/add-credentials';
-
+import { AdminGuard } from './guards/admin.guard';
 
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
   { path: 'add-credentials', component: AddCredentialsComponent, canActivate: [AuthGuard] },
-
 
   { 
     path: 'app', 
@@ -26,10 +25,13 @@ export const routes: Routes = [
     children: [
         { path: 'dashboard', component: Dashboard },
         { path: 'room-management', component: RoomManagement },
-          { path: 'energy-reports', component: EnergyReports },
-            { path: 'user-management', component: UserManagement },
-      { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
-      
+        { path: 'energy-reports', component: EnergyReports },
+        { 
+          path: 'user-management', 
+          component: UserManagement, 
+          canActivate: [AdminGuard]
+        },
+        { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
     ]
   },
 
