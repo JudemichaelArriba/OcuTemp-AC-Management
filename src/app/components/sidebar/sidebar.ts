@@ -1,4 +1,4 @@
-import { Component, inject, ViewEncapsulation } from '@angular/core';
+import { Component, inject, ViewEncapsulation, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthStateService } from '../../services/auth-state.service';
@@ -14,8 +14,24 @@ import { User } from '../../models/user.model';
 export class SidebarComponent {
   private authState = inject(AuthStateService);
 
-
   currentUser$ = this.authState.currentUser$;
+
+
+  isOpen = signal(typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: Event) {
+    const width = (event.target as Window).innerWidth;
+    if (width >= 768) {
+      this.isOpen.set(true);
+    } else {
+      this.isOpen.set(false);
+    }
+  }
+
+  toggleSidebar() {
+    this.isOpen.update(v => !v);
+  }
 
   isAdmin(user?: User): boolean {
     return user?.role === 'admin';
