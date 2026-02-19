@@ -11,11 +11,12 @@ import { UserManagement } from './pages/user-management/user-management';
 import {  } from './pages/room-management/room-management';
 import { AddCredentialsComponent } from './pages/add-credentials/add-credentials';
 import { AdminGuard } from './guards/admin.guard';
-
+import { SignupComponent } from './pages/signup/signup';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'forgot-password', component: ForgotPasswordComponent },
+  { path: 'signup', component: SignupComponent },
   { path: 'add-credentials', component: AddCredentialsComponent, canActivate: [AuthGuard] },
 
   { 

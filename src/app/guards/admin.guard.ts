@@ -21,10 +21,8 @@ export class AdminGuard implements CanActivate {
 
         try {
           const user = await this.userService.getUser(firebaseUser.uid);
-
-
+          
           if (user?.role === 'admin') {
-            console.log(user);
             resolve(true);
           } else {
             this.router.navigate(['/app/dashboard']);

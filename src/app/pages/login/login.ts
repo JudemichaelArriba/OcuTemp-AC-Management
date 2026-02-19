@@ -63,6 +63,7 @@ export class LoginComponent implements OnInit {
       if (err.code === 'auth/user-not-found') message = 'User not found.';
       if (err.code === 'auth/wrong-password') message = 'Incorrect password.';
       if (err.code === 'auth/invalid-credential') message = 'Invalid credentials.';
+      if (err.message === 'not-approved') message = 'Your account is pending approval. Please contact Admin support.';
       alert(message);
     }
   }

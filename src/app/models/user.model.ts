@@ -3,6 +3,7 @@ export interface User {
   email: string | null;
   fullName?: string;
   role?: 'admin' | 'staff';
+  approved: boolean;
   lastLoginAt?: string;
   createdAt?: string;
 }

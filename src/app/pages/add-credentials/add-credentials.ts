@@ -49,6 +49,7 @@ export class AddCredentialsComponent {
         email: currentUser.email ?? '',
         fullName: `${firstName} ${lastName}`,
         role: 'staff',
+        approved: false,
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       });
