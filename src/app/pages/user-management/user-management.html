@@ -11,11 +11,6 @@
             Manage system administrators and technical staff
           </p>
         </div>
-        <div class="flex items-center gap-2">
-          <a href="#user-modal" class="flex items-center gap-2 bg-gradient-to-br from-blue-600 to-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 duration-200">
-            <span class="material-symbols-outlined text-[18px]">add</span> Add New User
-          </a>
-        </div>
       </div>
     </div>
   </header>
@@ -31,9 +26,8 @@
             placeholder="Search by name, email or role..."
             [(ngModel)]="searchQuery"
             (ngModelChange)="onSearch()"
-          class="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-sm transition-all"
+            class="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-sm transition-all"
           />
-    
           <button
             *ngIf="searchQuery"
             (click)="searchQuery = ''; onSearch()"
@@ -61,7 +55,6 @@
         </thead>
         <tbody class="divide-y divide-slate-100">
 
-         
           <ng-container *ngIf="isLoading">
             <tr *ngFor="let _ of skeletonRows" class="animate-pulse">
               <td class="px-6 py-4">
@@ -82,11 +75,11 @@
             </tr>
           </ng-container>
 
-
           <ng-container *ngIf="!isLoading">
-            <ng-container *ngFor="let user of filteredUsers">
-              <app-user-card [user]="user"></app-user-card>
-            </ng-container>
+         <ng-container *ngFor="let user of filteredUsers; trackBy: trackByUserId">
+  <app-user-card [user]="user"></app-user-card>
+</ng-container>
+
 
             <tr *ngIf="filteredUsers.length === 0 && searchQuery">
               <td colspan="5" class="px-6 py-16 text-center">
@@ -98,13 +91,12 @@
               </td>
             </tr>
 
-   
             <tr *ngIf="users.length === 0 && !searchQuery">
               <td colspan="5" class="px-6 py-16 text-center">
                 <div class="flex flex-col items-center gap-3">
                   <span class="material-symbols-outlined text-slate-300 text-5xl">person_off</span>
                   <p class="text-sm font-bold text-slate-400">No staff users found</p>
-                  <p class="text-xs text-slate-400">Add a new user using the button above.</p>
+                  <p class="text-xs text-slate-400">Users who sign up will appear here.</p>
                 </div>
               </td>
             </tr>
@@ -113,7 +105,6 @@
         </tbody>
       </table>
 
-   
       <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100/50 border-t border-slate-200 flex items-center justify-between">
         <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">
           <ng-container *ngIf="!isLoading">
@@ -134,58 +125,6 @@
             <span class="material-symbols-outlined text-[18px]">chevron_right</span>
           </button>
         </div>
-      </div>
-    </div>
-  </div>
-
-
-  <div class="hidden fixed inset-0 z-50 overflow-hidden bg-slate-900/60 backdrop-blur-sm flex justify-end" id="user-modal">
-    <a class="absolute inset-0 cursor-default" href="#"></a>
-    <div class="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-      <div class="p-8 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white rounded-t-xl">
-        <div>
-          <h3 class="text-xl font-black text-slate-900">Add New User</h3>
-          <p class="text-sm text-slate-500 font-medium mt-1">Create a new staff account</p>
-        </div>
-        <a href="#" class="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all">
-          <span class="material-symbols-outlined">close</span>
-        </a>
-      </div>
-      <div class="flex-1 overflow-y-auto p-8">
-        <form class="space-y-6">
-          <div>
-            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">Full Name</label>
-            <input type="text" placeholder="e.g. John Doe" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
-          </div>
-          <div>
-            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">Email Address</label>
-            <input type="email" placeholder="john.doe@ocutemp.com" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
-          </div>
-          <div>
-            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">System Role</label>
-            <select class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
-              <option value="">Select a role</option>
-              <option value="staff">Staff</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2.5">Password</label>
-            <div class="relative">
-              <input type="password" placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
-              <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                <span class="material-symbols-outlined text-xl">visibility</span>
-              </button>
-            </div>
-            <p class="mt-2.5 text-[11px] text-slate-500 flex items-start gap-1.5">
-              <span class="material-symbols-outlined text-[14px] text-slate-400 mt-0.5">info</span>
-              Minimum 8 characters with at least one number and special symbol.
-            </p>
-          </div>
-        </form>
-      </div>
-      <div class="p-8 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white flex gap-4 rounded-b-xl">
-        <a href="#" class="flex-1 px-6 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 text-center hover:bg-white hover:border-slate-300 transition-all shadow-sm">Cancel</a>
-        <button class="flex-1 px-6 py-3 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl text-sm font-bold hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/30">Save User</button>
       </div>
     </div>
   </div>
