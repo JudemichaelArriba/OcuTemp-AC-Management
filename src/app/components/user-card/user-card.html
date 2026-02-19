@@ -1,6 +1,7 @@
 <!-- user-card.component.html -->
 <ng-container>
   <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
+
     <!-- User Name -->
     <td class="px-6 py-4">
       <div class="flex items-center gap-3">
@@ -37,12 +38,52 @@
     <!-- Actions -->
     <td class="px-6 py-4 text-right">
       <div class="flex justify-end gap-2">
-        <button class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
-          <span class="material-symbols-outlined text-[20px]">edit</span>
-        </button>
-        <button class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
-          <span class="material-symbols-outlined text-[20px]">delete</span>
-        </button>
+
+        <!-- PENDING: Approve button only -->
+        <ng-container *ngIf="!user.approved">
+          <button
+            (click)="onApprove()"
+            [disabled]="isUpdating"
+            title="Approve user"
+            class="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all text-[11px] font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span
+              *ngIf="isUpdating"
+              class="material-symbols-outlined text-[18px] animate-spin"
+            >progress_activity</span>
+            <span
+              *ngIf="!isUpdating"
+              class="material-symbols-outlined text-[18px]"
+            >check_circle</span>
+            {{ isUpdating ? 'Approving...' : 'Approve' }}
+          </button>
+        </ng-container>
+
+        <!-- APPROVED: Edit + Restrict -->
+        <ng-container *ngIf="user.approved">
+          <button
+            title="Edit user"
+            class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+          >
+            <span class="material-symbols-outlined text-[20px]">edit</span>
+          </button>
+          <button
+            (click)="onRestrict()"
+            [disabled]="isUpdating"
+            title="Restrict user access"
+            class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span
+              *ngIf="isUpdating"
+              class="material-symbols-outlined text-[20px] animate-spin"
+            >progress_activity</span>
+            <span
+              *ngIf="!isUpdating"
+              class="material-symbols-outlined text-[20px]"
+            >block</span>
+          </button>
+        </ng-container>
+
       </div>
     </td>
   </tr>

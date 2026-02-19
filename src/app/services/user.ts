@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Database, ref, get, set, query, orderByChild, equalTo } from '@angular/fire/database';
+import { Database, ref, get, set, update, query, orderByChild, equalTo } from '@angular/fire/database';
 import { User } from '../models/user.model';
 
 @Injectable({
@@ -33,5 +33,14 @@ export class UserService {
       users.push({ uid: child.key!, ...child.val() });
     });
     return users;
+  }
+
+   /**
+   * Sets approved: true (approve)
+   * or approved: false (restrict) for a user.
+   */
+  async setApproval(uid: string, approved: boolean): Promise<void> {
+    const userRef = ref(this.db, `users/${uid}`);
+    await update(userRef, { approved });
   }
 }

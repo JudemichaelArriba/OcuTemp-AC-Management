@@ -1,16 +1,57 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { User } from '../../models/user.model';
-
+import { UserService } from '../../services/user';
+import { ChangeDetectorRef } from '@angular/core';
 @Component({
   selector: 'app-user-card',
   standalone: true,
   imports: [CommonModule],
   templateUrl: './user-card.html',
-      host: { style: 'display: contents' }
+  host: { style: 'display: contents' }
 })
 export class UserCardComponent {
   @Input() user!: User;
+
+  isUpdating = false;
+
+  constructor(private userService: UserService, private cdr: ChangeDetectorRef) {}
+
+  async onApprove() {
+    if (this.isUpdating) return;
+    const confirmed = confirm(`Approve ${this.user.fullName || this.user.email}? They will be able to log in.`);
+    if (!confirmed) return;
+
+    this.isUpdating = true;
+    try {
+      await this.userService.setApproval(this.user.uid, true);
+      this.user = { ...this.user, approved: true };
+          this.cdr.markForCheck();
+    } catch (err) {
+      console.error('Failed to approve user:', err);
+      alert('Failed to approve user. Please try again.');
+    } finally {
+      this.isUpdating = false;
+    }
+  }
+
+  async onRestrict() {
+    if (this.isUpdating) return;
+    const confirmed = confirm(`Restrict ${this.user.fullName || this.user.email}? They will no longer be able to log in.`);
+    if (!confirmed) return;
+
+    this.isUpdating = true;
+    try {
+      await this.userService.setApproval(this.user.uid, false);
+      this.user = { ...this.user, approved: false };
+           this.cdr.markForCheck();
+    } catch (err) {
+      console.error('Failed to restrict user:', err);
+      alert('Failed to restrict user. Please try again.');
+    } finally {
+      this.isUpdating = false;
+    }
+  }
 
   getInitials(name?: string): string {
     if (!name) return '??';
