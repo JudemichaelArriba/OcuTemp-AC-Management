@@ -75,17 +75,11 @@ export class AuthService {
       uid,
       email,
       fullName: `${firstName} ${lastName}`,
-      firstName,
-      lastName,
       role: 'staff',
       approved: false,
       createdAt: new Date().toISOString()
     };
-
-    // Persist to Realtime Database under /users/{uid}
     await set(ref(this.db, `users/${uid}`), newUser);
-
-    // Sign out immediately — the user must wait for admin approval before logging in
     await this.auth.signOut();
   }
 }

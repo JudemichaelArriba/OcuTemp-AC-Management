@@ -5,7 +5,6 @@ import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
 import { DialogService } from '../../services/dialog.service';
 
-// Compiled once — not recreated on every keystroke
 const NAME_PATTERN     = /^[a-zA-ZÀ-ÿ\s'-]+$/;
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
