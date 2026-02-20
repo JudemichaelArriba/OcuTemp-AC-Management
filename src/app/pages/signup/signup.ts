@@ -3,12 +3,17 @@ import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
+import { DialogService } from '../../services/dialog.service';
+
+// Compiled once — not recreated on every keystroke
+const NAME_PATTERN     = /^[a-zA-ZÀ-ÿ\s'-]+$/;
+const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 @Component({
   selector: 'app-signup',
   templateUrl: './signup.html',
   standalone: true,
-  imports: [CommonModule, RouterModule]
+  imports: [CommonModule, RouterModule],
 })
 export class SignupComponent {
 
@@ -17,10 +22,11 @@ export class SignupComponent {
   constructor(
     private authService: AuthService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private dialog: DialogService,
   ) {}
 
-  async signup(event: Event) {
+  async signup(event: Event): Promise<void> {
     event.preventDefault();
 
     const form = event.target as HTMLFormElement;
@@ -29,28 +35,30 @@ export class SignupComponent {
       return;
     }
 
-    const firstName     = (form.querySelector('#firstName') as HTMLInputElement).value.trim();
-    const lastName      = (form.querySelector('#lastName') as HTMLInputElement).value.trim();
-    const email         = (form.querySelector('#email') as HTMLInputElement).value.trim();
-    const password      = (form.querySelector('#password') as HTMLInputElement).value;
+    const firstName       = (form.querySelector('#firstName')       as HTMLInputElement).value.trim();
+    const lastName        = (form.querySelector('#lastName')        as HTMLInputElement).value.trim();
+    const email           = (form.querySelector('#email')           as HTMLInputElement).value.trim();
+    const password        = (form.querySelector('#password')        as HTMLInputElement).value;
     const confirmPassword = (form.querySelector('#confirmPassword') as HTMLInputElement).value;
 
-
-    const namePattern = /^[a-zA-ZÀ-ÿ\s'-]+$/;
-    if (!namePattern.test(firstName) || !namePattern.test(lastName)) {
-      alert('Names may only contain letters, spaces, hyphens, or apostrophes.');
+    if (!NAME_PATTERN.test(firstName) || !NAME_PATTERN.test(lastName)) {
+      this.dialog.alert(
+        'Invalid Name',
+        'Names may only contain letters, spaces, hyphens, or apostrophes.',
+      );
       return;
     }
 
     if (password !== confirmPassword) {
-      alert('Passwords do not match.');
+      this.dialog.alert('Passwords Do Not Match', 'Please make sure both password fields match.');
       return;
     }
 
-   
-    const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!strongPassword.test(password)) {
-      alert('Password must be at least 8 characters and include uppercase, lowercase, and a number.');
+    if (!PASSWORD_PATTERN.test(password)) {
+      this.dialog.alert(
+        'Weak Password',
+        'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.',
+      );
       return;
     }
 
@@ -63,18 +71,29 @@ export class SignupComponent {
       this.isSigningUp = false;
       this.cdr.detectChanges();
 
-      alert('Account created! Your account is pending approval. Please wait for an admin to approve it before signing in.');
-      this.router.navigate(['/login']);
+      this.dialog.success(
+        'Account Created!',
+        'Your account is pending admin approval. You will be able to sign in once it has been reviewed.',
+        () => this.router.navigate(['/login']),
+      );
 
     } catch (err: any) {
       this.isSigningUp = false;
       this.cdr.detectChanges();
 
-      let message = 'Sign up failed. Please try again.';
-      if (err.code === 'auth/email-already-in-use') message = 'This email is already registered.';
-      if (err.code === 'auth/invalid-email')        message = 'Invalid email address.';
-      if (err.code === 'auth/weak-password')        message = 'Password is too weak.';
-      alert(message);
+      const message = this.resolveSignupError(err);
+      this.dialog.error('Sign Up Failed', message);
+    }
+  }
+
+
+
+  private resolveSignupError(err: any): string {
+    switch (err?.code) {
+      case 'auth/email-already-in-use': return 'This email address is already registered.';
+      case 'auth/invalid-email':         return 'The email address entered is not valid.';
+      case 'auth/weak-password':         return 'The password provided is too weak.';
+      default:                           return 'Sign up failed. Please try again.';
     }
   }
 }
