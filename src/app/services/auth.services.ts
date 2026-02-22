@@ -82,4 +82,24 @@ export class AuthService {
     await set(ref(this.db, `users/${uid}`), newUser);
     await this.auth.signOut();
   }
+
+
+
+        /**
+       * Logs out the current user
+       * Clears AuthState and Firebase session
+       */
+        async logout(): Promise<void> {
+          try {
+            await this.auth.signOut();
+
+            // Clear local auth state
+            this.authState.clearUser?.(); // if you have this method
+            // or this.authState.setUser(null);
+
+          } catch (error) {
+            console.error('Logout failed:', error);
+            throw error;
+          }
+        }
 }

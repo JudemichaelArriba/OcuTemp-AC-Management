@@ -45,10 +45,10 @@ export class LoginComponent implements OnInit {
       this.isLoggingIn = false;
       this.cdr.detectChanges();
 
-      this.dialog.success(
+        this.dialog.success(
         'Welcome back!',
         'You have signed in successfully.',
-        () => this.router.navigate([redirectTo]),
+        () => this.router.navigate([redirectTo]) 
       );
 
     } catch (err: any) {

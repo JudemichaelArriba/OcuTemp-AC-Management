@@ -36,7 +36,10 @@ export class AuthStateService {
       }
     });
   }
-
+  
+  clearUser(): void {
+    this.setUser(null as any);
+  }
   setUser(user: User) {
     this._currentUser.next(user);
   }
