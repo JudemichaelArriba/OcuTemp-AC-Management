@@ -123,22 +123,40 @@ export class EditUserModal implements OnChanges {
     try {
       const newFullName = [trimmedFirst, trimmedLast].filter(Boolean).join(' ');
 
+      this.dialogService.confirm(
+        'Confirm Update',
+        `Are you sure you want to change the name to "${newFullName}"?`,
+        async () => {
+          this.isSaving = true;
+          this.cdr.markForCheck();
 
-      await this.userService.updateUserFullName(this.user.uid, newFullName);
+          try {
+            await this.userService.updateUserFullName(this.user!.uid, newFullName);
 
-      const updatedUser: User = { ...this.user, fullName: newFullName };
+            const updatedUser: User = { ...this.user!, fullName: newFullName };
 
+            this.animateOut(() => {
+              this.userUpdated.emit(updatedUser);
+              this.closed.emit();
+              setTimeout(() => {
+                this.dialogService.success(
+                  'User Updated',
+                  `${newFullName}'s name has been saved successfully.`
+                );
+              }, 50);
+            });
 
-      this.animateOut(() => {
-        this.userUpdated.emit(updatedUser);
-        this.closed.emit();
-        setTimeout(() => {
-          this.dialogService.success(
-            'User Updated',
-            `${newFullName}'s name has been saved successfully.`
-          );
-        }, 50);
-      });
+          } catch (err) {
+            console.error('Failed to update user:', err);
+            this.isSaving = false;
+            this.cdr.markForCheck();
+            this.dialogService.error(
+              'Update Failed',
+              'Something went wrong. Please try again.'
+            );
+          }
+        }
+      );
 
     } catch (err) {
       console.error('Failed to update user:', err);
