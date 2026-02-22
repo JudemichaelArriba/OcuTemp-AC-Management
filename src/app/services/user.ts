@@ -43,4 +43,12 @@ export class UserService {
     const userRef = ref(this.db, `users/${uid}`);
     await update(userRef, { approved });
   }
+
+  /**
+   *Updates the fullName field of a user.
+   */
+async updateUserFullName(uid: string, fullName: string): Promise<void> {
+  const userRef = ref(this.db, `users/${uid}`);
+  await update(userRef, { fullName: fullName }); 
+}
 }

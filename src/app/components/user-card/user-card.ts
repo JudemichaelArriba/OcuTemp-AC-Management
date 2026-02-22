@@ -3,10 +3,12 @@ import { CommonModule } from '@angular/common';
 import { User } from '../../models/user.model';
 import { UserService } from '../../services/user';
 import { ChangeDetectorRef } from '@angular/core';
+import { EditUserModal } from '../edit-user-modal/edit-user-modal';
+
 @Component({
   selector: 'app-user-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, EditUserModal],
   templateUrl: './user-card.html',
   host: { style: 'display: contents' }
 })
@@ -14,19 +16,35 @@ export class UserCardComponent {
   @Input() user!: User;
 
   isUpdating = false;
+  editUser: User | null = null;
 
   constructor(private userService: UserService, private cdr: ChangeDetectorRef) {}
+
+  openEditModal(): void {
+    this.editUser = { ...this.user };
+    this.cdr.markForCheck();
+  }
+
+  onEditModalClosed(): void {
+    this.editUser = null;
+    this.cdr.markForCheck();
+  }
+
+  onUserUpdated(updatedUser: User): void {
+    this.user = { ...updatedUser };
+    this.editUser = null;
+    this.cdr.markForCheck();
+  }
 
   async onApprove() {
     if (this.isUpdating) return;
     const confirmed = confirm(`Approve ${this.user.fullName || this.user.email}? They will be able to log in.`);
     if (!confirmed) return;
-
     this.isUpdating = true;
     try {
       await this.userService.setApproval(this.user.uid, true);
       this.user = { ...this.user, approved: true };
-          this.cdr.markForCheck();
+      this.cdr.markForCheck();
     } catch (err) {
       console.error('Failed to approve user:', err);
       alert('Failed to approve user. Please try again.');
@@ -39,12 +57,11 @@ export class UserCardComponent {
     if (this.isUpdating) return;
     const confirmed = confirm(`Restrict ${this.user.fullName || this.user.email}? They will no longer be able to log in.`);
     if (!confirmed) return;
-
     this.isUpdating = true;
     try {
       await this.userService.setApproval(this.user.uid, false);
       this.user = { ...this.user, approved: false };
-           this.cdr.markForCheck();
+      this.cdr.markForCheck();
     } catch (err) {
       console.error('Failed to restrict user:', err);
       alert('Failed to restrict user. Please try again.');
@@ -86,7 +103,6 @@ export class UserCardComponent {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-
     if (diffMins < 5) return { text: 'Just now', isRecent: true };
     if (diffMins < 60) return { text: `${diffMins} mins ago`, isRecent: true };
     if (diffHours < 24) return { text: `${diffHours} hours ago`, isRecent: false };

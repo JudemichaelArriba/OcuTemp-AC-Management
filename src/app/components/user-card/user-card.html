@@ -1,15 +1,12 @@
-<!-- user-card.component.html -->
 <ng-container>
   <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
 
-    <!-- User Name -->
     <td class="px-6 py-4">
       <div class="flex items-center gap-3">
         <span class="text-sm font-bold text-slate-900">{{ user.fullName || 'Unknown' }}</span>
       </div>
     </td>
 
-    <!-- Role -->
     <td class="px-6 py-4">
       <span
         class="inline-flex items-center px-3 py-1 rounded-lg text-[11px] font-bold uppercase"
@@ -19,27 +16,20 @@
       </span>
     </td>
 
-    <!-- Email -->
     <td class="px-6 py-4 text-sm text-slate-600 font-medium">{{ user.email || '—' }}</td>
 
-    <!-- Last Login -->
     <td class="px-6 py-4">
       <ng-container *ngIf="formatLastLogin(user.lastLoginAt) as login">
         <div class="flex items-center gap-1.5">
-          <span
-            *ngIf="login.isRecent"
-            class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
-          ></span>
+          <span *ngIf="login.isRecent" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span class="text-sm text-slate-500 font-medium">{{ login.text }}</span>
         </div>
       </ng-container>
     </td>
 
-    <!-- Actions -->
     <td class="px-6 py-4 text-right">
       <div class="flex justify-end gap-2">
 
-        <!-- PENDING: Approve button only -->
         <ng-container *ngIf="!user.approved">
           <button
             (click)="onApprove()"
@@ -47,21 +37,15 @@
             title="Approve user"
             class="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all text-[11px] font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span
-              *ngIf="isUpdating"
-              class="material-symbols-outlined text-[18px] animate-spin"
-            >progress_activity</span>
-            <span
-              *ngIf="!isUpdating"
-              class="material-symbols-outlined text-[18px]"
-            >check_circle</span>
+            <span *ngIf="isUpdating" class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+            <span *ngIf="!isUpdating" class="material-symbols-outlined text-[18px]">check_circle</span>
             {{ isUpdating ? 'Approving...' : 'Approve' }}
           </button>
         </ng-container>
 
-        <!-- APPROVED: Edit + Restrict -->
         <ng-container *ngIf="user.approved">
           <button
+            (click)="openEditModal()"
             title="Edit user"
             class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
           >
@@ -73,14 +57,8 @@
             title="Restrict user access"
             class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span
-              *ngIf="isUpdating"
-              class="material-symbols-outlined text-[20px] animate-spin"
-            >progress_activity</span>
-            <span
-              *ngIf="!isUpdating"
-              class="material-symbols-outlined text-[20px]"
-            >block</span>
+            <span *ngIf="isUpdating" class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+            <span *ngIf="!isUpdating" class="material-symbols-outlined text-[20px]">block</span>
           </button>
         </ng-container>
 
@@ -88,3 +66,10 @@
     </td>
   </tr>
 </ng-container>
+
+
+<app-edit-user-modal
+  [user]="editUser"
+  (closed)="onEditModalClosed()"
+  (userUpdated)="onUserUpdated($event)"
+></app-edit-user-modal>
