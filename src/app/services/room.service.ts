@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Database, ref, get, push, set, update } from '@angular/fire/database';
+import { Database, ref, get, push, set, onValue } from '@angular/fire/database';
 import { Room, Schedule } from '../models/room.model';
 
 @Injectable({
@@ -34,5 +34,23 @@ export class RoomService {
     const newRoom: Room = { ...room, uid: newRef.key! };
     await set(newRef, newRoom);
     return newRoom;
+  }
+
+  streamRooms(callback: (rooms: Room[]) => void): () => void {
+    const roomsRef = ref(this.db, 'rooms');
+    return onValue(roomsRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        callback([]);
+        return;
+      }
+
+      const rawRooms = snapshot.val() as Record<string, Omit<Room, 'uid'> & Partial<Pick<Room, 'uid'>>>;
+      const rooms = Object.entries(rawRooms).map(([uid, room]) => ({
+        ...room,
+        uid: room.uid ?? uid,
+      })) as Room[];
+
+      callback(rooms);
+    });
   }
 }
