@@ -1,0 +1,200 @@
+:host {
+  display: block;
+}
+
+.dd {
+  position: relative;
+}
+
+.dd-trigger {
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #d4dee9;
+  border-radius: 0.9rem;
+  color: #0f172a;
+  cursor: pointer;
+  display: flex;
+  gap: 0.65rem;
+  min-height: 3rem;
+  padding: 0.45rem 0.75rem;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  width: 100%;
+}
+
+.dd-trigger:hover:not(:disabled) {
+  border-color: #93c5fd;
+}
+
+.dd-open .dd-trigger {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+  transform: translateY(-1px);
+}
+
+.dd-trigger:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.dd-leading-icon {
+  align-items: center;
+  border-radius: 9999px;
+  display: inline-flex;
+  font-size: 1rem;
+  height: 1.65rem;
+  justify-content: center;
+  width: 1.65rem;
+}
+
+.dd-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dd-value {
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dd-placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.dd-hint {
+  color: #64748b;
+  font-size: 0.69rem;
+  line-height: 0.95rem;
+}
+
+.dd-caret {
+  color: #64748b;
+  font-size: 1.1rem;
+  transition: transform 180ms ease;
+}
+
+.dd-open .dd-caret {
+  transform: rotate(180deg);
+}
+
+.dd-menu {
+  background: #ffffff;
+  border: 1px solid #dbe3ed;
+  border-radius: 0.9rem;
+  box-shadow: 0 18px 35px rgba(2, 6, 23, 0.16);
+  margin-top: 0.45rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.4rem;
+  position: absolute;
+  width: 100%;
+  z-index: 30;
+}
+
+.dd-option {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 0.7rem;
+  color: #1e293b;
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  grid-template-columns: 1fr auto;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  transition: background-color 150ms ease, color 150ms ease;
+  width: 100%;
+}
+
+.dd-option-main {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.05rem;
+}
+
+.dd-option-hint {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 500;
+  grid-column: 1;
+}
+
+.dd-option-check {
+  color: #2563eb;
+  font-size: 1rem;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  place-self: center;
+}
+
+.dd-option-active {
+  background: #eff6ff;
+}
+
+.dd-option-selected {
+  background: #dbeafe;
+}
+
+.dd-option-selected .dd-option-main {
+  color: #1e3a8a;
+}
+
+.dd-device .dd-leading-icon {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+.dd-device .dd-option-active,
+.dd-device .dd-option-selected {
+  background: #ecfeff;
+}
+
+.dd-device .dd-option-selected .dd-option-main,
+.dd-device .dd-option-check {
+  color: #0e7490;
+}
+
+.dd-day .dd-leading-icon {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.dd-day .dd-option-active {
+  background: #f3e8ff;
+}
+
+.dd-day .dd-option-selected {
+  background: #ede9fe;
+}
+
+.dd-day .dd-option-selected .dd-option-main,
+.dd-day .dd-option-check {
+  color: #6d28d9;
+}
+
+.dd-time .dd-leading-icon {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.dd-time .dd-option-active {
+  background: #f0fdf4;
+}
+
+.dd-time .dd-option-selected {
+  background: #dcfce7;
+}
+
+.dd-time .dd-option-selected .dd-option-main,
+.dd-time .dd-option-check {
+  color: #166534;
+}

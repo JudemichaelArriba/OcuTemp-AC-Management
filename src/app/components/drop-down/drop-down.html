@@ -1,0 +1,41 @@
+<div
+  class="dd"
+  [class.dd-open]="isOpen"
+  [class.dd-disabled]="disabled"
+  [class.dd-device]="variant === 'device'"
+  [class.dd-day]="variant === 'day'"
+  [class.dd-time]="variant === 'time'"
+>
+  <button
+    type="button"
+    class="dd-trigger"
+    [disabled]="disabled"
+    (click)="toggle()"
+    (keydown)="onKeyDown($event)"
+    aria-haspopup="listbox"
+    [attr.aria-expanded]="isOpen"
+  >
+    <span class="material-symbols-outlined dd-leading-icon">{{ icon }}</span>
+    <span class="dd-copy">
+      <span class="dd-value" [class.dd-placeholder]="!selectedOption">{{ selectedOption?.label || placeholder }}</span>
+      <span class="dd-hint" *ngIf="selectedOption?.hint">{{ selectedOption?.hint }}</span>
+    </span>
+    <span class="material-symbols-outlined dd-caret">expand_more</span>
+  </button>
+
+  <div class="dd-menu" *ngIf="isOpen" role="listbox">
+    <button
+      type="button"
+      *ngFor="let option of options; let i = index"
+      class="dd-option"
+      [class.dd-option-active]="i === activeIndex"
+      [class.dd-option-selected]="option.value === value"
+      (click)="select(option.value)"
+      (mouseenter)="activeIndex = i"
+    >
+      <span class="dd-option-main">{{ option.label }}</span>
+      <span class="dd-option-hint" *ngIf="option.hint">{{ option.hint }}</span>
+      <span class="material-symbols-outlined dd-option-check" *ngIf="option.value === value">check</span>
+    </button>
+  </div>
+</div>

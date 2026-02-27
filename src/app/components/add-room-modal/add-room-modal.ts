@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { RoomService } from '../../services/room.service'; 
 import { DialogService } from '../../services/dialog.service';
 import { Room, Schedule } from '../../models/room.model'; 
+import { DropDown, DropDownOption } from '../drop-down/drop-down';
 
 @Component({
   selector: 'app-add-room-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, DropDown],
   templateUrl: './add-room-modal.html',
   styleUrl: './add-room-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,6 +27,17 @@ export class AddRoomModal implements OnInit {
   roomName = '';
   selectedDevice = '';
   devices: string[] = [];
+  deviceOptions: DropDownOption[] = [];
+  dayOptions: DropDownOption[] = [
+    { value: 'Monday', label: 'Monday', hint: 'Start of work week' },
+    { value: 'Tuesday', label: 'Tuesday', hint: 'Second weekday' },
+    { value: 'Wednesday', label: 'Wednesday', hint: 'Midweek' },
+    { value: 'Thursday', label: 'Thursday', hint: 'Near weekend' },
+    { value: 'Friday', label: 'Friday', hint: 'Last weekday' },
+    { value: 'Saturday', label: 'Saturday', hint: 'Weekend' },
+    { value: 'Sunday', label: 'Sunday', hint: 'Weekend' },
+  ];
+  timeOptions: DropDownOption[] = this.buildTimeOptions();
 
   newSchedule: Schedule = { day: '', startTime: '', endTime: '', subject: '' };
   schedules: Schedule[] = [];
@@ -38,6 +50,11 @@ export class AddRoomModal implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.devices = await this.roomService.getDevices();
+    this.deviceOptions = this.devices.map((device) => ({
+      value: device,
+      label: device,
+      hint: 'Registered controller',
+    }));
     this.openModal();
   }
 
@@ -119,6 +136,12 @@ export class AddRoomModal implements OnInit {
     }
   }
 
+  onDayChange(value: string): void {
+    if (!this.isScheduleDay(value)) return;
+    this.newSchedule.day = value;
+    this.cdr.markForCheck();
+  }
+
   addSchedule(): void {
     const { day, startTime, endTime, subject } = this.newSchedule;
     const trimmedSubject = subject.trim();
@@ -174,6 +197,40 @@ export class AddRoomModal implements OnInit {
     const s2 = this.timeToMinutes(start2);
     const e2 = this.timeToMinutes(end2);
     return s1 < e2 && s2 < e1;
+  }
+
+  private buildTimeOptions(): DropDownOption[] {
+    const options: DropDownOption[] = [];
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const value = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        options.push({
+          value,
+          label: this.toMeridiem(value),
+          hint: value,
+        });
+      }
+    }
+    return options;
+  }
+
+  private toMeridiem(time: string): string {
+    const [hour, minute] = time.split(':').map(Number);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const adjustedHour = hour % 12 === 0 ? 12 : hour % 12;
+    return `${adjustedHour}:${minute.toString().padStart(2, '0')} ${period}`;
+  }
+
+  private isScheduleDay(value: string): value is Exclude<Schedule['day'], ''> {
+    return (
+      value === 'Monday' ||
+      value === 'Tuesday' ||
+      value === 'Wednesday' ||
+      value === 'Thursday' ||
+      value === 'Friday' ||
+      value === 'Saturday' ||
+      value === 'Sunday'
+    );
   }
 
   async onSave(): Promise<void> {
