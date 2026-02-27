@@ -15,6 +15,19 @@ export class RoomService {
     return Object.keys(snapshot.val());
   }
 
+  async checkRoomNameExists(roomName: string): Promise<boolean> {
+    const roomsRef = ref(this.db, 'rooms');
+    const snapshot = await get(roomsRef);
+    if (!snapshot.exists()) return false;
+    
+    const rooms = snapshot.val();
+    const normalizedName = roomName.toLowerCase().trim();
+    
+    return Object.values(rooms).some((room: any) => 
+      room.roomName.toLowerCase().trim() === normalizedName
+    );
+  }
+
   async createRoom(room: Omit<Room, 'uid'>): Promise<Room> {
     const roomsRef = ref(this.db, 'rooms');
     const newRef = push(roomsRef);
@@ -22,5 +35,4 @@ export class RoomService {
     await set(newRef, newRoom);
     return newRoom;
   }
-
 }

@@ -53,7 +53,7 @@ export class AddRoomModal implements OnInit {
       setTimeout(() => {
         this.animating = true;
         this.cdr.markForCheck();
-      }, 20);
+      }, 10);
     });
   }
 
@@ -64,7 +64,7 @@ export class AddRoomModal implements OnInit {
       this.visible = false;
       this.cdr.markForCheck();
       afterDone?.();
-    }, 280);
+    }, 180);
   }
 
   close(): void {
@@ -78,7 +78,7 @@ export class AddRoomModal implements OnInit {
     }
   }
 
-  nextStep(): void {
+  async nextStep(): Promise<void> {
     const trimmedName = this.roomName.trim();
     if (!trimmedName) {
       this.dialogService.error('Validation Error', 'Room name is required.');
@@ -93,6 +93,14 @@ export class AddRoomModal implements OnInit {
       this.dialogService.error('Validation Error', 'Device UID is required.');
       return;
     }
+    
+    // Check if room name already exists
+    const roomExists = await this.roomService.checkRoomNameExists(trimmedName);
+    if (roomExists) {
+      this.dialogService.error('Duplicate Room', 'A room with this name already exists. Please choose a different name.');
+      return;
+    }
+    
     this.step = 2;
     this.cdr.markForCheck();
   }
@@ -107,6 +115,11 @@ export class AddRoomModal implements OnInit {
     const namePattern = /^[a-zA-Z0-9\s\-]+$/;
     if (!namePattern.test(trimmedSubject)) {
       this.dialogService.error('Invalid Input', 'Subject may only contain letters, numbers, spaces, and hyphens.');
+      return;
+    }
+    // Check if start time and end time are the same
+    if (startTime === endTime) {
+      this.dialogService.error('Validation Error', 'Start time and end time cannot be the same.');
       return;
     }
     if (this.timeToMinutes(startTime) >= this.timeToMinutes(endTime)) {
