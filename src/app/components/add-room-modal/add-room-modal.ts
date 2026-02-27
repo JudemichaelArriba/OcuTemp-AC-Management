@@ -10,6 +10,7 @@ import { Room, Schedule } from '../../models/room.model';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './add-room-modal.html',
+  styleUrl: './add-room-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AddRoomModal implements OnInit {
