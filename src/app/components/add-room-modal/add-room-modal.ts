@@ -19,6 +19,7 @@ export class AddRoomModal implements OnInit {
   visible = false;
   animating = false;
   isSaving = false;
+  isStepOneLoading = false;
   step = 1;
 
   roomName = '';
@@ -43,6 +44,7 @@ export class AddRoomModal implements OnInit {
     this.visible = true;
     this.animating = false;
     this.isSaving = false;
+    this.isStepOneLoading = false;
     this.step = 1;
     this.roomName = '';
     this.selectedDevice = '';
@@ -68,7 +70,7 @@ export class AddRoomModal implements OnInit {
   }
 
   close(): void {
-    if (this.isSaving) return;
+    if (this.isSaving || this.isStepOneLoading) return;
     this.animateOut(() => this.closed.emit());
   }
 
@@ -79,6 +81,8 @@ export class AddRoomModal implements OnInit {
   }
 
   async nextStep(): Promise<void> {
+    if (this.isStepOneLoading) return;
+
     const trimmedName = this.roomName.trim();
     if (!trimmedName) {
       this.dialogService.error('Validation Error', 'Room name is required.');
@@ -93,16 +97,25 @@ export class AddRoomModal implements OnInit {
       this.dialogService.error('Validation Error', 'Device UID is required.');
       return;
     }
-    
-    // Check if room name already exists
-    const roomExists = await this.roomService.checkRoomNameExists(trimmedName);
-    if (roomExists) {
-      this.dialogService.error('Duplicate Room', 'A room with this name already exists. Please choose a different name.');
-      return;
-    }
-    
-    this.step = 2;
+
+    this.isStepOneLoading = true;
     this.cdr.markForCheck();
+
+    try {
+      const roomExists = await this.roomService.checkRoomNameExists(trimmedName);
+      if (roomExists) {
+        this.dialogService.error('Duplicate Room', 'A room with this name already exists. Please choose a different name.');
+        return;
+      }
+
+      this.step = 2;
+    } catch (err) {
+      console.error('Failed to validate room details:', err);
+      this.dialogService.error('Validation Failed', 'Unable to validate room details. Please try again.');
+    } finally {
+      this.isStepOneLoading = false;
+      this.cdr.markForCheck();
+    }
   }
 
   addSchedule(): void {
@@ -164,6 +177,11 @@ export class AddRoomModal implements OnInit {
 
   async onSave(): Promise<void> {
     if (this.isSaving) return;
+    if (this.schedules.length === 0) {
+      this.dialogService.error('Validation Error', 'Add at least one schedule before creating a room.');
+      return;
+    }
+
     this.isSaving = true;
     this.cdr.markForCheck();
 
