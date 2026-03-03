@@ -4,6 +4,14 @@ import { Database, onValue, ref } from '@angular/fire/database';
 export interface DeviceTelemetry {
   temperature?: number;
   humidity?: number;
+  occupancy?: boolean;
+  acState?: {
+    power?: boolean;
+    currentTemp?: number;
+    roomUid?: string;
+    source?: string;
+    updatedAt?: string;
+  };
 }
 
 @Injectable({

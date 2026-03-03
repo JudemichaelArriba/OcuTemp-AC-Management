@@ -13,6 +13,7 @@ export interface Room {
   humidity?: number;
   device?: string;
   occupancy?: boolean;
+  power?: boolean;
   createdAt?: string;
   updatedAt?: string;
   schedules?: Schedule[];

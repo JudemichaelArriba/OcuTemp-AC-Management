@@ -14,7 +14,11 @@ export class RoomCard {
   @Input({ required: true }) room!: Room;
 
   get hasTelemetry(): boolean {
-    return this.room.temperature !== undefined || this.room.humidity !== undefined;
+    return (
+      this.room.temperature !== undefined ||
+      this.room.humidity !== undefined ||
+      this.room.occupancy !== undefined
+    );
   }
 
   get scheduleCount(): number {
@@ -22,9 +26,13 @@ export class RoomCard {
   }
 
   get statusBadgeClass(): string {
-    return this.room.status === 'active'
+    return this.room.power === true
       ? 'bg-emerald-100 text-emerald-700'
       : 'bg-slate-100 text-slate-600';
+  }
+
+  get statusText(): string {
+    return this.room.power === true ? 'on' : 'off';
   }
 
   get temperatureText(): string {
@@ -35,5 +43,11 @@ export class RoomCard {
   get humidityText(): string {
     if (this.room.humidity === undefined) return '--';
     return `${this.room.humidity.toFixed(1)}%`;
+  }
+
+  get occupancyText(): string {
+
+    if (this.room.occupancy === undefined) return '--';
+    return this.room.occupancy ? 'Occupied' : 'Unoccupied';
   }
 }

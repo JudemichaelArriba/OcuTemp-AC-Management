@@ -67,11 +67,15 @@ export class RoomManagement implements OnInit, OnDestroy {
   }
 
   get activeRooms(): number {
-    return this.rooms.filter((room) => room.status === 'active').length;
+    return this.rooms.filter((room) => room.power === true).length;
   }
 
   get roomsWithTelemetry(): number {
-    return this.rooms.filter((room) => room.temperature !== undefined || room.humidity !== undefined).length;
+    return this.rooms.filter((room) =>
+      room.temperature !== undefined ||
+      room.humidity !== undefined ||
+      room.occupancy !== undefined
+    ).length;
   }
 
   get roomsWithoutDevice(): number {
@@ -85,6 +89,8 @@ export class RoomManagement implements OnInit, OnDestroy {
         ...room,
         temperature: telemetry?.temperature ?? room.temperature,
         humidity: telemetry?.humidity ?? room.humidity,
+        occupancy: telemetry?.occupancy ?? room.occupancy,
+        power: telemetry?.acState?.power ?? false,
       };
     });
 
