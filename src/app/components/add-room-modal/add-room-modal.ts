@@ -1,5 +1,4 @@
 import { Component, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RoomService } from '../../services/room.service'; 
 import { DialogService } from '../../services/dialog.service';
@@ -9,7 +8,7 @@ import { DropDown, DropDownOption } from '../drop-down/drop-down';
 @Component({
   selector: 'app-add-room-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, DropDown],
+  imports: [ FormsModule, DropDown],
   templateUrl: './add-room-modal.html',
   styleUrl: './add-room-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

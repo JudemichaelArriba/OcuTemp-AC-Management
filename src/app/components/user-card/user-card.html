@@ -16,34 +16,39 @@
       </span>
     </td>
 
-    <td class="px-6 py-4 text-sm text-slate-600 font-medium">{{ user.email || '—' }}</td>
+    <td class="px-6 py-4 text-sm text-slate-600 font-medium">{{ user.email || '--' }}</td>
 
     <td class="px-6 py-4">
-      <ng-container *ngIf="formatLastLogin(user.lastLoginAt) as login">
+      @if (formatLastLogin(user.lastLoginAt); as login) {
         <div class="flex items-center gap-1.5">
-          <span *ngIf="login.isRecent" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          @if (login.isRecent) {
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          }
           <span class="text-sm text-slate-500 font-medium">{{ login.text }}</span>
         </div>
-      </ng-container>
+      }
     </td>
 
     <td class="px-6 py-4 text-right">
       <div class="flex justify-end gap-2">
 
-        <ng-container *ngIf="!user.approved">
+        @if (!user.approved) {
           <button
             (click)="onApprove()"
             [disabled]="isUpdating"
             title="Approve user"
             class="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-all text-[11px] font-bold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span *ngIf="isUpdating" class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-            <span *ngIf="!isUpdating" class="material-symbols-outlined text-[18px]">check_circle</span>
+            @if (isUpdating) {
+              <span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+            } @else {
+              <span class="material-symbols-outlined text-[18px]">check_circle</span>
+            }
             {{ isUpdating ? 'Approving...' : 'Approve' }}
           </button>
-        </ng-container>
+        }
 
-        <ng-container *ngIf="user.approved">
+        @if (user.approved) {
           <button
             (click)="openEditModal()"
             title="Edit user"
@@ -57,10 +62,13 @@
             title="Restrict user access"
             class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span *ngIf="isUpdating" class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
-            <span *ngIf="!isUpdating" class="material-symbols-outlined text-[20px]">block</span>
+            @if (isUpdating) {
+              <span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
+            } @else {
+              <span class="material-symbols-outlined text-[20px]">block</span>
+            }
           </button>
-        </ng-container>
+        }
 
       </div>
     </td>

@@ -62,10 +62,11 @@
     <div class="flex items-center justify-between pt-1 border-t border-slate-100">
       <div class="flex items-center gap-1.5">
         <span class="relative flex h-2 w-2">
-          <span 
-            *ngIf="hasTelemetry"
-            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
-          ></span>
+          @if (hasTelemetry) {
+            <span
+              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+            ></span>
+          }
           <span 
             class="relative inline-flex rounded-full h-2 w-2" 
             [ngClass]="hasTelemetry ? 'bg-emerald-500' : 'bg-slate-300'"

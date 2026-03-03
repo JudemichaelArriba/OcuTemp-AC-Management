@@ -1,4 +1,4 @@
-<ng-container *ngIf="visible">
+@if (visible) {
   <div
     class="eu-backdrop fixed inset-0 z-[60] flex items-center justify-center p-4"
     (click)="onBackdropClick($event)"
@@ -45,227 +45,237 @@
       <!-- Content -->
       <div class="px-6 py-5">
         <!-- Step 1: Room Details -->
-        <div *ngIf="step === 1" class="space-y-4">
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-2">
-              Room Name <span class="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              [(ngModel)]="roomName"
-              maxlength="50"
-              placeholder="Enter room name (e.g., Conference Room A)"
-              [disabled]="isSaving || isStepOneLoading"
-              class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-800
-                     focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
-                     disabled:bg-slate-50 disabled:text-slate-400 transition-all placeholder:text-slate-400"
-            />
-          </div>
+        @if (step === 1) {
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">
+                Room Name <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                [(ngModel)]="roomName"
+                maxlength="50"
+                placeholder="Enter room name (e.g., Conference Room A)"
+                [disabled]="isSaving || isStepOneLoading"
+                class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-800
+                       focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
+                       disabled:bg-slate-50 disabled:text-slate-400 transition-all placeholder:text-slate-400"
+              />
+            </div>
 
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-2">
-              Device UID <span class="text-red-500">*</span>
-            </label>
-            <app-drop-down
-              [options]="deviceOptions"
-              [value]="selectedDevice"
-              [disabled]="isSaving || isStepOneLoading"
-              placeholder="Select a device UID"
-              variant="device"
-              icon="memory"
-              (valueChange)="selectedDevice = $event"
-            />
-          </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-2">
+                Device UID <span class="text-red-500">*</span>
+              </label>
+              <app-drop-down
+                [options]="deviceOptions"
+                [value]="selectedDevice"
+                [disabled]="isSaving || isStepOneLoading"
+                placeholder="Select a device UID"
+                variant="device"
+                icon="memory"
+                (valueChange)="selectedDevice = $event"
+              />
+            </div>
 
-          <div class="pt-2 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl">
-            <div class="flex gap-2">
-              <span class="material-symbols-outlined text-blue-600 text-[18px] flex-shrink-0 mt-0.5">info</span>
-              <p class="text-xs text-blue-700">Make sure the room name is unique and the device is available.</p>
+            <div class="pt-2 px-4 py-3 bg-blue-50 border border-blue-100 rounded-xl">
+              <div class="flex gap-2">
+                <span class="material-symbols-outlined text-blue-600 text-[18px] flex-shrink-0 mt-0.5">info</span>
+                <p class="text-xs text-blue-700">Make sure the room name is unique and the device is available.</p>
+              </div>
             </div>
           </div>
-        </div>
+        }
 
         <!-- Step 2: Add Schedules -->
-        <div *ngIf="step === 2" class="space-y-4">
-          <div class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-2">Day <span class="text-red-500">*</span></label>
-                <app-drop-down
-                  [options]="dayOptions"
-                  [value]="newSchedule.day"
-                  [disabled]="isSaving"
-                  placeholder="Select day"
-                  variant="day"
-                  icon="calendar_today"
-                  (valueChange)="onDayChange($event)"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-2">Subject <span class="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  [(ngModel)]="newSchedule.subject"
-                  maxlength="50"
-                  placeholder="e.g., Math 101"
-                  [disabled]="isSaving"
-                  class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-800
-                         focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
-                         disabled:bg-slate-50 disabled:text-slate-400 transition-all placeholder:text-slate-400"
-                />
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-2">Start Time <span class="text-red-500">*</span></label>
-                <app-drop-down
-                  [options]="timeOptions"
-                  [value]="newSchedule.startTime"
-                  [disabled]="isSaving"
-                  placeholder="Select start time"
-                  variant="time"
-                  icon="schedule"
-                  (valueChange)="newSchedule.startTime = $event"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-semibold text-slate-700 mb-2">End Time <span class="text-red-500">*</span></label>
-                <app-drop-down
-                  [options]="timeOptions"
-                  [value]="newSchedule.endTime"
-                  [disabled]="isSaving"
-                  placeholder="Select end time"
-                  variant="time"
-                  icon="timer"
-                  (valueChange)="newSchedule.endTime = $event"
-                />
-              </div>
-            </div>
-
-            <button
-              (click)="addSchedule()"
-              [disabled]="isSaving"
-              class="w-full px-4 py-3 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
-                     rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                     flex items-center justify-center gap-2"
-            >
-              <span class="material-symbols-outlined text-[18px]">add</span>
-              Add Schedule
-            </button>
-          </div>
-
-          <!-- Added Schedules List -->
-          <div *ngIf="schedules.length > 0" class="mt-5">
-            <div class="flex items-center justify-between mb-3">
-              <p class="text-sm font-semibold text-slate-700">Schedules ({{ schedules.length }})</p>
-              <span class="text-xs text-slate-500">Click to remove</span>
-            </div>
-            <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
-              <div *ngFor="let sch of schedules; let i = index"
-                   class="group flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100
-                          rounded-xl border border-slate-200 transition-colors">
-                <div class="flex-1">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-xs font-medium">
-                      {{ sch.day }}
-                    </span>
-                    <span class="text-xs text-slate-600 font-medium">
-                      {{ sch.startTime }} - {{ sch.endTime }}
-                    </span>
-                  </div>
-                  <p class="text-sm font-medium text-slate-800">{{ sch.subject }}</p>
+        @if (step === 2) {
+          <div class="space-y-4">
+            <div class="space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">Day <span class="text-red-500">*</span></label>
+                  <app-drop-down
+                    [options]="dayOptions"
+                    [value]="newSchedule.day"
+                    [disabled]="isSaving"
+                    placeholder="Select day"
+                    variant="day"
+                    icon="calendar_today"
+                    (valueChange)="onDayChange($event)"
+                  />
                 </div>
-                <button
-                  (click)="removeSchedule(i)"
-                  [disabled]="isSaving"
-                  class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-600
-                         hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Remove schedule"
-                >
-                  <span class="material-symbols-outlined text-[18px]">delete</span>
-                </button>
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">Subject <span class="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    [(ngModel)]="newSchedule.subject"
+                    maxlength="50"
+                    placeholder="e.g., Math 101"
+                    [disabled]="isSaving"
+                    class="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-800
+                           focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
+                           disabled:bg-slate-50 disabled:text-slate-400 transition-all placeholder:text-slate-400"
+                  />
+                </div>
               </div>
-            </div>
-          </div>
 
-          <!-- Empty State -->
-          <div *ngIf="schedules.length === 0" class="py-8 text-center">
-            <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center">
-              <span class="material-symbols-outlined text-slate-400 text-[28px]">event_note</span>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">Start Time <span class="text-red-500">*</span></label>
+                  <app-drop-down
+                    [options]="timeOptions"
+                    [value]="newSchedule.startTime"
+                    [disabled]="isSaving"
+                    placeholder="Select start time"
+                    variant="time"
+                    icon="schedule"
+                    (valueChange)="newSchedule.startTime = $event"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-2">End Time <span class="text-red-500">*</span></label>
+                  <app-drop-down
+                    [options]="timeOptions"
+                    [value]="newSchedule.endTime"
+                    [disabled]="isSaving"
+                    placeholder="Select end time"
+                    variant="time"
+                    icon="timer"
+                    (valueChange)="newSchedule.endTime = $event"
+                  />
+                </div>
+              </div>
+
+              <button
+                (click)="addSchedule()"
+                [disabled]="isSaving"
+                class="w-full px-4 py-3 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
+                       rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                       flex items-center justify-center gap-2"
+              >
+                <span class="material-symbols-outlined text-[18px]">add</span>
+                Add Schedule
+              </button>
             </div>
-            <p class="text-sm text-slate-500">No schedules added yet</p>
-            <p class="text-xs text-slate-400 mt-1">Add at least one schedule to continue</p>
+
+            <!-- Added Schedules List -->
+            @if (schedules.length > 0) {
+              <div class="mt-5">
+                <div class="flex items-center justify-between mb-3">
+                  <p class="text-sm font-semibold text-slate-700">Schedules ({{ schedules.length }})</p>
+                  <span class="text-xs text-slate-500">Click to remove</span>
+                </div>
+                <div class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  @for (sch of schedules; track $index; let i = $index) {
+                    <div
+                      class="group flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100
+                             rounded-xl border border-slate-200 transition-colors"
+                    >
+                      <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-xs font-medium">
+                            {{ sch.day }}
+                          </span>
+                          <span class="text-xs text-slate-600 font-medium">
+                            {{ sch.startTime }} - {{ sch.endTime }}
+                          </span>
+                        </div>
+                        <p class="text-sm font-medium text-slate-800">{{ sch.subject }}</p>
+                      </div>
+                      <button
+                        (click)="removeSchedule(i)"
+                        [disabled]="isSaving"
+                        class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-600
+                               hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Remove schedule"
+                      >
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+            } @else {
+              <!-- Empty State -->
+              <div class="py-8 text-center">
+                <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-slate-100 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-slate-400 text-[28px]">event_note</span>
+                </div>
+                <p class="text-sm text-slate-500">No schedules added yet</p>
+                <p class="text-xs text-slate-400 mt-1">Add at least one schedule to continue</p>
+              </div>
+            }
           </div>
-        </div>
+        }
       </div>
 
       <!-- Footer -->
       <div class="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
-        <button
-          *ngIf="step === 2"
-          (click)="step = 1"
-          [disabled]="isSaving || isStepOneLoading"
-          class="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-200
-                 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors 
-                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-        >
-          <span class="material-symbols-outlined text-[18px]">arrow_back</span>
-          Back
-        </button>
-        
+        @if (step === 2) {
+          <button
+            (click)="step = 1"
+            [disabled]="isSaving || isStepOneLoading"
+            class="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-200
+                   rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors
+                   disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+            Back
+          </button>
+        }
+
         <div class="flex-1"></div>
 
-        <button
-          *ngIf="step === 1"
-          (click)="close()"
-          [disabled]="isSaving || isStepOneLoading"
-          class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-200
-                 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors 
-                 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Cancel
-        </button>
+        @if (step === 1) {
+          <button
+            (click)="close()"
+            [disabled]="isSaving || isStepOneLoading"
+            class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-200
+                   rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors
+                   disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+        }
 
-        <button
-          *ngIf="step === 1"
-          (click)="nextStep()"
-          [disabled]="isSaving || isStepOneLoading"
-          class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
-                 rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                 flex items-center gap-2"
-        >
-          <span
-            *ngIf="isStepOneLoading"
-            class="material-symbols-outlined text-[18px] animate-spin"
-          >progress_activity</span>
-          <span *ngIf="!isStepOneLoading">Next</span>
-          <span
-            *ngIf="!isStepOneLoading"
-            class="material-symbols-outlined text-[18px]"
-          >arrow_forward</span>
-          <span *ngIf="isStepOneLoading">Checking...</span>
-        </button>
+        @if (step === 1) {
+          <button
+            (click)="nextStep()"
+            [disabled]="isSaving || isStepOneLoading"
+            class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
+                   rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                   flex items-center gap-2"
+          >
+            @if (isStepOneLoading) {
+              <span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+            }
+            @if (!isStepOneLoading) {
+              <span>Next</span>
+              <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+            }
+            @if (isStepOneLoading) {
+              <span>Checking...</span>
+            }
+          </button>
+        }
 
-        <button
-          *ngIf="step === 2"
-          (click)="onSave()"
-          [disabled]="isSaving"
-          class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
-                 rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                 flex items-center gap-2"
-        >
-          <span
-            *ngIf="isSaving"
-            class="material-symbols-outlined text-[18px] animate-spin"
-          >progress_activity</span>
-          <span
-            *ngIf="!isSaving"
-            class="material-symbols-outlined text-[18px]"
-          >check</span>
-          {{ isSaving ? 'Creating...' : 'Create Room' }}
-        </button>
+        @if (step === 2) {
+          <button
+            (click)="onSave()"
+            [disabled]="isSaving"
+            class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
+                   rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                   flex items-center gap-2"
+          >
+            @if (isSaving) {
+              <span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+            } @else {
+              <span class="material-symbols-outlined text-[18px]">check</span>
+            }
+            {{ isSaving ? 'Creating...' : 'Create Room' }}
+          </button>
+        }
       </div>
     </div>
   </div>
-</ng-container>
+}

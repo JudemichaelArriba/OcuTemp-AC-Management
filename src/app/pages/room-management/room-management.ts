@@ -1,6 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { AddRoomModal } from '../../components/add-room-modal/add-room-modal'; 
-import { CommonModule } from '@angular/common';
 import { Room } from '../../models/room.model'; 
 import { FormsModule } from '@angular/forms';
 import { RoomCard } from '../../components/room-card/room-card';
@@ -10,7 +9,7 @@ import { DeviceService, DeviceTelemetry } from '../../services/device.service';
 @Component({
   selector: 'app-room-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, AddRoomModal, RoomCard],
+  imports: [FormsModule, AddRoomModal, RoomCard],
   templateUrl: './room-management.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

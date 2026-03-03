@@ -31,13 +31,14 @@
           (ngModelChange)="onSearch()"
           class="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-sm transition-all"
         />
-        <button
-          *ngIf="searchQuery"
-          (click)="searchQuery = ''; onSearch()"
-          class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          <span class="material-symbols-outlined text-[18px]">close</span>
-        </button>
+        @if (searchQuery) {
+          <button
+            (click)="searchQuery = ''; onSearch()"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <span class="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        }
       </div>
     </div>
   </div>
@@ -96,28 +97,32 @@
 
   <div class="px-6 pb-6 pt-2 flex-1 overflow-y-auto">
     <div class="max-w-[1800px] mx-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-      <ng-container *ngIf="isLoading">
-        <div *ngFor="let _ of [1,2,3,4,5,6]" class="h-56 rounded-2xl bg-white border border-slate-200 animate-pulse"></div>
-      </ng-container>
+      @if (isLoading) {
+        @for (_ of [1,2,3,4,5,6]; track $index) {
+          <div class="h-56 rounded-2xl bg-white border border-slate-200 animate-pulse"></div>
+        }
+      }
 
-      <ng-container *ngIf="!isLoading">
-        <app-room-card
-          *ngFor="let room of filteredRooms; trackBy: trackByRoomId"
-          [room]="room"
-        ></app-room-card>
-      </ng-container>
+      @if (!isLoading) {
+        @for (room of filteredRooms; track room.uid) {
+          <app-room-card [room]="room"></app-room-card>
+        }
+      }
     </div>
 
-    <div *ngIf="!isLoading && filteredRooms.length === 0" class="max-w-[1800px] mx-auto mt-4 bg-white border border-slate-200 rounded-2xl p-12 text-center">
-      <span class="material-symbols-outlined text-slate-300 text-5xl">meeting_room</span>
-      <p class="text-sm font-bold text-slate-500 mt-3">No rooms found</p>
-      <p class="text-xs text-slate-400 mt-1">Try a different search or add a new room.</p>
-    </div>
+    @if (!isLoading && filteredRooms.length === 0) {
+      <div class="max-w-[1800px] mx-auto mt-4 bg-white border border-slate-200 rounded-2xl p-12 text-center">
+        <span class="material-symbols-outlined text-slate-300 text-5xl">meeting_room</span>
+        <p class="text-sm font-bold text-slate-500 mt-3">No rooms found</p>
+        <p class="text-xs text-slate-400 mt-1">Try a different search or add a new room.</p>
+      </div>
+    }
   </div>
 </main>
 
-<app-add-room-modal
-  *ngIf="showAddModal"
-  (closed)="showAddModal = false"
-  (roomAdded)="onRoomAdded($event)"
-></app-add-room-modal>
+@if (showAddModal) {
+  <app-add-room-modal
+    (closed)="showAddModal = false"
+    (roomAdded)="onRoomAdded($event)"
+  ></app-add-room-modal>
+}

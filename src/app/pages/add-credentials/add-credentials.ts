@@ -1,5 +1,4 @@
 import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { Auth } from '@angular/fire/auth';
 import { Router } from '@angular/router';
 import { UserService } from '../../services/user';
@@ -7,7 +6,6 @@ import { UserService } from '../../services/user';
 @Component({
   selector: 'app-add-credentials',
   standalone: true,
-  imports: [CommonModule],
   templateUrl: './add-credentials.html'
 })
 export class AddCredentialsComponent {

@@ -18,24 +18,33 @@
     <span class="material-symbols-outlined dd-leading-icon">{{ icon }}</span>
     <span class="dd-copy">
       <span class="dd-value" [class.dd-placeholder]="!selectedOption">{{ selectedOption?.label || placeholder }}</span>
-      <span class="dd-hint" *ngIf="selectedOption?.hint">{{ selectedOption?.hint }}</span>
+      @if (selectedOption?.hint) {
+        <span class="dd-hint">{{ selectedOption?.hint }}</span>
+      }
     </span>
     <span class="material-symbols-outlined dd-caret">expand_more</span>
   </button>
 
-  <div class="dd-menu" *ngIf="isOpen" role="listbox">
-    <button
-      type="button"
-      *ngFor="let option of options; let i = index"
-      class="dd-option"
-      [class.dd-option-active]="i === activeIndex"
-      [class.dd-option-selected]="option.value === value"
-      (click)="select(option.value)"
-      (mouseenter)="activeIndex = i"
-    >
-      <span class="dd-option-main">{{ option.label }}</span>
-      <span class="dd-option-hint" *ngIf="option.hint">{{ option.hint }}</span>
-      <span class="material-symbols-outlined dd-option-check" *ngIf="option.value === value">check</span>
-    </button>
-  </div>
+  @if (isOpen) {
+    <div class="dd-menu" role="listbox">
+      @for (option of options; track option.value; let i = $index) {
+        <button
+          type="button"
+          class="dd-option"
+          [class.dd-option-active]="i === activeIndex"
+          [class.dd-option-selected]="option.value === value"
+          (click)="select(option.value)"
+          (mouseenter)="activeIndex = i"
+        >
+          <span class="dd-option-main">{{ option.label }}</span>
+          @if (option.hint) {
+            <span class="dd-option-hint">{{ option.hint }}</span>
+          }
+          @if (option.value === value) {
+            <span class="material-symbols-outlined dd-option-check">check</span>
+          }
+        </button>
+      }
+    </div>
+  }
 </div>

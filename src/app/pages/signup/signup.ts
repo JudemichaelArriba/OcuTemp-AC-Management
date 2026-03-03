@@ -1,6 +1,5 @@
 import { Component, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
-import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
 import { DialogService } from '../../services/dialog.service';
@@ -12,7 +11,7 @@ const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
   selector: 'app-signup',
   templateUrl: './signup.html',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [RouterModule],
 })
 export class SignupComponent {
 

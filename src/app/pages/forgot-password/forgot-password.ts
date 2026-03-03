@@ -1,12 +1,11 @@
 import { Component, ChangeDetectorRef } from '@angular/core';
 import { Auth, sendPasswordResetEmail } from '@angular/fire/auth';
-import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 
 @Component({
   selector: 'app-forgot-password',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [RouterModule],
   templateUrl: './forgot-password.html',
 })
 export class ForgotPasswordComponent {

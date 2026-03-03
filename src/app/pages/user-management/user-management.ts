@@ -4,7 +4,6 @@ import {
   ChangeDetectionStrategy, 
   ChangeDetectorRef 
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { UserService } from '../../services/user';
 import { User } from '../../models/user.model';
@@ -13,7 +12,7 @@ import { UserCardComponent } from '../../components/user-card/user-card';
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, UserCardComponent],
+  imports: [FormsModule, UserCardComponent],
   templateUrl: './user-management.html',
   styleUrls: ['./user-management.css'],
   changeDetection: ChangeDetectionStrategy.OnPush 

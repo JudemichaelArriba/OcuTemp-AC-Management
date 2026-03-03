@@ -19,7 +19,6 @@ export interface DropDownOption {
 @Component({
   selector: 'app-drop-down',
   standalone: true,
-  imports: [CommonModule],
   templateUrl: './drop-down.html',
   styleUrl: './drop-down.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

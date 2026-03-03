@@ -1,6 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
-import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
 import { DialogService } from '../../services/dialog.service';
@@ -9,7 +8,7 @@ import { DialogService } from '../../services/dialog.service';
   selector: 'app-login',
   templateUrl: './login.html',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [RouterModule],
 })
 export class LoginComponent implements OnInit {
 
