@@ -3,8 +3,7 @@
   [ngClass]="{
     'opacity-60 saturate-50 grayscale-[0.2]': room.power === false,
     'opacity-100 saturate-100 grayscale-0': room.power === true
-  }"
->
+  }">
   <div class="p-3 border-b border-slate-100 bg-gradient-to-br from-blue-50 via-indigo-50/30 to-slate-50">
     <div class="flex items-start justify-between gap-2">
       <div class="min-w-0 flex-1">
@@ -13,19 +12,21 @@
         </p>
         <h3 class="text-sm font-bold text-slate-900 mt-0.5 truncate">{{ room.roomName }}</h3>
       </div>
-
-      <span
-        class="inline-flex items-center px-2 py-1 rounded-full text-[8px] font-bold uppercase shrink-0 shadow-sm"
-        [ngClass]="statusBadgeClass"
-      >
+      <button class=" text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all hover:scale-110">
+        <span class="material-symbols-outlined text-[15px]">more_horiz</span>
+      </button>
+      <span class="inline-flex items-center px-2 py-1 rounded-full text-[8px] font-bold uppercase shrink-0 shadow-sm"
+        [ngClass]="statusBadgeClass">
         {{ statusText }}
       </span>
+
     </div>
   </div>
 
   <div class="p-3 space-y-2.5 bg-gradient-to-b from-white to-slate-50/30">
     <div class="grid grid-cols-2 gap-2">
-      <div class="rounded-xl border border-cyan-200/60 bg-gradient-to-br from-cyan-50 via-cyan-50/80 to-cyan-100/40 p-2 shadow-sm hover:shadow-md transition-shadow">
+      <div
+        class="rounded-xl border border-cyan-200/60 bg-gradient-to-br from-cyan-50 via-cyan-50/80 to-cyan-100/40 p-2 shadow-sm hover:shadow-md transition-shadow">
         <div class="flex items-center gap-1.5 mb-1">
           <span class="material-symbols-outlined text-cyan-600 text-[13px]">thermostat</span>
           <span class="text-[8px] font-bold uppercase tracking-wide text-cyan-700">Temp</span>
@@ -33,7 +34,8 @@
         <p class="text-xs font-extrabold text-slate-900">{{ temperatureText }}</p>
       </div>
 
-      <div class="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-50 via-blue-50/80 to-blue-100/40 p-2 shadow-sm hover:shadow-md transition-shadow">
+      <div
+        class="rounded-xl border border-blue-200/60 bg-gradient-to-br from-blue-50 via-blue-50/80 to-blue-100/40 p-2 shadow-sm hover:shadow-md transition-shadow">
         <div class="flex items-center gap-1.5 mb-1">
           <span class="material-symbols-outlined text-blue-600 text-[13px]">water_drop</span>
           <span class="text-[8px] font-bold uppercase tracking-wide text-blue-700">Humid</span>
@@ -42,7 +44,8 @@
       </div>
     </div>
 
-    <div class="rounded-xl border border-slate-200/60 bg-gradient-to-br from-slate-50/80 to-slate-100/40 p-2 space-y-1.5 shadow-sm">
+    <div
+      class="rounded-xl border border-slate-200/60 bg-gradient-to-br from-slate-50/80 to-slate-100/40 p-2 space-y-1.5 shadow-sm">
       <div class="flex items-center justify-between">
         <p class="text-[8px] font-bold uppercase tracking-wide text-slate-500">Device</p>
         <p class="text-[10px] font-semibold text-slate-800 truncate max-w-[120px]">{{ room.device || 'Not linked' }}</p>
@@ -59,26 +62,6 @@
       </div>
     </div>
 
-    <div class="flex items-center justify-between pt-1 border-t border-slate-100">
-      <div class="flex items-center gap-1.5">
-        <span class="relative flex h-2 w-2">
-          @if (hasTelemetry) {
-            <span
-              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
-            ></span>
-          }
-          <span 
-            class="relative inline-flex rounded-full h-2 w-2" 
-            [ngClass]="hasTelemetry ? 'bg-emerald-500' : 'bg-slate-300'"
-          ></span>
-        </span>
-        <span class="text-[9px] font-medium text-slate-500">
-          {{ hasTelemetry ? 'Live' : 'Waiting' }}
-        </span>
-      </div>
-      <button class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all hover:scale-110">
-        <span class="material-symbols-outlined text-[15px]">more_horiz</span>
-      </button>
-    </div>
+
   </div>
 </article>
