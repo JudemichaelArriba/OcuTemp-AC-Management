@@ -1,0 +1,24 @@
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-pulse .bg-slate-200,
+.animate-pulse .bg-slate-300 {
+  background: linear-gradient(
+    90deg,
+    #e2e8f0 0%,
+    #cbd5e1 50%,
+    #e2e8f0 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
