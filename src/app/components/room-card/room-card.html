@@ -14,34 +14,36 @@
       </div>
 
       <div class="relative">
-        <button 
-          (click)="toggleDropdown()"
-          class="text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all hover:scale-110 p-1">
+        <button (click)="toggleDropdown()"
+          class="text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all hover:scale-110">
           <span class="material-symbols-outlined text-[15px]">more_horiz</span>
         </button>
 
         @if (isDropdownOpen()) {
-        <div 
-          (click)="closeDropdown()"
-          class="fixed inset-0 z-10"
-          style="background: transparent;">
+        <div (click)="closeDropdown()" class="fixed inset-0 z-10" style="background: transparent;">
         </div>
-        
-        <div class="absolute right-0 top-9 z-20 w-44 bg-white rounded-xl shadow-xl border border-slate-200/80 py-1.5 overflow-hidden backdrop-blur-sm">
-          <button class="w-full px-3.5 py-2.5 text-left text-[13px] font-semibold text-slate-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100/50 hover:text-blue-700 flex items-center gap-2.5 transition-all group">
-            <span class="material-symbols-outlined text-[17px] group-hover:scale-110 transition-transform">edit</span>
+
+        <div
+          class="absolute right-0 top-8 z-20 w-36 bg-white/95 backdrop-blur-xl rounded-xl shadow-xl border border-slate-200/60 py-1 overflow-hidden">
+          <button
+            class="w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-gradient-to-r hover:from-blue-50/80 hover:to-blue-100/60 hover:text-blue-700 flex items-center gap-2 transition-all group">
+            <span class="material-symbols-outlined text-[15px] group-hover:scale-110 transition-transform">edit</span>
             <span>Edit Room</span>
           </button>
-          
-          <button class="w-full px-3.5 py-2.5 text-left text-[13px] font-semibold text-slate-700 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-emerald-100/50 hover:text-emerald-700 flex items-center gap-2.5 transition-all group">
-            <span class="material-symbols-outlined text-[17px] group-hover:scale-110 transition-transform">power_settings_new</span>
+
+          <button
+            class="w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-gradient-to-r hover:from-emerald-50/80 hover:to-emerald-100/60 hover:text-emerald-700 flex items-center gap-2 transition-all group">
+            <span
+              class="material-symbols-outlined text-[15px] group-hover:scale-110 transition-transform">power_settings_new</span>
             <span>Power On</span>
           </button>
-          
-          <div class="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent my-1.5"></div>
-          
-          <button class="w-full px-3.5 py-2.5 text-left text-[13px] font-semibold text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100/50 hover:text-red-700 flex items-center gap-2.5 transition-all group">
-            <span class="material-symbols-outlined text-[17px] group-hover:scale-110 transition-transform">power_settings_new</span>
+
+          <div class="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent my-1"></div>
+
+          <button
+            class="w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-red-600 hover:bg-gradient-to-r hover:from-red-50/80 hover:to-red-100/60 hover:text-red-700 flex items-center gap-2 transition-all group">
+            <span
+              class="material-symbols-outlined text-[15px] group-hover:scale-110 transition-transform">power_settings_new</span>
             <span>Power Off</span>
           </button>
         </div>
