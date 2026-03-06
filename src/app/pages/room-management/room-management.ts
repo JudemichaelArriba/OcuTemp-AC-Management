@@ -49,9 +49,7 @@ export class RoomManagement implements OnInit, OnDestroy {
     this.stopDevicesStream?.();
   }
 
-  onRoomAdded(room: Room): void {
-    console.log('New room added:', room);
-  }
+
 
   onSearch(): void {
     this.mergeRoomTelemetryAndFilter();

@@ -43,31 +43,31 @@ export class SidebarComponent {
     return parts.map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('');
   }
 
-    onLogoutClick(): void {
-      this.dialogService.confirm(
-        'Sign Out',
-        'Are you sure you want to sign out of your account?',
-        async () => {
-          try {
-            await signOut(this.auth);
+  onLogoutClick(): void {
+    this.dialogService.confirm(
+      'Sign Out',
+      'Are you sure you want to sign out of your account?',
+      async () => {
+        try {
+          await signOut(this.auth);
 
-    
-            this.authState.clearUser;
 
-            this.router.navigate(['/login']);
+          this.authState.clearUser;
 
-          } catch (error) {
-            console.error('Logout failed:', error);
-            this.dialogService.error(
-              'Logout Failed',
-              'Something went wrong while signing out.'
-            );
-          }
-        },
-        undefined,
-        'Sign Out',
-        'Cancel'
-      );
-    }
+          this.router.navigate(['/login']);
+
+        } catch (error) {
+          console.error('Logout failed:', error);
+          this.dialogService.error(
+            'Logout Failed',
+            'Something went wrong while signing out.'
+          );
+        }
+      },
+      undefined,
+      'Sign Out',
+      'Cancel'
+    );
+  }
 
 }
