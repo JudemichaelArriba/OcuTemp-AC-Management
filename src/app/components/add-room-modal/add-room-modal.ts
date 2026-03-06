@@ -1,6 +1,7 @@
 import { Component, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RoomService } from '../../services/room.service'; 
+import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { Room, Schedule } from '../../models/room.model'; 
 import { DropDown, DropDownOption } from '../drop-down/drop-down';
@@ -43,12 +44,13 @@ export class AddRoomModal implements OnInit {
 
   constructor(
     private roomService: RoomService,
+    private deviceService: DeviceService,
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef
   ) {}
 
   async ngOnInit(): Promise<void> {
-    this.devices = await this.roomService.getDevices();
+    this.devices = await this.deviceService.getAvailableDevices();
     this.deviceOptions = this.devices.map((device) => ({
       value: device,
       label: device,

@@ -8,13 +8,6 @@ import { Room, Schedule } from '../models/room.model';
 export class RoomService {
   constructor(private db: Database) {}
 
-  async getDevices(): Promise<string[]> {
-    const devicesRef = ref(this.db, 'devices');
-    const snapshot = await get(devicesRef);
-    if (!snapshot.exists()) return [];
-    return Object.keys(snapshot.val());
-  }
-
   async checkRoomNameExists(roomName: string): Promise<boolean> {
     const roomsRef = ref(this.db, 'rooms');
     const snapshot = await get(roomsRef);
