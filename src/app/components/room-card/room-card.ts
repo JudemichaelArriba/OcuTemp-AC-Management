@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input } from '@angular/core';
+import { Component, Input, signal } from '@angular/core';
 import { Room } from '../../models/room.model';
 
 @Component({
@@ -12,6 +12,17 @@ import { Room } from '../../models/room.model';
 })
 export class RoomCard {
   @Input({ required: true }) room!: Room;
+
+
+
+  isDropdownOpen = signal(false);
+  toggleDropdown() {
+    this.isDropdownOpen.update(v => !v);
+  }
+
+  closeDropdown() {
+    this.isDropdownOpen.set(false);
+  }
 
   get hasTelemetry(): boolean {
     return (
