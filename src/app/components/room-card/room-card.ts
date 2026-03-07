@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input, signal } from '@angular/core';
 import { Room } from '../../models/room.model';
+import { Router } from '@angular/router';
+
 
 @Component({
   selector: 'app-room-card',
@@ -14,6 +16,7 @@ export class RoomCard {
   @Input({ required: true }) room!: Room;
 
 
+  constructor(private router: Router) { }
 
   isDropdownOpen = signal(false);
   toggleDropdown() {
@@ -22,6 +25,13 @@ export class RoomCard {
 
   closeDropdown() {
     this.isDropdownOpen.set(false);
+  }
+
+
+
+  viewDetails() {
+    this.closeDropdown();
+    this.router.navigate(['app/room-details', this.room.uid]);
   }
 
   get hasTelemetry(): boolean {

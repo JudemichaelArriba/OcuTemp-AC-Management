@@ -12,6 +12,7 @@ import {  } from './pages/room-management/room-management';
 import { AddCredentialsComponent } from './pages/add-credentials/add-credentials';
 import { AdminGuard } from './guards/admin.guard';
 import { SignupComponent } from './pages/signup/signup';
+import { RoomDetails } from './pages/room-details/room-details';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -26,6 +27,7 @@ export const routes: Routes = [
     children: [
         { path: 'dashboard', component: Dashboard },
         { path: 'room-management', component: RoomManagement },
+        { path: 'room-details/:uid', component: RoomDetails},
         { path: 'energy-reports', component: EnergyReports },
         { 
           path: 'user-management', 
