@@ -4,11 +4,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RoomService } from '../../services/room.service';
 import { DeviceService, DeviceTelemetry } from '../../services/device.service';
 import { Room } from '../../models/room.model';
+import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
 
 @Component({
   selector: 'app-room-details',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RoomEditModal],
   templateUrl: './room-details.html',
   styleUrl: './room-details.css',
 })
@@ -17,6 +18,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   deviceData: DeviceTelemetry | null = null;
   loading = true;
   error: string | null = null;
+  isEditModalOpen = false;
 
   private unsubscribeRooms?: () => void;
   private unsubscribeDevices?: () => void;
@@ -92,8 +94,20 @@ export class RoomDetails implements OnInit, OnDestroy {
   }
 
   editRoom() {
+    if (!this.room || this.loading) return;
+    this.isEditModalOpen = true;
+    this.refreshView();
+  }
 
-    console.log('Edit room:', this.room?.uid);
+  onEditModalClosed(): void {
+    this.isEditModalOpen = false;
+    this.refreshView();
+  }
+
+  onRoomUpdated(updated: Room): void {
+    this.room = updated;
+    this.isEditModalOpen = false;
+    this.refreshView();
   }
 
   get statusBadgeClass(): string {

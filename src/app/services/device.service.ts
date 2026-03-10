@@ -46,6 +46,39 @@ export class DeviceService {
     return allDeviceIds.filter((deviceId) => !assignedDeviceIds.has(deviceId));
   }
 
+  async getAvailableDevicesForRoom(currentDeviceId?: string): Promise<string[]> {
+    const devicesRef = ref(this.db, 'devices');
+    const roomsRef = ref(this.db, 'rooms');
+
+    const [devicesSnapshot, roomsSnapshot] = await Promise.all([
+      get(devicesRef),
+      get(roomsRef),
+    ]);
+
+    if (!devicesSnapshot.exists()) return currentDeviceId ? [currentDeviceId] : [];
+
+    const devices = devicesSnapshot.val() as Record<string, unknown>;
+    const allDeviceIds = Object.keys(devices);
+
+    if (!roomsSnapshot.exists()) {
+      return this.ensureCurrentDevice(allDeviceIds, currentDeviceId);
+    }
+
+    const rooms = roomsSnapshot.val() as Record<string, { device?: string }>;
+    const assignedDeviceIds = new Set(
+      Object.values(rooms)
+        .map((room) => room?.device)
+        .filter((deviceId): deviceId is string => typeof deviceId === 'string' && deviceId.length > 0)
+    );
+
+    if (currentDeviceId) {
+      assignedDeviceIds.delete(currentDeviceId);
+    }
+
+    const available = allDeviceIds.filter((deviceId) => !assignedDeviceIds.has(deviceId));
+    return this.ensureCurrentDevice(available, currentDeviceId);
+  }
+
   streamDevices(callback: (devices: Record<string, DeviceTelemetry>) => void): () => void {
     const devicesRef = ref(this.db, 'devices');
     return onValue(devicesRef, (snapshot) => {
@@ -55,5 +88,11 @@ export class DeviceService {
       }
       callback(snapshot.val() as Record<string, DeviceTelemetry>);
     });
+  }
+
+  private ensureCurrentDevice(list: string[], currentDeviceId?: string): string[] {
+    if (!currentDeviceId) return list;
+    if (list.includes(currentDeviceId)) return list;
+    return [currentDeviceId, ...list];
   }
 }

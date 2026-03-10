@@ -1,32 +1,45 @@
 import { Injectable } from '@angular/core';
-import { Database, ref, get, push, set, onValue } from '@angular/fire/database';
+import { Database, ref, get, push, set, onValue, update } from '@angular/fire/database';
 import { Room, Schedule } from '../models/room.model';
 
 @Injectable({
   providedIn: 'root'
 })
 export class RoomService {
-  constructor(private db: Database) {}
+  constructor(private db: Database) { }
 
-  async checkRoomNameExists(roomName: string): Promise<boolean> {
+  async checkRoomNameExists(roomName: string, excludeUid?: string): Promise<boolean> {
     const roomsRef = ref(this.db, 'rooms');
     const snapshot = await get(roomsRef);
     if (!snapshot.exists()) return false;
-    
+
     const rooms = snapshot.val();
     const normalizedName = roomName.toLowerCase().trim();
-    
-    return Object.values(rooms).some((room: any) => 
-      room.roomName.toLowerCase().trim() === normalizedName
-    );
+
+    return Object.entries(rooms).some(([uid, room]: [string, any]) => {
+      if (excludeUid && uid === excludeUid) return false;
+      if (!room?.roomName) return false;
+      return room.roomName.toLowerCase().trim() === normalizedName;
+    });
   }
 
   async createRoom(room: Omit<Room, 'uid'>): Promise<Room> {
+    const exists = await this.checkRoomNameExists(room.roomName);
+
+    if (exists) {
+      throw new Error('Room name already exists');
+    }
+    
     const roomsRef = ref(this.db, 'rooms');
     const newRef = push(roomsRef);
     const newRoom: Room = { ...room, uid: newRef.key! };
     await set(newRef, newRoom);
     return newRoom;
+  }
+
+  async updateRoom(uid: string, roomUpdate: Partial<Omit<Room, 'uid'>>): Promise<void> {
+    const roomRef = ref(this.db, `rooms/${uid}`);
+    await update(roomRef, roomUpdate);
   }
 
   streamRooms(callback: (rooms: Room[]) => void): () => void {
