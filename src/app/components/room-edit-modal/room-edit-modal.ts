@@ -15,6 +15,13 @@ import { RoomService } from '../../services/room.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { DropDown, DropDownOption } from '../drop-down/drop-down';
+import {
+  getRoomNameError,
+  getScheduleValidationError,
+  isScheduleDay,
+  normalizeSchedule,
+  validateSchedulesList,
+} from '../../helpers/room-validation';
 
 @Component({
   selector: 'app-room-edit-modal',
@@ -163,7 +170,7 @@ export class RoomEditModal implements OnChanges {
   }
 
   onDayChange(value: string): void {
-    if (!this.isScheduleDay(value)) return;
+    if (!isScheduleDay(value)) return;
     this.newSchedule.day = value;
     this.cdr.markForCheck();
   }
@@ -183,13 +190,13 @@ export class RoomEditModal implements OnChanges {
   }
 
   addOrUpdateSchedule(): void {
-    const error = this.getScheduleValidationError(this.newSchedule, this.schedules, this.editingIndex ?? undefined);
+    const error = getScheduleValidationError(this.newSchedule, this.schedules, this.editingIndex ?? undefined);
     if (error) {
       this.dialogService.error('Validation Error', error);
       return;
     }
 
-    const normalized = this.normalizeSchedule(this.newSchedule);
+    const normalized = normalizeSchedule(this.newSchedule);
     if (this.editingIndex !== null) {
       this.schedules[this.editingIndex] = normalized;
       this.editingIndex = null;
@@ -242,110 +249,8 @@ export class RoomEditModal implements OnChanges {
     return `${adjustedHour}:${minute.toString().padStart(2, '0')} ${period}`;
   }
 
-  private isScheduleDay(value: string): value is Exclude<Schedule['day'], ''> {
-    return (
-      value === 'Monday' ||
-      value === 'Tuesday' ||
-      value === 'Wednesday' ||
-      value === 'Thursday' ||
-      value === 'Friday' ||
-      value === 'Saturday' ||
-      value === 'Sunday'
-    );
-  }
-
-  private normalizeSchedule(schedule: Schedule): Schedule {
-    return {
-      day: schedule.day,
-      startTime: schedule.startTime,
-      endTime: schedule.endTime,
-      subject: schedule.subject.trim(),
-    };
-  }
-
   private cloneSchedules(schedules: Schedule[]): Schedule[] {
     return schedules.map((schedule) => ({ ...schedule }));
-  }
-
-  private timeToMinutes(time: string): number {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  private hasOverlap(start1: string, end1: string, start2: string, end2: string): boolean {
-    const s1 = this.timeToMinutes(start1);
-    const e1 = this.timeToMinutes(end1);
-    const s2 = this.timeToMinutes(start2);
-    const e2 = this.timeToMinutes(end2);
-    return s1 < e2 && s2 < e1;
-  }
-
-  private getScheduleValidationError(
-    schedule: Schedule,
-    schedules: Schedule[],
-    excludeIndex?: number
-  ): string | null {
-    const { day, startTime, endTime, subject } = schedule;
-    const trimmedSubject = subject.trim();
-    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-    if (!day || !startTime || !endTime || !trimmedSubject) {
-      return 'All schedule fields are required.';
-    }
-    if (!this.isScheduleDay(day)) {
-      return 'Please select a valid day.';
-    }
-    if (!timePattern.test(startTime) || !timePattern.test(endTime)) {
-      return 'Please select a valid time value.';
-    }
-    const namePattern = /^[a-zA-Z0-9\s\-]+$/;
-    if (!namePattern.test(trimmedSubject)) {
-      return 'Subject may only contain letters, numbers, spaces, and hyphens.';
-    }
-    if (startTime === endTime) {
-      return 'Start time and end time cannot be the same.';
-    }
-    if (this.timeToMinutes(startTime) >= this.timeToMinutes(endTime)) {
-      return 'Start time must be before end time.';
-    }
-
-    const normalized = this.normalizeSchedule(schedule);
-    if (schedules.some((s, i) => i !== excludeIndex && s.subject.trim() === trimmedSubject)) {
-      return 'Subject name must be unique.';
-    }
-    if (
-      schedules.some(
-        (s, i) =>
-          i !== excludeIndex &&
-          s.day === normalized.day &&
-          s.startTime === normalized.startTime &&
-          s.endTime === normalized.endTime &&
-          s.subject.trim() === trimmedSubject
-      )
-    ) {
-      return 'Duplicate schedule.';
-    }
-    if (
-      schedules.some(
-        (s, i) =>
-          i !== excludeIndex &&
-          s.day === normalized.day &&
-          this.hasOverlap(normalized.startTime, normalized.endTime, s.startTime, s.endTime)
-      )
-    ) {
-      return 'Schedules on the same day cannot overlap.';
-    }
-
-    return null;
-  }
-
-  private validateSchedulesList(): string | null {
-    for (let i = 0; i < this.schedules.length; i++) {
-      const schedule = this.schedules[i];
-      const error = this.getScheduleValidationError(schedule, this.schedules, i);
-      if (error) return error;
-    }
-    return null;
   }
 
   private hasUnsavedChanges(): boolean {
@@ -356,8 +261,8 @@ export class RoomEditModal implements OnChanges {
     if (this.selectedDevice !== this.originalSnapshot.device) return true;
     if (this.schedules.length !== this.originalSnapshot.schedules.length) return true;
     for (let i = 0; i < this.schedules.length; i++) {
-      const current = this.normalizeSchedule(this.schedules[i]);
-      const original = this.normalizeSchedule(this.originalSnapshot.schedules[i]);
+      const current = normalizeSchedule(this.schedules[i]);
+      const original = normalizeSchedule(this.originalSnapshot.schedules[i]);
       if (
         current.day !== original.day ||
         current.startTime !== original.startTime ||
@@ -378,16 +283,12 @@ export class RoomEditModal implements OnChanges {
       return;
     }
 
+    const nameError = getRoomNameError(this.roomName);
+    if (nameError) {
+      this.dialogService.error('Validation Error', nameError);
+      return;
+    }
     const trimmedName = this.roomName.trim();
-    if (!trimmedName) {
-      this.dialogService.error('Validation Error', 'Room name is required.');
-      return;
-    }
-    const namePattern = /^[a-zA-Z0-9\s\-]+$/;
-    if (!namePattern.test(trimmedName)) {
-      this.dialogService.error('Invalid Input', 'Room name may only contain letters, numbers, spaces, and hyphens.');
-      return;
-    }
     if (!this.selectedDevice) {
       this.dialogService.error('Validation Error', 'Device UID is required.');
       return;
@@ -396,7 +297,7 @@ export class RoomEditModal implements OnChanges {
       this.dialogService.error('Validation Error', 'Add at least one schedule before updating the room.');
       return;
     }
-    const scheduleError = this.validateSchedulesList();
+    const scheduleError = validateSchedulesList(this.schedules);
     if (scheduleError) {
       this.dialogService.error('Validation Error', scheduleError);
       return;

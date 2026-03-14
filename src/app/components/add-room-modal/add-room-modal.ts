@@ -3,7 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { RoomService } from '../../services/room.service'; 
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
-import { Room, Schedule } from '../../models/room.model'; 
+import { Room, Schedule } from '../../models/room.model';
+import {
+  getRoomNameError,
+  getScheduleValidationError,
+  isScheduleDay,
+  normalizeSchedule,
+} from '../../helpers/room-validation';
 import { DropDown, DropDownOption } from '../drop-down/drop-down';
 
 @Component({
@@ -102,16 +108,12 @@ export class AddRoomModal implements OnInit {
   async nextStep(): Promise<void> {
     if (this.isStepOneLoading) return;
 
+    const nameError = getRoomNameError(this.roomName);
+    if (nameError) {
+      this.dialogService.error('Validation Error', nameError);
+      return;
+    }
     const trimmedName = this.roomName.trim();
-    if (!trimmedName) {
-      this.dialogService.error('Validation Error', 'Room name is required.');
-      return;
-    }
-    const namePattern = /^[a-zA-Z0-9\s\-]+$/;
-    if (!namePattern.test(trimmedName)) {
-      this.dialogService.error('Invalid Input', 'Room name may only contain letters, numbers, spaces, and hyphens.');
-      return;
-    }
     if (!this.selectedDevice) {
       this.dialogService.error('Validation Error', 'Device UID is required.');
       return;
@@ -138,46 +140,19 @@ export class AddRoomModal implements OnInit {
   }
 
   onDayChange(value: string): void {
-    if (!this.isScheduleDay(value)) return;
+    if (!isScheduleDay(value)) return;
     this.newSchedule.day = value;
     this.cdr.markForCheck();
   }
 
   addSchedule(): void {
-    const { day, startTime, endTime, subject } = this.newSchedule;
-    const trimmedSubject = subject.trim();
-    if (!day || !startTime || !endTime || !trimmedSubject) {
-      this.dialogService.error('Validation Error', 'All schedule fields are required.');
-      return;
-    }
-    const namePattern = /^[a-zA-Z0-9\s\-]+$/;
-    if (!namePattern.test(trimmedSubject)) {
-      this.dialogService.error('Invalid Input', 'Subject may only contain letters, numbers, spaces, and hyphens.');
-      return;
-    }
-    // Check if start time and end time are the same
-    if (startTime === endTime) {
-      this.dialogService.error('Validation Error', 'Start time and end time cannot be the same.');
-      return;
-    }
-    if (this.timeToMinutes(startTime) >= this.timeToMinutes(endTime)) {
-      this.dialogService.error('Validation Error', 'Start time must be before end time.');
-      return;
-    }
-    if (this.schedules.some(s => s.subject === trimmedSubject)) {
-      this.dialogService.error('Duplicate Error', 'Subject name must be unique.');
-      return;
-    }
-    if (this.schedules.some(s => s.day === day && s.startTime === startTime && s.endTime === endTime && s.subject === trimmedSubject)) {
-      this.dialogService.error('Duplicate Error', 'Duplicate schedule.');
-      return;
-    }
-    if (this.schedules.some(s => s.day === day && this.hasOverlap(startTime, endTime, s.startTime, s.endTime))) {
-      this.dialogService.error('Overlap Error', 'Schedules on the same day cannot overlap.');
+    const error = getScheduleValidationError(this.newSchedule, this.schedules);
+    if (error) {
+      this.dialogService.error('Validation Error', error);
       return;
     }
 
-    this.schedules.push({ day, startTime, endTime, subject: trimmedSubject });
+    this.schedules.push(normalizeSchedule(this.newSchedule));
     this.newSchedule = { day: '', startTime: '', endTime: '', subject: '' };
     this.cdr.markForCheck();
   }
@@ -185,19 +160,6 @@ export class AddRoomModal implements OnInit {
   removeSchedule(index: number): void {
     this.schedules.splice(index, 1);
     this.cdr.markForCheck();
-  }
-
-  private timeToMinutes(time: string): number {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  private hasOverlap(start1: string, end1: string, start2: string, end2: string): boolean {
-    const s1 = this.timeToMinutes(start1);
-    const e1 = this.timeToMinutes(end1);
-    const s2 = this.timeToMinutes(start2);
-    const e2 = this.timeToMinutes(end2);
-    return s1 < e2 && s2 < e1;
   }
 
   private buildTimeOptions(): DropDownOption[] {
@@ -220,18 +182,6 @@ export class AddRoomModal implements OnInit {
     const period = hour >= 12 ? 'PM' : 'AM';
     const adjustedHour = hour % 12 === 0 ? 12 : hour % 12;
     return `${adjustedHour}:${minute.toString().padStart(2, '0')} ${period}`;
-  }
-
-  private isScheduleDay(value: string): value is Exclude<Schedule['day'], ''> {
-    return (
-      value === 'Monday' ||
-      value === 'Tuesday' ||
-      value === 'Wednesday' ||
-      value === 'Thursday' ||
-      value === 'Friday' ||
-      value === 'Saturday' ||
-      value === 'Sunday'
-    );
   }
 
   async onSave(): Promise<void> {
