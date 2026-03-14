@@ -92,8 +92,8 @@ export class RoomDetails implements OnInit, OnDestroy {
     this.clearLoadingTimeout();
   }
   private streamDeviceData(deviceId: string) {
-    this.unsubscribeDevices = this.deviceService.streamDevices((devices) => {
-      this.deviceData = devices[deviceId] || null;
+    this.unsubscribeDevices = this.deviceService.streamDevice(deviceId, (device) => {
+      this.deviceData = device;
       this.refreshView();
     });
   }

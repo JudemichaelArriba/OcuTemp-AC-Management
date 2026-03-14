@@ -18,7 +18,7 @@ export interface DeviceTelemetry {
   providedIn: 'root'
 })
 export class DeviceService {
-  constructor(private db: Database) {}
+  constructor(private db: Database) { }
 
   async getAvailableDevices(): Promise<string[]> {
     const devicesRef = ref(this.db, 'devices');
@@ -87,6 +87,17 @@ export class DeviceService {
         return;
       }
       callback(snapshot.val() as Record<string, DeviceTelemetry>);
+    });
+  }
+
+  streamDevice(deviceId: string, callback: (device: DeviceTelemetry | null) => void): () => void {
+    const deviceRef = ref(this.db, `devices/${deviceId}`);
+    return onValue(deviceRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null);
+        return;
+      }
+      callback(snapshot.val() as DeviceTelemetry);
     });
   }
 

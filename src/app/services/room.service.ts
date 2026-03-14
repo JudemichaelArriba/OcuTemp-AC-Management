@@ -29,7 +29,7 @@ export class RoomService {
     if (exists) {
       throw new Error('Room name already exists');
     }
-    
+
     const roomsRef = ref(this.db, 'rooms');
     const newRef = push(roomsRef);
     const newRoom: Room = { ...room, uid: newRef.key! };
