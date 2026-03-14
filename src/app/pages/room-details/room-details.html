@@ -92,12 +92,12 @@
                     <div
                         class="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Created</p>
-                        <p class="text-xs font-bold text-gray-900">{{ room.createdAt || 'N/A' }}</p>
+                        <p class="text-xs font-bold text-gray-900">{{ room.createdAt ? (room.createdAt | date:'MMM d, y, h:mm a') : 'N/A' }}</p>
                     </div>
                     <div
                         class="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Updated</p>
-                        <p class="text-xs font-bold text-gray-900">{{ room.updatedAt || 'N/A' }}</p>
+                        <p class="text-xs font-bold text-gray-900">{{ room.updatedAt ? (room.updatedAt | date:'MMM d, y, h:mm a') : 'N/A' }}</p>
                     </div>
                 </div>
             </div>
@@ -232,8 +232,7 @@
                             <div class="bg-white rounded-lg p-3 border border-blue-100">
                                 <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Updated At
                                 </p>
-                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt || '--' }}
-                                </p>
+                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ? (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}
                             </div>
                         </div>
                     </div>
