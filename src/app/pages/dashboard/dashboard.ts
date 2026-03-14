@@ -3,6 +3,7 @@ import { Room } from '../../models/room.model';
 import { RoomService } from '../../services/room.service';
 import { DeviceService, DeviceTelemetry } from '../../services/device.service';
 import { RoomCard } from '../../components/room-card/room-card';
+import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 
 
 
@@ -51,16 +52,10 @@ export class Dashboard {
   }
 
   private mergeRoomTelemetry(): void {
-   this.rooms = this.baseRooms.map((room)=>{
-      const telemetry = room.device ? this.deviceMap[room.device] : undefined;
-    return{
-        ...room,
-        temperature: telemetry?.temperature ?? room.temperature,
-        humidity: telemetry?.humidity ?? room.humidity,
-        occupancy: telemetry?.occupancy ?? room.occupancy,
-        power: telemetry?.acState?.power ?? room.power ?? false,
-    };
-   });
+    this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
+      fallbackToRoomPower: true,
+      defaultPower: false,
+    });
    this.cdr.markForCheck();
   }
 

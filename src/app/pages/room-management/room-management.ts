@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { RoomCard } from '../../components/room-card/room-card';
 import { RoomService } from '../../services/room.service';
 import { DeviceService, DeviceTelemetry } from '../../services/device.service';
+import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 
 @Component({
   selector: 'app-room-management',
@@ -80,15 +81,8 @@ export class RoomManagement implements OnInit, OnDestroy {
   }
 
   private mergeRoomTelemetryAndFilter(): void {
-    this.rooms = this.baseRooms.map((room) => {
-      const telemetry = room.device ? this.deviceMap[room.device] : undefined;
-      return {
-        ...room,
-        temperature: telemetry?.temperature ?? room.temperature,
-        humidity: telemetry?.humidity ?? room.humidity,
-        occupancy: telemetry?.occupancy ?? room.occupancy,
-        power: telemetry?.acState?.power ?? false,
-      };
+    this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
+      defaultPower: false,
     });
 
     const query = this.searchQuery.trim().toLowerCase();
