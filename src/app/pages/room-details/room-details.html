@@ -116,8 +116,7 @@
                                 </p>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-xl font-black text-gray-900">
-                                        {{ room.temperature !== undefined ? (room.temperature | number:'1.1-1') : '--'
-                                        }}
+                                        {{ environmentalTemperature !== null ? (environmentalTemperature | number:'1.1-1') : '--' }}
                                     </span>
                                     <span class="text-sm font-bold text-gray-400">°C</span>
                                 </div>
@@ -136,7 +135,7 @@
                                 </p>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-xl font-black text-gray-900">
-                                        {{ room.humidity !== undefined ? (room.humidity | number:'1.1-1') : '--' }}
+                                        {{ environmentalHumidity !== null ? (environmentalHumidity | number:'1.1-1') : '--' }}
                                     </span>
                                     <span class="text-sm font-bold text-gray-400">%</span>
                                 </div>
@@ -155,8 +154,7 @@
                                 </p>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-xl font-black text-gray-900">
-                                        {{ room.occupancy !== undefined ? (room.occupancy ? 'Occupied' : 'Vacant') :
-                                        '--' }}
+                                        {{ environmentalOccupancy !== null ? (environmentalOccupancy ? 'Occupied' : 'Vacant') : '--' }}
                                     </span>
                                 </div>
                             </div>
@@ -176,49 +174,17 @@
 
                 @if (deviceData) {
                 <div class="space-y-4">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div
-                            class="bg-orange-50 rounded-xl p-4 border border-orange-200 hover:border-orange-300 transition-all">
-                            <p class="text-[10px] text-orange-700 uppercase mb-1.5 font-bold tracking-wider">Device Temp
-                            </p>
-                            <p class="text-base font-black text-orange-900">
-                                {{ deviceData.temperature !== undefined ? (deviceData.temperature | number:'1.1-1') + '
-                                °C' : '--' }}
-                            </p>
-                        </div>
-                        <div
-                            class="bg-blue-50 rounded-xl p-4 border border-blue-200 hover:border-blue-300 transition-all">
-                            <p class="text-[10px] text-blue-700 uppercase mb-1.5 font-bold tracking-wider">Device
-                                Humidity</p>
-                            <p class="text-base font-black text-blue-900">
-                                {{ deviceData.humidity !== undefined ? (deviceData.humidity | number:'1.1-1') + '%' :
-                                '--' }}
-                            </p>
-                        </div>
-                        <div
-                            class="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all">
-                            <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Occupancy</p>
-                            <p class="text-base font-black text-gray-900">
-                                {{ deviceData.occupancy !== undefined ? (deviceData.occupancy ? 'Yes' : 'No') : '--' }}
-                            </p>
-                        </div>
-                        <div
-                            class="bg-emerald-50 rounded-xl p-4 border border-emerald-200 hover:border-emerald-300 transition-all">
-                            <p class="text-[10px] text-emerald-700 uppercase mb-1.5 font-bold tracking-wider">AC Power
-                            </p>
-                            <p class="text-base font-black text-emerald-900">
-                                {{ acPowerText }}
-                            </p>
-                        </div>
-                    </div>
-
                     @if (deviceData.acState) {
                     <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
                         <h3 class="font-bold text-blue-900 mb-3 text-xs flex items-center gap-2">
                             <span class="size-1.5 bg-blue-600 rounded-full"></span>
                             AC State Details
                         </h3>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div class="bg-white rounded-lg p-3 border border-blue-100">
+                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Power</p>
+                                <p class="text-blue-950 font-black text-sm">{{ acPowerText }}</p>
+                            </div>
                             <div class="bg-white rounded-lg p-3 border border-blue-100">
                                 <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Current
                                     Temp</p>
@@ -232,7 +198,7 @@
                             <div class="bg-white rounded-lg p-3 border border-blue-100">
                                 <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Updated At
                                 </p>
-                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ? (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}
+                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ? (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}</p>
                             </div>
                         </div>
                     </div>

@@ -24,6 +24,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   private unsubscribeDevices?: () => void;
   private loadingTimeoutId?: ReturnType<typeof setTimeout>;
   private destroyed = false;
+  private currentDeviceId: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -64,8 +65,17 @@ export class RoomDetails implements OnInit, OnDestroy {
         this.refreshView();
 
 
-        if (foundRoom.device) {
-          this.streamDeviceData(foundRoom.device);
+        const nextDeviceId = foundRoom.device || null;
+        if (nextDeviceId !== this.currentDeviceId) {
+          this.currentDeviceId = nextDeviceId;
+          this.deviceData = null;
+          this.unsubscribeDevices?.();
+          this.unsubscribeDevices = undefined;
+          if (nextDeviceId) {
+            this.streamDeviceData(nextDeviceId);
+          }
+        } else if (nextDeviceId && !this.unsubscribeDevices) {
+          this.streamDeviceData(nextDeviceId);
         }
       } else {
         this.error = 'Room not found';
@@ -135,6 +145,27 @@ export class RoomDetails implements OnInit, OnDestroy {
     if (!this.destroyed) {
       this.cdr.detectChanges();
     }
+  }
+
+  get environmentalTemperature(): number | null {
+    if (this.room?.device && this.deviceData?.temperature !== undefined) {
+      return this.deviceData.temperature;
+    }
+    return this.room?.temperature ?? null;
+  }
+
+  get environmentalHumidity(): number | null {
+    if (this.room?.device && this.deviceData?.humidity !== undefined) {
+      return this.deviceData.humidity;
+    }
+    return this.room?.humidity ?? null;
+  }
+
+  get environmentalOccupancy(): boolean | null {
+    if (this.room?.device && this.deviceData?.occupancy !== undefined) {
+      return this.deviceData.occupancy;
+    }
+    return this.room?.occupancy ?? null;
   }
 
 }
