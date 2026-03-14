@@ -55,8 +55,7 @@ export class RoomDetails implements OnInit, OnDestroy {
     }, 12000);
 
 
-    this.unsubscribeRooms = this.roomService.streamRooms((rooms) => {
-      const foundRoom = rooms.find(r => r.uid === uid);
+    this.unsubscribeRooms = this.roomService.streamRoomById(uid, (foundRoom) => {
       if (foundRoom) {
         this.error = null;
         this.room = foundRoom;

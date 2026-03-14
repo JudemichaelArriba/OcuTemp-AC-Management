@@ -59,4 +59,19 @@ export class RoomService {
       callback(rooms);
     });
   }
+
+  streamRoomById(uid: string, callback: (room: Room | null) => void): () => void {
+    const roomRef = ref(this.db, `rooms/${uid}`);
+    return onValue(roomRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null);
+        return;
+      }
+      const rawRoom = snapshot.val() as Omit<Room, 'uid'> & Partial<Pick<Room, 'uid'>>;
+      callback({
+        ...rawRoom,
+        uid: rawRoom.uid ?? uid,
+      } as Room);
+    });
+  }
 }
