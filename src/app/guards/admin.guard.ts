@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { CanActivate, Router } from '@angular/router';
 import { Auth, onAuthStateChanged } from '@angular/fire/auth';
-import { UserService } from '../services/user';
+import { AuthStateService } from '../services/auth-state.service';
 
 @Injectable({
   providedIn: 'root',
@@ -9,7 +9,7 @@ import { UserService } from '../services/user';
 export class AdminGuard implements CanActivate {
   private auth = inject(Auth);
   private router = inject(Router);
-  private userService = inject(UserService);
+  private authState = inject(AuthStateService);
 
   canActivate(): Promise<boolean> {
     return new Promise((resolve) => {
@@ -19,17 +19,11 @@ export class AdminGuard implements CanActivate {
           return resolve(false);
         }
 
-        try {
-          const user = await this.userService.getUser(firebaseUser.uid);
-          
-          if (user?.role === 'admin' && user?.approved === true) {
-            resolve(true);
-          } else {
-            this.router.navigate(['/app/dashboard']);
-            resolve(false);
-          }
-        } catch {
-          this.router.navigate(['/login']);
+        const user = await this.authState.getCurrentUserOnce();
+        if (user?.role === 'admin' && user?.approved === true) {
+          resolve(true);
+        } else {
+          this.router.navigate(['/app/dashboard']);
           resolve(false);
         }
       });

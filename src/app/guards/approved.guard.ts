@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { CanActivate, Router } from '@angular/router';
 import { Auth, onAuthStateChanged } from '@angular/fire/auth';
-import { UserService } from '../services/user';
+import { AuthStateService } from '../services/auth-state.service';
 
 @Injectable({
   providedIn: 'root',
@@ -9,7 +9,7 @@ import { UserService } from '../services/user';
 export class ApprovedGuard implements CanActivate {
   private auth = inject(Auth);
   private router = inject(Router);
-  private userService = inject(UserService);
+  private authState = inject(AuthStateService);
 
   canActivate(): Promise<boolean> {
     return new Promise((resolve) => {
@@ -19,16 +19,11 @@ export class ApprovedGuard implements CanActivate {
           return resolve(false);
         }
 
-        try {
-          const user = await this.userService.getUser(firebaseUser.uid);
-          if (user?.approved === true) {
-            resolve(true);
-          } else {
-            this.router.navigate(['/add-credentials']);
-            resolve(false);
-          }
-        } catch {
-          this.router.navigate(['/login']);
+        const user = await this.authState.getCurrentUserOnce();
+        if (user?.approved === true) {
+          resolve(true);
+        } else {
+          this.router.navigate(['/add-credentials']);
           resolve(false);
         }
       });
