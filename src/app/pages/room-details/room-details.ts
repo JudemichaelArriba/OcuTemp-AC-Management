@@ -34,8 +34,6 @@ export class RoomDetails implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef
   ) { }
 
-
-
   ngOnInit() {
     const uid = this.route.snapshot.paramMap.get('uid');
     if (!uid) {

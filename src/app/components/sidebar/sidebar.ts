@@ -52,7 +52,7 @@ export class SidebarComponent {
           await signOut(this.auth);
 
 
-          this.authState.clearUser;
+          this.authState.clearUser();
 
           this.router.navigate(['/login']);
 
