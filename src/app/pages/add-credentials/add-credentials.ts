@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { Auth } from '@angular/fire/auth';
 import { Router } from '@angular/router';
 import { UserService } from '../../services/user';
+import { DialogService } from '../../services/dialog.service';
 
 @Component({
   selector: 'app-add-credentials',
@@ -15,7 +16,8 @@ export class AddCredentialsComponent {
   constructor(
     private auth: Auth,
     private userService: UserService,
-    private router: Router
+    private router: Router,
+    private dialogService: DialogService
   ) {}
 
   async saveAccount(event: Event) {
@@ -35,7 +37,7 @@ export class AddCredentialsComponent {
     const currentUser = this.auth.currentUser;
 
     if (!currentUser) {
-      alert('User not authenticated. Please log in again.');
+      this.dialogService.alert('Not Authenticated', 'User not authenticated. Please log in again.');
       return;
     }
 
@@ -53,19 +55,22 @@ export class AddCredentialsComponent {
       });
 
       this.isSaving = false;
-      alert('Account successfully created!');
-      this.router.navigate(['/app/dashboard']); 
+      this.dialogService.success(
+        'Account Created',
+        'Account successfully created!',
+        () => this.router.navigate(['/app/dashboard'])
+      );
 
     } catch (err: any) {
       this.isSaving = false;
 
   
       if (err.code === 'auth/email-already-in-use') {
-        alert('This email is already in use.');
+        this.dialogService.error('Add Credentials Failed', 'This email is already in use.');
       } else if (err.code === 'auth/invalid-email') {
-        alert('The email is invalid.');
+        this.dialogService.error('Add Credentials Failed', 'The email is invalid.');
       } else {
-        alert('Failed to save account. Please try again.');
+        this.dialogService.error('Add Credentials Failed', 'Failed to save account. Please try again.');
       }
 
       console.error('AddCredentials error:', err);

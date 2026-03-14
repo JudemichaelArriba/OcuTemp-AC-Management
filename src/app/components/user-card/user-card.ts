@@ -2,6 +2,7 @@ import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { User } from '../../models/user.model';
 import { UserService } from '../../services/user';
+import { DialogService } from '../../services/dialog.service';
 import { ChangeDetectorRef } from '@angular/core';
 import { EditUserModal } from '../edit-user-modal/edit-user-modal';
 
@@ -18,7 +19,11 @@ export class UserCardComponent {
   isUpdating = false;
   editUser: User | null = null;
 
-  constructor(private userService: UserService, private cdr: ChangeDetectorRef) {}
+  constructor(
+    private userService: UserService,
+    private cdr: ChangeDetectorRef,
+    private dialogService: DialogService
+  ) {}
 
   openEditModal(): void {
     this.editUser = { ...this.user };
@@ -38,36 +43,56 @@ export class UserCardComponent {
 
   async onApprove() {
     if (this.isUpdating) return;
-    const confirmed = confirm(`Approve ${this.user.fullName || this.user.email}? They will be able to log in.`);
-    if (!confirmed) return;
-    this.isUpdating = true;
-    try {
-      await this.userService.setApproval(this.user.uid, true);
-      this.user = { ...this.user, approved: true };
-      this.cdr.markForCheck();
-    } catch (err) {
-      console.error('Failed to approve user:', err);
-      alert('Failed to approve user. Please try again.');
-    } finally {
-      this.isUpdating = false;
-    }
+    this.dialogService.confirm(
+      'Approve User',
+      `Approve ${this.user.fullName || this.user.email}? They will be able to log in.`,
+      async () => {
+        if (this.isUpdating) return;
+        this.isUpdating = true;
+        this.cdr.markForCheck();
+        try {
+          await this.userService.setApproval(this.user.uid, true);
+          this.user = { ...this.user, approved: true };
+          this.cdr.markForCheck();
+        } catch (err) {
+          console.error('Failed to approve user:', err);
+          this.dialogService.error('Approve Failed', 'Failed to approve user. Please try again.');
+        } finally {
+          this.isUpdating = false;
+          this.cdr.markForCheck();
+        }
+      },
+      undefined,
+      'Approve',
+      'Cancel'
+    );
   }
 
   async onRestrict() {
     if (this.isUpdating) return;
-    const confirmed = confirm(`Restrict ${this.user.fullName || this.user.email}? They will no longer be able to log in.`);
-    if (!confirmed) return;
-    this.isUpdating = true;
-    try {
-      await this.userService.setApproval(this.user.uid, false);
-      this.user = { ...this.user, approved: false };
-      this.cdr.markForCheck();
-    } catch (err) {
-      console.error('Failed to restrict user:', err);
-      alert('Failed to restrict user. Please try again.');
-    } finally {
-      this.isUpdating = false;
-    }
+    this.dialogService.confirm(
+      'Restrict User',
+      `Restrict ${this.user.fullName || this.user.email}? They will no longer be able to log in.`,
+      async () => {
+        if (this.isUpdating) return;
+        this.isUpdating = true;
+        this.cdr.markForCheck();
+        try {
+          await this.userService.setApproval(this.user.uid, false);
+          this.user = { ...this.user, approved: false };
+          this.cdr.markForCheck();
+        } catch (err) {
+          console.error('Failed to restrict user:', err);
+          this.dialogService.error('Restrict Failed', 'Failed to restrict user. Please try again.');
+        } finally {
+          this.isUpdating = false;
+          this.cdr.markForCheck();
+        }
+      },
+      undefined,
+      'Restrict',
+      'Cancel'
+    );
   }
 
   getInitials(name?: string): string {
