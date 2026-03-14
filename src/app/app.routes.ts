@@ -5,6 +5,7 @@ import { ForgotPasswordComponent } from './pages/forgot-password/forgot-password
 import { Dashboard } from './pages/dashboard/dashboard';
 import { LayoutComponent } from './layout/layout/layout';
 import { AuthGuard } from './guards/auth.guard';
+import { ApprovedGuard } from './guards/approved.guard';
 import { RoomManagement } from './pages/room-management/room-management';
 import { EnergyReports } from './pages/energy-reports/energy-reports';
 import { UserManagement } from './pages/user-management/user-management';
@@ -23,7 +24,7 @@ export const routes: Routes = [
   { 
     path: 'app', 
     component: LayoutComponent, 
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, ApprovedGuard],
     children: [
         { path: 'dashboard', component: Dashboard },
         { path: 'room-management', component: RoomManagement },

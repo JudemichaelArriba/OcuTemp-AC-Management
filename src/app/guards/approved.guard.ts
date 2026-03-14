@@ -6,7 +6,7 @@ import { UserService } from '../services/user';
 @Injectable({
   providedIn: 'root',
 })
-export class AdminGuard implements CanActivate {
+export class ApprovedGuard implements CanActivate {
   private auth = inject(Auth);
   private router = inject(Router);
   private userService = inject(UserService);
@@ -21,11 +21,10 @@ export class AdminGuard implements CanActivate {
 
         try {
           const user = await this.userService.getUser(firebaseUser.uid);
-          
-          if (user?.role === 'admin' && user?.approved === true) {
+          if (user?.approved === true) {
             resolve(true);
           } else {
-            this.router.navigate(['/app/dashboard']);
+            this.router.navigate(['/add-credentials']);
             resolve(false);
           }
         } catch {
