@@ -25,7 +25,7 @@ export class AuthService {
     private userService: UserService,
     private zone: NgZone,
     private authState: AuthStateService
-  ) {}
+  ) { }
 
 
   /**
@@ -34,29 +34,36 @@ export class AuthService {
    */
   async login(email: string, password: string): Promise<string> {
     try {
- 
+
       await setPersistence(this.auth, browserSessionPersistence);
 
       const credential = await signInWithEmailAndPassword(this.auth, email, password);
       const uid = credential.user.uid;
       const existingUser = await this.userService.getUser(uid);
 
-    if (existingUser && existingUser.approved === false) {
-      await this.auth.signOut(); 
-      throw new Error('not-approved');
-    }
+      if (existingUser && existingUser.role && existingUser.role !== 'admin' && existingUser.role !== 'staff') {
+        await this.auth.signOut();
+        throw new Error('Invalid credentials. Please check your details.');
+      }
 
-        if (existingUser) this.authState.setUser(existingUser);
+      if (existingUser && existingUser.approved === false) {
+        await this.auth.signOut();
+        throw new Error('not-approved');
+      }
+
+
+
+      if (existingUser) this.authState.setUser(existingUser);
       return existingUser ? '/app/dashboard' : '/add-credentials';
 
     } catch (err: any) {
-      throw err; 
+      throw err;
     }
   }
 
 
 
-  
+
   /**
    * Registers a new staff account.
    * Sets approved: false by default — admin must approve before the user can log in.
@@ -85,21 +92,21 @@ export class AuthService {
 
 
 
-        /**
-       * Logs out the current user
-       * Clears AuthState and Firebase session
-       */
-        async logout(): Promise<void> {
-          try {
-            await this.auth.signOut();
+  /**
+ * Logs out the current user
+ * Clears AuthState and Firebase session
+ */
+  async logout(): Promise<void> {
+    try {
+      await this.auth.signOut();
 
-            // Clear local auth state
-            this.authState.clearUser?.(); // if you have this method
-            // or this.authState.setUser(null);
+      // Clear local auth state
+      this.authState.clearUser?.(); // if you have this method
+      // or this.authState.setUser(null);
 
-          } catch (error) {
-            console.error('Logout failed:', error);
-            throw error;
-          }
-        }
+    } catch (error) {
+      console.error('Logout failed:', error);
+      throw error;
+    }
+  }
 }
