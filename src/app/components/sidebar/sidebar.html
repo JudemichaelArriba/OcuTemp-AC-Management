@@ -15,9 +15,8 @@
     [class.justify-center]="!isOpen()" [class.px-4]="isOpen()">
 
     <div class="flex items-center gap-3 min-w-0">
-      <div
-        class="size-9 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-md shadow-blue-300/40 shrink-0">
-        <span class="material-symbols-outlined text-white text-lg">thermostat</span>
+      <div class="flex justify-center">
+        <img src="logo.png" alt="OcuTemp Logo" class="w-12 h-12 object-contain" />
       </div>
       @if (isOpen()) {
       <div class="overflow-hidden">
