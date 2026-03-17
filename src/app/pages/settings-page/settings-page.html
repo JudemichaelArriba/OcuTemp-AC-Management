@@ -72,15 +72,36 @@
 
 
             <div class="mt-8 flex justify-end">
-                <button (click)="isEditing ? saveChanges() : startEdit(user.fullName)" class="px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500
+                <button (click)="isEditing ? saveChanges(user) : startEdit(user.fullName)" [disabled]="isSaving" class="relative px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500
          rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl
-         transform hover:-translate-y-0.5 transition-all duration-200">
-                    {{ isEditing ? 'Save Changes' : 'Edit Profile' }}
+         transform hover:-translate-y-0.5 transition-all duration-200
+         disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden">
+
+                    @if (isSaving) {
+                    <div class="absolute inset-0 bg-white/20" style="animation: progress 1.5s ease-in-out infinite;">
+                    </div>
+                    }
+
+                    <span class="relative z-10 flex items-center justify-center gap-2">
+                        @if (isSaving) {
+                        <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
+                            viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z">
+                            </path>
+                        </svg>
+                        }
+                        {{ isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Edit Profile') }}
+                    </span>
                 </button>
 
 
+
+
                 @if (isEditing) {
-                <button (click)="cancelEdit()"
+                <button (click)="isEditing = false"
                     class="ml-2 px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50">
                     Cancel
                 </button>
