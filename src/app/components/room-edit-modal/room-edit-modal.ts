@@ -15,10 +15,9 @@ import { RoomService } from '../../services/room.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { DropDown, DropDownOption } from '../drop-down/drop-down';
+import { ScheduleBuilder } from '../schedule-builder/schedule-builder';
 import {
   getRoomNameError,
-  getScheduleValidationError,
-  isScheduleDay,
   normalizeSchedule,
   validateSchedulesList,
 } from '../../helpers/room-validation';
@@ -26,7 +25,7 @@ import {
 @Component({
   selector: 'app-room-edit-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, DropDown],
+  imports: [CommonModule, FormsModule, DropDown, ScheduleBuilder],
   templateUrl: './room-edit-modal.html',
   styleUrl: './room-edit-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,21 +44,7 @@ export class RoomEditModal implements OnChanges {
   status: Room['status'] = 'active';
   selectedDevice = '';
   deviceOptions: DropDownOption[] = [];
-
-  dayOptions: DropDownOption[] = [
-    { value: 'Monday', label: 'Monday', hint: 'Start of work week' },
-    { value: 'Tuesday', label: 'Tuesday', hint: 'Second weekday' },
-    { value: 'Wednesday', label: 'Wednesday', hint: 'Midweek' },
-    { value: 'Thursday', label: 'Thursday', hint: 'Near weekend' },
-    { value: 'Friday', label: 'Friday', hint: 'Last weekday' },
-    { value: 'Saturday', label: 'Saturday', hint: 'Weekend' },
-    { value: 'Sunday', label: 'Sunday', hint: 'Weekend' },
-  ];
-  timeOptions: DropDownOption[] = this.buildTimeOptions();
-
-  newSchedule: Schedule = { day: '', startTime: '', endTime: '', subject: '' };
   schedules: Schedule[] = [];
-  editingIndex: number | null = null;
 
   private originalSnapshot: {
     roomName: string;
@@ -73,7 +58,7 @@ export class RoomEditModal implements OnChanges {
     private deviceService: DeviceService,
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef
-  ) {}
+  ) { }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['room']) {
@@ -91,8 +76,6 @@ export class RoomEditModal implements OnChanges {
     this.status = room.status || 'active';
     this.selectedDevice = room.device || '';
     this.schedules = this.cloneSchedules(room.schedules || []);
-    this.newSchedule = { day: '', startTime: '', endTime: '', subject: '' };
-    this.editingIndex = null;
     this.originalSnapshot = {
       roomName: this.roomName.trim(),
       status: this.status,
@@ -167,86 +150,6 @@ export class RoomEditModal implements OnChanges {
   setStatus(value: Room['status']): void {
     this.status = value;
     this.cdr.markForCheck();
-  }
-
-  onDayChange(value: string): void {
-    if (!isScheduleDay(value)) return;
-    this.newSchedule.day = value;
-    this.cdr.markForCheck();
-  }
-
-  editSchedule(index: number): void {
-    const schedule = this.schedules[index];
-    if (!schedule) return;
-    this.newSchedule = { ...schedule };
-    this.editingIndex = index;
-    this.cdr.markForCheck();
-  }
-
-  cancelEdit(): void {
-    this.newSchedule = { day: '', startTime: '', endTime: '', subject: '' };
-    this.editingIndex = null;
-    this.cdr.markForCheck();
-  }
-
-  addOrUpdateSchedule(): void {
-    const error = getScheduleValidationError(this.newSchedule, this.schedules, this.editingIndex ?? undefined);
-    if (error) {
-      this.dialogService.error('Validation Error', error);
-      return;
-    }
-
-    const normalized = normalizeSchedule(this.newSchedule);
-    if (this.editingIndex !== null) {
-      this.schedules[this.editingIndex] = normalized;
-      this.editingIndex = null;
-    } else {
-      this.schedules.push(normalized);
-    }
-
-    this.newSchedule = { day: '', startTime: '', endTime: '', subject: '' };
-    this.cdr.markForCheck();
-  }
-
-  removeSchedule(index: number): void {
-    const schedule = this.schedules[index];
-    if (!schedule) return;
-    const label = `${schedule.day} ${schedule.startTime}-${schedule.endTime}`;
-    this.dialogService.confirm(
-      'Remove Schedule',
-      `Remove ${label} (${schedule.subject})?`,
-      () => {
-        this.schedules.splice(index, 1);
-        if (this.editingIndex === index) {
-          this.cancelEdit();
-        } else if (this.editingIndex !== null && index < this.editingIndex) {
-          this.editingIndex -= 1;
-        }
-        this.cdr.markForCheck();
-      }
-    );
-  }
-
-  private buildTimeOptions(): DropDownOption[] {
-    const options: DropDownOption[] = [];
-    for (let hour = 0; hour < 24; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const value = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        options.push({
-          value,
-          label: this.toMeridiem(value),
-          hint: value,
-        });
-      }
-    }
-    return options;
-  }
-
-  private toMeridiem(time: string): string {
-    const [hour, minute] = time.split(':').map(Number);
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const adjustedHour = hour % 12 === 0 ? 12 : hour % 12;
-    return `${adjustedHour}:${minute.toString().padStart(2, '0')} ${period}`;
   }
 
   private cloneSchedules(schedules: Schedule[]): Schedule[] {

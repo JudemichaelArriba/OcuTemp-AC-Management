@@ -1,21 +1,17 @@
 import { Component, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RoomService } from '../../services/room.service'; 
+import { RoomService } from '../../services/room.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { Room, Schedule } from '../../models/room.model';
-import {
-  getRoomNameError,
-  getScheduleValidationError,
-  isScheduleDay,
-  normalizeSchedule,
-} from '../../helpers/room-validation';
+import { getRoomNameError } from '../../helpers/room-validation';
 import { DropDown, DropDownOption } from '../drop-down/drop-down';
+import { ScheduleBuilder } from '../schedule-builder/schedule-builder';
 
 @Component({
   selector: 'app-add-room-modal',
   standalone: true,
-  imports: [ FormsModule, DropDown],
+  imports: [FormsModule, DropDown, ScheduleBuilder],
   templateUrl: './add-room-modal.html',
   styleUrl: './add-room-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,18 +30,6 @@ export class AddRoomModal implements OnInit {
   selectedDevice = '';
   devices: string[] = [];
   deviceOptions: DropDownOption[] = [];
-  dayOptions: DropDownOption[] = [
-    { value: 'Monday', label: 'Monday', hint: 'Start of work week' },
-    { value: 'Tuesday', label: 'Tuesday', hint: 'Second weekday' },
-    { value: 'Wednesday', label: 'Wednesday', hint: 'Midweek' },
-    { value: 'Thursday', label: 'Thursday', hint: 'Near weekend' },
-    { value: 'Friday', label: 'Friday', hint: 'Last weekday' },
-    { value: 'Saturday', label: 'Saturday', hint: 'Weekend' },
-    { value: 'Sunday', label: 'Sunday', hint: 'Weekend' },
-  ];
-  timeOptions: DropDownOption[] = this.buildTimeOptions();
-
-  newSchedule: Schedule = { day: '', startTime: '', endTime: '', subject: '' };
   schedules: Schedule[] = [];
 
   constructor(
@@ -53,7 +37,7 @@ export class AddRoomModal implements OnInit {
     private deviceService: DeviceService,
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef
-  ) {}
+  ) { }
 
   async ngOnInit(): Promise<void> {
     this.devices = await this.deviceService.getAvailableDevices();
@@ -74,7 +58,6 @@ export class AddRoomModal implements OnInit {
     this.roomName = '';
     this.selectedDevice = '';
     this.schedules = [];
-    this.newSchedule = { day: '', startTime: '', endTime: '', subject: '' };
     this.cdr.markForCheck();
     requestAnimationFrame(() => {
       setTimeout(() => {
@@ -137,51 +120,6 @@ export class AddRoomModal implements OnInit {
       this.isStepOneLoading = false;
       this.cdr.markForCheck();
     }
-  }
-
-  onDayChange(value: string): void {
-    if (!isScheduleDay(value)) return;
-    this.newSchedule.day = value;
-    this.cdr.markForCheck();
-  }
-
-  addSchedule(): void {
-    const error = getScheduleValidationError(this.newSchedule, this.schedules);
-    if (error) {
-      this.dialogService.error('Validation Error', error);
-      return;
-    }
-
-    this.schedules.push(normalizeSchedule(this.newSchedule));
-    this.newSchedule = { day: '', startTime: '', endTime: '', subject: '' };
-    this.cdr.markForCheck();
-  }
-
-  removeSchedule(index: number): void {
-    this.schedules.splice(index, 1);
-    this.cdr.markForCheck();
-  }
-
-  private buildTimeOptions(): DropDownOption[] {
-    const options: DropDownOption[] = [];
-    for (let hour = 0; hour < 24; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        const value = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        options.push({
-          value,
-          label: this.toMeridiem(value),
-          hint: value,
-        });
-      }
-    }
-    return options;
-  }
-
-  private toMeridiem(time: string): string {
-    const [hour, minute] = time.split(':').map(Number);
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const adjustedHour = hour % 12 === 0 ? 12 : hour % 12;
-    return `${adjustedHour}:${minute.toString().padStart(2, '0')} ${period}`;
   }
 
   async onSave(): Promise<void> {
