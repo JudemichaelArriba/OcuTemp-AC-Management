@@ -21,6 +21,7 @@ import {
   normalizeSchedule,
   validateSchedulesList,
 } from '../../helpers/room-validation';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-room-edit-modal',
@@ -57,7 +58,8 @@ export class RoomEditModal implements OnChanges {
     private roomService: RoomService,
     private deviceService: DeviceService,
     private dialogService: DialogService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private logger: LoggerService
   ) { }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -96,7 +98,7 @@ export class RoomEditModal implements OnChanges {
         hint: device === currentDeviceId ? 'Currently assigned' : 'Available device',
       }));
     } catch (err) {
-      console.error('Failed to load devices:', err);
+      this.logger.error('Failed to load devices:', err);
       this.deviceOptions = [];
       this.dialogService.error('Load Failed', 'Unable to load device list. Please try again.');
     } finally {
@@ -264,7 +266,7 @@ export class RoomEditModal implements OnChanges {
               }, 50);
             });
           } catch (err) {
-            console.error('Failed to update room:', err);
+            this.logger.error('Failed to update room:', err)
             this.isSaving = false;
             this.cdr.markForCheck();
             this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');
@@ -278,7 +280,7 @@ export class RoomEditModal implements OnChanges {
         'Cancel'
       );
     } catch (err) {
-      console.error('Validation failed:', err);
+      this.logger.error('Validation failed:', err);
       this.isSaving = false;
       this.cdr.markForCheck();
       this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');

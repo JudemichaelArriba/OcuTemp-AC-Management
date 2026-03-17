@@ -9,7 +9,7 @@ import {
 } from '@angular/fire/auth';
 import { AuthStateService } from './auth-state.service';
 import { Database, ref, set, serverTimestamp } from '@angular/fire/database';
-
+import { LoggerService } from './logger.service';
 
 
 
@@ -24,7 +24,8 @@ export class AuthService {
     private db: Database,
     private userService: UserService,
     private zone: NgZone,
-    private authState: AuthStateService
+    private authState: AuthStateService,
+    private logger: LoggerService
   ) { }
 
 
@@ -100,12 +101,11 @@ export class AuthService {
     try {
       await this.auth.signOut();
 
-      // Clear local auth state
-      this.authState.clearUser?.(); // if you have this method
-      // or this.authState.setUser(null);
+      this.authState.clearUser?.(); 
+
 
     } catch (error) {
-      console.error('Logout failed:', error);
+      this.logger.error('Logout failed:', error);
       throw error;
     }
   }

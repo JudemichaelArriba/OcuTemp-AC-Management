@@ -5,6 +5,7 @@ import { Auth, signOut } from '@angular/fire/auth';
 import { AuthStateService } from '../../services/auth-state.service';
 import { DialogService } from '../../services/dialog.service';
 import { User } from '../../models/user.model';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -18,6 +19,10 @@ export class SidebarComponent {
   private dialogService = inject(DialogService);
   private auth = inject(Auth);
   private router = inject(Router);
+
+  constructor(
+    private logger: LoggerService
+  ) { }
 
   currentUser$ = this.authState.currentUser$;
 
@@ -57,7 +62,7 @@ export class SidebarComponent {
           this.router.navigate(['/login']);
 
         } catch (error) {
-          console.error('Logout failed:', error);
+          this.logger.error('Logout failed:', error);
           this.dialogService.error(
             'Logout Failed',
             'Something went wrong while signing out.'

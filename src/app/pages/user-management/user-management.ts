@@ -8,6 +8,7 @@ import { FormsModule } from '@angular/forms';
 import { UserService } from '../../services/user';
 import { User } from '../../models/user.model';
 import { UserCardComponent } from '../../components/user-card/user-card';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-user-management',
@@ -30,7 +31,8 @@ export class UserManagement implements OnInit {
 
   constructor(
     private userService: UserService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private logger: LoggerService
   ) {}
 
   async ngOnInit() {
@@ -42,7 +44,7 @@ export class UserManagement implements OnInit {
       this.isSuccess = true;
 
     } catch (error) {
-      console.error('Failed to load staff users:', error);
+      this.logger.error('Failed to load staff users:', error);
       this.isSuccess = false;
     } finally {
       this.isLoading = false;

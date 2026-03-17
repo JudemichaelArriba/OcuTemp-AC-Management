@@ -7,6 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { User } from '../../models/user.model';
 import { UserService } from '../../services/user';
 import { DialogService } from '../../services/dialog.service';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-edit-user-modal',
@@ -31,7 +32,8 @@ export class EditUserModal implements OnChanges {
   constructor(
     private userService: UserService,
     private dialogService: DialogService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private logger: LoggerService
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -147,7 +149,7 @@ export class EditUserModal implements OnChanges {
             });
 
           } catch (err) {
-            console.error('Failed to update user:', err);
+            this.logger.error('Failed to update user:', err);
             this.isSaving = false;
             this.cdr.markForCheck();
             this.dialogService.error(
@@ -159,7 +161,7 @@ export class EditUserModal implements OnChanges {
       );
 
     } catch (err) {
-      console.error('Failed to update user:', err);
+      this.logger.error('Failed to update user:', err);
       this.isSaving = false;
       this.cdr.markForCheck();
       this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');
