@@ -1,9 +1,9 @@
 <ng-container>
   <tr class="hover:bg-blue-50/50 transition-all duration-150 group">
 
-    <td class="px-6 py-4">
-      <div class="flex items-center gap-3">
-        <span class="text-sm font-bold text-slate-900">{{ user.fullName || 'Unknown' }}</span>
+    <td class="px-6 py-4 min-w-0">
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="text-sm font-bold text-slate-900 break-words min-w-0">{{ user.fullName || 'Unknown' }}</span>
       </div>
     </td>
 
@@ -16,9 +16,11 @@
       </span>
     </td>
 
-    <td class="px-6 py-4 text-sm text-slate-600 font-medium">{{ user.email || '--' }}</td>
+    <td class="px-6 py-4 text-sm text-slate-600 font-medium break-all max-w-[220px] sm:max-w-none">
+      {{ user.email || '--' }}
+    </td>
 
-    <td class="px-6 py-4">
+    <td class="hidden md:table-cell px-6 py-4">
       @if (formatLastLogin(user.lastLoginAt); as login) {
         <div class="flex items-center gap-1.5">
           @if (login.isRecent) {
@@ -30,7 +32,7 @@
     </td>
 
     <td class="px-6 py-4 text-right">
-      <div class="flex justify-end gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
 
         @if (!user.approved) {
           <button

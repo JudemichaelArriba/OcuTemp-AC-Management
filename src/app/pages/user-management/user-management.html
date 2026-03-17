@@ -44,17 +44,18 @@
 
   <div class="px-6 pb-6 flex-1 overflow-y-auto">
     <div class="max-w-[1800px] mx-auto bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      <table class="w-full text-left border-collapse">
-        <thead class="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
-          <tr>
-            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">User Name</th>
-            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Role</th>
-            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Email</th>
-            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Last Login</th>
-            <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
+      <div class="overflow-x-auto">
+        <table class="min-w-[860px] w-full text-left border-collapse">
+          <thead class="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
+            <tr>
+              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">User Name</th>
+              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Role</th>
+              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Email</th>
+              <th class="hidden md:table-cell px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Last Login</th>
+              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
 
           @if (isLoading) {
             @for (_ of skeletonRows; track $index) {
@@ -67,7 +68,7 @@
                 </td>
                 <td class="px-6 py-4"><div class="h-6 bg-slate-200 rounded-lg w-16"></div></td>
                 <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded-lg w-44"></div></td>
-                <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded-lg w-24"></div></td>
+                <td class="hidden md:table-cell px-6 py-4"><div class="h-4 bg-slate-200 rounded-lg w-24"></div></td>
                 <td class="px-6 py-4 text-right">
                   <div class="flex justify-end gap-2">
                     <div class="w-9 h-9 bg-slate-200 rounded-lg"></div>
@@ -108,8 +109,9 @@
             }
           }
 
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
 
       <div class="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100/50 border-t border-slate-200 flex items-center justify-between">
         <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">
