@@ -64,6 +64,16 @@ export class SettingsPage {
       return;
     }
 
+    if (trimmed.length > 50) {
+      this.dialogService.error('Validation Error', 'Full name must be 50 characters or less.');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9\s\-]+$/.test(trimmed)) {
+      this.dialogService.error('Validation Error', 'Full name has invalid characters.');
+      return;
+    }
+
     this.dialogService.confirm(
       'Confirm update',
       'Save your updated full name?',
@@ -77,7 +87,7 @@ export class SettingsPage {
 
           this.dialogService.success('Updated', 'Your name was updated successfully.');
         } catch (err) {
-          this.logger.error('Failed to update name', err);
+          this.logger.error('Failed to update name');
           this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');
         } finally {
           this.isSaving = false;
