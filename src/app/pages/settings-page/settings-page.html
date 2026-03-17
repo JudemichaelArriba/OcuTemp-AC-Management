@@ -49,8 +49,11 @@
                             Full Name
                         </label>
 
-                        <input type="text" [value]="user.fullName || ''"
-                            class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-slate-300 bg-white" />
+                        <input type="text" [value]="isEditing ? fullNameDraft : (user.fullName || '')"
+                            [disabled]="!isEditing" (input)="fullNameDraft = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+           transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isEditing"
+                            [class.cursor-not-allowed]="!isEditing" />
                     </div>
 
                     <div>
@@ -66,6 +69,23 @@
 
             </div>
 
+
+
+            <div class="mt-8 flex justify-end">
+                <button (click)="isEditing ? saveChanges() : startEdit(user.fullName)" class="px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500
+         rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl
+         transform hover:-translate-y-0.5 transition-all duration-200">
+                    {{ isEditing ? 'Save Changes' : 'Edit Profile' }}
+                </button>
+
+
+                @if (isEditing) {
+                <button (click)="cancelEdit()"
+                    class="ml-2 px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50">
+                    Cancel
+                </button>
+                }
+            </div>
             } @else {
 
             <div class="text-sm text-slate-400">
@@ -74,12 +94,7 @@
 
             }
 
-            <div class="mt-8 flex justify-end">
-                <button
-                    class="px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200">
-                    Save Changes
-                </button>
-            </div>
+
 
         </section>
 

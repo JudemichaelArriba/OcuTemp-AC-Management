@@ -15,7 +15,8 @@ import { Observable } from 'rxjs';
 
 export class SettingsPage {
   currentUser$: Observable<User | null>;
-
+  isEditing = false;
+  fullNameDraft = '';
 
   constructor(private auhtState: AuthStateService) {
     this.currentUser$ = this.auhtState.currentUser$;
@@ -25,5 +26,19 @@ export class SettingsPage {
     if (!user?.fullName) return 'U';
     const parts = user.fullName.trim().split(' ');
     return parts.map(p => p.charAt(0).toUpperCase()).slice(0, 2).join('');
+  }
+
+
+  startEdit(userFullname: string | null | undefined) {
+    this.fullNameDraft = userFullname ?? "";
+    this.isEditing = true;
+  }
+
+  cancelEdit() {
+    this.isEditing = false;
+  }
+
+  async saveChanges() {
+    this.isEditing = false;
   }
 }
