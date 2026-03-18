@@ -123,29 +123,31 @@ export class SettingsPage {
   }
 
 
- private mapAuthError(err: any): string {
-  const code =
-    err?.code ||
-    err?.customData?._tokenResponse?.error?.message ||
-    err?.message;
+  private mapAuthError(err: any): string {
+    const tokenMessage = err?.customData?._tokenResponse?.error?.message;
+    const code = tokenMessage || err?.code || err?.message;
 
-  switch (code) {
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-    case 'auth/invalid-login-credentials':
-    case 'INVALID_PASSWORD':
-    case 'INVALID_LOGIN_CREDENTIALS':
-      return 'Current password is incorrect.';
-    case 'auth/weak-password':
-      return 'New password is too weak.';
-    case 'auth/requires-recent-login':
-      return 'Please log out and log back in, then try again.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Try again later.';
-    default:
-      return 'Something went wrong. Please try again.';
+    switch (code) {
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+      case 'auth/invalid-login-credentials':
+      case 'INVALID_PASSWORD':
+      case 'INVALID_LOGIN_CREDENTIALS':
+        return 'Current password is incorrect.';
+      case 'auth/network-request-failed':
+        return 'Could not verify your current password. Please check your password and connection.';
+      case 'auth/weak-password':
+        return 'New password is too weak.';
+      case 'auth/requires-recent-login':
+        return 'Please log out and log back in, then try again.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Try again later.';
+      default:
+        return 'Something went wrong. Please try again.';
+    }
   }
-}
+
+
 
 
 
@@ -198,6 +200,7 @@ export class SettingsPage {
           this.dialogService.success('Updated', 'Your password was updated successfully.');
         } catch (err: any) {
           this.dialogService.error('Update Failed', this.mapAuthError(err));
+          this.logger.error('Password change failed', err);
         } finally {
           this.isPasswordSaving = false;
         }
