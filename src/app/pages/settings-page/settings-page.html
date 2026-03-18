@@ -125,16 +125,79 @@
                 <span class="w-1 h-6 bg-gradient-to-b from-blue-600 to-blue-500 rounded-full"></span>
                 Security
             </h2>
-            <div class="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50/50 transition-colors">
-                <div>
-                    <p class="text-base font-semibold text-slate-900">Reset Password</p>
-                    <p class="text-sm text-slate-500 mt-1">Send a reset link to your email</p>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                            Current Password
+                        </label>
+                        <input type="password" [value]="currentPassword" [disabled]="!isPasswordEditing"
+                            (input)="currentPassword = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
+               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+               transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isPasswordEditing"
+                            [class.cursor-not-allowed]="!isPasswordEditing" />
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                            New Password
+                        </label>
+                        <input type="password" [value]="newPassword" [disabled]="!isPasswordEditing"
+                            (input)="newPassword = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
+               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+               transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isPasswordEditing"
+                            [class.cursor-not-allowed]="!isPasswordEditing" />
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                            Confirm Password
+                        </label>
+                        <input type="password" [value]="confirmPassword" [disabled]="!isPasswordEditing"
+                            (input)="confirmPassword = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
+               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+               transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isPasswordEditing"
+                            [class.cursor-not-allowed]="!isPasswordEditing" />
+                    </div>
                 </div>
-                <button
-                    class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50 hover:border-slate-400 hover:shadow-md transition-all duration-200">
-                    Send Link
-                </button>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button (click)="isPasswordEditing ? savePassword() : startPasswordEdit()"
+                        [disabled]="isPasswordSaving" class="relative px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500
+             rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl
+             transform hover:-translate-y-0.5 transition-all duration-200
+             disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden">
+
+                        @if (isPasswordSaving) {
+                        <div class="absolute inset-0 bg-white/20"
+                            style="animation: progress 1.5s ease-in-out infinite;"></div>
+                        }
+
+                        <span class="relative z-10 flex items-center justify-center gap-2">
+                            @if (isPasswordSaving) {
+                            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z">
+                                </path>
+                            </svg>
+                            }
+                            {{ isPasswordSaving ? 'Saving...' : (isPasswordEditing ? 'Save Password' : 'Edit Password')
+                            }}
+                        </span>
+                    </button>
+
+                    @if (isPasswordEditing) {
+                    <button (click)="cancelPasswordEdit()"
+                        class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50">
+                        Cancel
+                    </button>
+                    }
+                </div>
             </div>
+
         </section>
 
         <section

@@ -6,6 +6,9 @@ import { Observable } from 'rxjs';
 import { UserService } from '../../services/user';
 import { LoggerService } from '../../services/logger.service';
 import { DialogService } from '../../services/dialog.service';
+import { AuthService } from '../../services/auth.services';
+import { PASSWORD_PATTERN, PASSWORD_HELP_TEXT } from '../../helpers/auth-validation';
+
 
 @Component({
   selector: 'app-settings-page',
@@ -20,12 +23,19 @@ export class SettingsPage {
   isEditing = false;
   fullNameDraft = '';
   isSaving = false;
+  isPasswordEditing = false;
+  isPasswordSaving = false;
+  currentPassword = '';
+  newPassword = '';
+  confirmPassword = '';
+
 
   constructor(
     private auhtState: AuthStateService,
     private userService: UserService,
     private logger: LoggerService,
-    private dialogService: DialogService
+    private dialogService: DialogService,
+    private authService: AuthService
   ) {
     this.currentUser$ = this.auhtState.currentUser$;
   }
@@ -97,4 +107,103 @@ export class SettingsPage {
     );
 
   }
+
+
+  startPasswordEdit() {
+    if (this.isPasswordEditing) return;
+    this.isPasswordEditing = true;
+  }
+
+  cancelPasswordEdit() {
+    this.isPasswordEditing = false;
+    this.currentPassword = '';
+    this.newPassword = '';
+    this.confirmPassword = '';
+
+  }
+
+
+ private mapAuthError(err: any): string {
+  const code =
+    err?.code ||
+    err?.customData?._tokenResponse?.error?.message ||
+    err?.message;
+
+  switch (code) {
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'INVALID_PASSWORD':
+    case 'INVALID_LOGIN_CREDENTIALS':
+      return 'Current password is incorrect.';
+    case 'auth/weak-password':
+      return 'New password is too weak.';
+    case 'auth/requires-recent-login':
+      return 'Please log out and log back in, then try again.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Try again later.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
+
+
+
+
+
+  savePassword() {
+    if (this.isPasswordSaving) return;
+
+
+    const current = this.currentPassword;
+    const next = this.newPassword;
+    const confirm = this.confirmPassword;
+
+
+    if (!current && !next && !confirm) {
+      this.dialogService.alert('No Changes', 'Enter your password details first.');
+      return;
+    }
+
+    if (!current || !next || !confirm) {
+      this.dialogService.error('Validation Error', 'All password fields are required.');
+      return;
+    }
+
+    if (!PASSWORD_PATTERN.test(next)) {
+      this.dialogService.error('Weak Password', PASSWORD_HELP_TEXT);
+      return;
+    }
+
+    if (next !== confirm) {
+      this.dialogService.error('Validation Error', 'New passwords do not match.');
+      return;
+    }
+    if (current === next) {
+      this.dialogService.error('Validation Error', 'New password must be different from the current password.');
+      return;
+    }
+
+
+
+    this.dialogService.confirm(
+      'Confirm update',
+      'Save your updated password?',
+      async () => {
+
+        this.isPasswordSaving = true;
+        try {
+          await this.authService.changePassword(current, next);
+          this.cancelPasswordEdit();
+          this.dialogService.success('Updated', 'Your password was updated successfully.');
+        } catch (err: any) {
+          this.dialogService.error('Update Failed', this.mapAuthError(err));
+        } finally {
+          this.isPasswordSaving = false;
+        }
+
+      }
+    );
+  }
+
 }

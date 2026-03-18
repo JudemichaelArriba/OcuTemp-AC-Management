@@ -10,7 +10,7 @@ import {
 import { AuthStateService } from './auth-state.service';
 import { Database, ref, set, serverTimestamp } from '@angular/fire/database';
 import { LoggerService } from './logger.service';
-
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 
 
 
@@ -101,7 +101,7 @@ export class AuthService {
     try {
       await this.auth.signOut();
 
-      this.authState.clearUser?.(); 
+      this.authState.clearUser?.();
 
 
     } catch (error) {
@@ -109,4 +109,21 @@ export class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Change apssword method with parameteres of current and new password
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const user = this.auth.currentUser;
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const credential = EmailAuthProvider.credential(user.email!, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+
+  }
+
+
 }
