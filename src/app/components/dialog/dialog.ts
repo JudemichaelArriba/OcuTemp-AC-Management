@@ -105,14 +105,6 @@ export class DialogComponent implements OnInit, OnDestroy {
     this.dismiss(() => cb?.());
   }
 
-  onOverlayClick(): void {
-    if (this.config?.type === 'confirm') {
-      this.onCancel();
-    } else {
-      this.onConfirm();
-    }
-  }
-
   get iconConfig(): IconConfig {
     return ICON_MAP[this.config?.type ?? 'alert'];
   }
