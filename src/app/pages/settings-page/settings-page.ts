@@ -28,7 +28,7 @@ export class SettingsPage {
   currentPassword = '';
   newPassword = '';
   confirmPassword = '';
-
+  readonly supportEmail = 'arribajudemichael@gmail.com';
 
   constructor(
     private auhtState: AuthStateService,
@@ -208,5 +208,40 @@ export class SettingsPage {
       }
     );
   }
+
+
+  openSupportDialog(): void {
+    const email = this.supportEmail?.trim();
+    if (!email) {
+      this.dialogService.error('Contact Unavailable', 'Support email is not configured.');
+      return;
+    }
+
+    this.dialogService.confirm(
+      'Contact Support',
+      `Email us at ${email}. Choose an action below.`,
+      () => {
+        if (navigator?.clipboard?.writeText) {
+          navigator.clipboard.writeText(email)
+            .then(() => this.dialogService.success('Copied', 'Support email copied to clipboard.'))
+            .catch(() => this.dialogService.alert('Copy failed', `Please copy manually: ${email}`));
+        } else {
+          this.dialogService.alert('Copy not available', `Please copy manually: ${email}`);
+        }
+      },
+      () => {
+        window.open(
+          `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`,
+          '_blank'
+        );
+      },
+      'Copy Email',
+      'Open Email App'
+    );
+  }
+
+
+
+
 
 }

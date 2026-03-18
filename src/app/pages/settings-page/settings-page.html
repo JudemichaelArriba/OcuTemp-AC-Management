@@ -199,29 +199,26 @@
             </div>
 
         </section>
-
         <section
             class="bg-white/90 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300">
             <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
                 <span class="w-1 h-6 bg-gradient-to-b from-blue-600 to-blue-500 rounded-full"></span>
-                Preferences
+                Support
             </h2>
 
-            <div class="space-y-4">
-                <div class="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50/50 transition-colors">
-                    <div>
-                        <p class="text-base font-semibold text-slate-900">Theme</p>
-                        <p class="text-sm text-slate-500 mt-1">Light / Dark</p>
-                    </div>
-                    <button
-                        class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50 hover:border-slate-400 hover:shadow-md transition-all duration-200">
-                        Toggle
-                    </button>
+            <div
+                class="p-4 rounded-xl border border-slate-200 hover:bg-slate-50/50 transition-colors flex items-center justify-between">
+                <div>
+                    <p class="text-base font-semibold text-slate-900">Contact Support</p>
+                    <p class="text-sm text-slate-500 mt-1">Need help? Reach out to our support team.</p>
                 </div>
 
-
-
+                <button (click)="openSupportDialog()"
+                    class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50 hover:border-slate-400 hover:shadow-md transition-all duration-200">
+                    Contact
+                </button>
             </div>
         </section>
+
     </div>
 </main>
