@@ -38,52 +38,59 @@
   </div>
 
   <div class="px-6 py-3">
-    <div class="max-w-[1800px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-blue-300 transition-all">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <p class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">Total Rooms</p>
-            <p class="text-2xl font-black text-gray-900">{{ totalRooms }}</p>
-          </div>
-          <div class="bg-blue-50 p-2.5 rounded-lg">
-            <span class="material-symbols-outlined text-blue-600 text-xl">meeting_room</span>
-          </div>
-        </div>
-      </div>
+    <div class="max-w-[1800px] mx-auto">
+      <div
+        class="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-2xl border border-blue-400/30 shadow-lg shadow-blue-500/20">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
 
-      <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-emerald-300 transition-all">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <p class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">Active Rooms</p>
-            <p class="text-2xl font-black text-gray-900">{{ activeRooms }}</p>
+          <div class="flex flex-col">
+            <div class="flex justify-between items-start mb-3">
+              <div>
+                <p class="text-blue-100 text-xs font-semibold uppercase tracking-wide mb-2">Total Rooms</p>
+                <p class="text-3xl font-black text-white">{{ totalRooms }}</p>
+              </div>
+              <div class="bg-white/20 backdrop-blur-sm p-2.5 rounded-lg border border-white/30">
+                <span class="material-symbols-outlined text-white text-xl">meeting_room</span>
+              </div>
+            </div>
           </div>
-          <div class="bg-emerald-50 p-2.5 rounded-lg text-emerald-600">
-            <span class="material-symbols-outlined text-xl">check_circle</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-cyan-300 transition-all">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <p class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">With Live Data</p>
-            <p class="text-2xl font-black text-gray-900">{{ roomsWithTelemetry }}</p>
+          <div class="flex flex-col border-l border-white/20 pl-6">
+            <div class="flex justify-between items-start mb-3">
+              <div>
+                <p class="text-blue-100 text-xs font-semibold uppercase tracking-wide mb-2">Active Rooms</p>
+                <p class="text-3xl font-black text-white">{{ activeRooms }}</p>
+              </div>
+              <div class="bg-white/20 backdrop-blur-sm p-2.5 rounded-lg border border-white/30">
+                <span class="material-symbols-outlined text-white text-xl">check_circle</span>
+              </div>
+            </div>
           </div>
-          <div class="bg-cyan-50 p-2.5 rounded-lg text-cyan-600">
-            <span class="material-symbols-outlined text-xl">sensors</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm hover:border-slate-300 transition-all">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <p class="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2">No Device</p>
-            <p class="text-2xl font-black text-gray-900">{{ roomsWithoutDevice }}</p>
+          <div class="flex flex-col border-l border-white/20 pl-6">
+            <div class="flex justify-between items-start mb-3">
+              <div>
+                <p class="text-blue-100 text-xs font-semibold uppercase tracking-wide mb-2">With Live Data</p>
+                <p class="text-3xl font-black text-white">{{ roomsWithTelemetry }}</p>
+              </div>
+              <div class="bg-white/20 backdrop-blur-sm p-2.5 rounded-lg border border-white/30">
+                <span class="material-symbols-outlined text-white text-xl">sensors</span>
+              </div>
+            </div>
           </div>
-          <div class="bg-slate-50 p-2.5 rounded-lg text-slate-500">
-            <span class="material-symbols-outlined text-xl">link_off</span>
+
+          <div class="flex flex-col border-l border-white/20 pl-6">
+            <div class="flex justify-between items-start mb-3">
+              <div>
+                <p class="text-blue-100 text-xs font-semibold uppercase tracking-wide mb-2">No Device</p>
+                <p class="text-3xl font-black text-white">{{ roomsWithoutDevice }}</p>
+              </div>
+              <div class="bg-white/20 backdrop-blur-sm p-2.5 rounded-lg border border-white/30">
+                <span class="material-symbols-outlined text-white text-xl">link_off</span>
+              </div>
+            </div>
           </div>
+
         </div>
       </div>
     </div>
