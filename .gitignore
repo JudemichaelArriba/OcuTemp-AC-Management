@@ -46,5 +46,4 @@ Thumbs.db
 
 # Angular environment files (with secrets)
 src/environments/environment.ts
-src/environments/environment.prod.ts
 src/environments/environment.development.ts

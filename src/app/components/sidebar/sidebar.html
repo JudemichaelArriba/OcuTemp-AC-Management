@@ -21,9 +21,16 @@
       @if (isOpen()) {
       <div class="overflow-hidden">
         <h1 class="text-base font-bold leading-none tracking-tight text-gray-900 whitespace-nowrap">OcuTemp</h1>
+        @if (currentUser$ | async; as currentUser) {
         <p class="text-[8.5px] font-semibold uppercase tracking-widest text-blue-600/70 mt-1 whitespace-nowrap">
-          IoT Admin Panel
+          IoT {{ isAdmin(currentUser) ? 'Admin' : 'Staff' }} Panel
         </p>
+        } @else {
+        <p class="text-[8.5px] font-semibold uppercase tracking-widest text-blue-600/70 mt-1 whitespace-nowrap">
+          IoT Panel
+        </p>
+        }
+
       </div>
       }
     </div>
