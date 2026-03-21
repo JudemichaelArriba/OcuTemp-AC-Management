@@ -22,7 +22,7 @@ export class Dashboard {
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
   private stopRoomStream?: () => void;
-  private stopDeviceStream?: () => void;
+  private stopDevicesStream?: () => void;
 
   constructor(
     private roomService: RoomService,
@@ -30,17 +30,26 @@ export class Dashboard {
     private cdr: ChangeDetectorRef
   ) { }
 
-
   ngOnInit(): void {
-    this.stopRoomStream = this.roomService.streamRooms((rooms) => {
+    this.stopRoomStream = this.roomService.streamRoomsByStatus('active', (rooms) => {
       this.baseRooms = rooms;
-      this.isLoading = false;
-      this.mergeRoomTelemetry();
-    });
 
-    this.stopDeviceStream = this.deviceService.streamDevices((devices) => {
-      this.deviceMap = devices;
-      this.mergeRoomTelemetry();
+      const deviceIds = rooms
+        .map(room => room.device)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+      this.stopDevicesStream?.();
+
+      let isFirstDeviceLoad = true;
+      this.stopDevicesStream = this.deviceService.streamDevicesByIds(deviceIds, (devices) => {
+        this.deviceMap = devices;
+        if (isFirstDeviceLoad && Object.keys(devices).length === deviceIds.length) {
+          this.isLoading = false;
+          isFirstDeviceLoad = false;
+        }
+
+        this.mergeRoomTelemetry();
+      });
     });
   }
 
@@ -48,15 +57,16 @@ export class Dashboard {
 
   ngOnDestroy(): void {
     this.stopRoomStream?.();
-    this.stopDeviceStream?.();
+    this.stopDevicesStream?.();
   }
+
 
   private mergeRoomTelemetry(): void {
     this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
       fallbackToRoomPower: true,
       defaultPower: false,
     });
-   this.cdr.markForCheck();
+    this.cdr.markForCheck();
   }
 
 
