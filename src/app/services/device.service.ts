@@ -106,4 +106,37 @@ export class DeviceService {
     if (list.includes(currentDeviceId)) return list;
     return [currentDeviceId, ...list];
   }
+
+
+
+  streamDevicesByIds(
+    deviceIds: string[],
+    callback: (devices: Record<string, DeviceTelemetry>) => void
+  ): () => void {
+    const uniqueIds = Array.from(new Set(deviceIds)).filter(id => id.length > 0);
+    const deviceMap: Record<string, DeviceTelemetry> = {};
+    const unsubs: Array<() => void> = [];
+
+    if (uniqueIds.length === 0) {
+      callback({});
+      return () => { };
+    }
+
+    uniqueIds.forEach((id) => {
+      const unsub = this.streamDevice(id, (device) => {
+        if (device) {
+          deviceMap[id] = device;
+        } else {
+          delete deviceMap[id];
+        }
+        callback({ ...deviceMap });
+      });
+      unsubs.push(unsub);
+    });
+
+    return () => {
+      unsubs.forEach(fn => fn());
+    };
+  }
+
 }
