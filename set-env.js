@@ -2,8 +2,9 @@ const fs = require('fs');
 
 
 
-if (fs.existsSync('.env')) {
+if (fs.existsSync('.env') && fs.readFileSync('.env', 'utf8').trim().length > 0) {
   require('dotenv').config();
+  console.log('📁 Loaded local .env file');
 } 
 
 
