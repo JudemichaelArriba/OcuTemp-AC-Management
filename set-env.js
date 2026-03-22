@@ -4,8 +4,10 @@ const fs = require('fs');
 
 if (fs.existsSync('.env') && fs.readFileSync('.env', 'utf8').trim().length > 0) {
   require('dotenv').config();
-  console.log('📁 Loaded local .env file');
-} 
+  console.log('Loaded local .env file');
+} else {
+  console.log('Using Vercel environment variables');
+}
 
 
 const baseConfig = {
