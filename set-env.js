@@ -19,6 +19,7 @@ const baseConfig = {
     messagingSenderId: process.env.FIREBASE_MESSAGING_ID,
     appId: process.env.FIREBASE_APP_ID
 };
+console.log('API KEY CHECK:', process.env.FIREBASE_API_KEY ? 'FOUND' : 'MISSING');
 
 const environments = {
 
