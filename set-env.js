@@ -1,5 +1,5 @@
 const fs = require('fs');
-
+const path = require('path');
 
 
 if (fs.existsSync('.env') && fs.readFileSync('.env', 'utf8').trim().length > 0) {
