@@ -1,0 +1,5 @@
+{
+  "buildCommand": "node set-env.js && ng build",
+  "outputDirectory": "dist/Ocutemp/browser",
+  "framework": null
+}
