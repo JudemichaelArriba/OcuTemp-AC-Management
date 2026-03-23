@@ -71,7 +71,9 @@ export const environment = {
 };
 
 Object.entries(environments).forEach(([path, content]) => {
-    fs.writeFileSync(path, content.trim());
-
+  fs.writeFileSync(path, content.trim());
+  const written = fs.readFileSync(path, 'utf8');
+  const hasKey = written.includes(baseConfig.apiKey);
+  console.log(`${path}: ${hasKey ? 'KEYS INJECTED ✅' : 'STILL EMPTY ❌'}`);
 });
 
