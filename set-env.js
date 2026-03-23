@@ -10,6 +10,13 @@ if (fs.existsSync('.env') && fs.readFileSync('.env', 'utf8').trim().length > 0) 
 }
 
 
+const cacheDir = path.join(__dirname, '.angular', 'cache');
+if (fs.existsSync(cacheDir)) {
+  fs.rmSync(cacheDir, { recursive: true, force: true });
+  console.log('Angular cache cleared!');
+}
+
+
 const baseConfig = {
     apiKey: process.env.FIREBASE_API_KEY,
     authDomain: process.env.FIREBASE_AUTH_DOMAIN,
