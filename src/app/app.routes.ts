@@ -15,11 +15,11 @@ import { AdminGuard } from './guards/admin.guard';
 import { SignupComponent } from './pages/signup/signup';
 import { RoomDetails } from './pages/room-details/room-details';
 import { SettingsPage } from './pages/settings-page/settings-page';
-
+import { LoginGuard } from './guards/login.guard';
 export const routes: Routes = [
-  { path: 'login', component: LoginComponent },
-  { path: 'forgot-password', component: ForgotPasswordComponent },
-  { path: 'signup', component: SignupComponent },
+  { path: 'login', component: LoginComponent, canActivate: [LoginGuard]},
+  { path: 'forgot-password', component: ForgotPasswordComponent , canActivate: [LoginGuard]},
+  { path: 'signup', component: SignupComponent, canActivate: [LoginGuard]},
   { path: 'add-credentials', component: AddCredentialsComponent, canActivate: [AuthGuard] },
 
   { 
