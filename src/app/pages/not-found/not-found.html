@@ -1,23 +1,86 @@
-<main class="min-h-full font-sans bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 flex items-center justify-center p-6">
-  <div class="max-w-lg w-full bg-white/90 backdrop-blur-sm border border-slate-200/60 rounded-2xl px-8 py-10 shadow-lg text-center">
-    <div class="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 via-blue-500 to-blue-600 flex items-center justify-center text-white text-2xl font-black shadow-xl ring-4 ring-blue-100">
-      404
+<main
+    class="min-h-full font-sans bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center p-6 relative overflow-hidden">
+
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"
+            style="animation-delay: 1s;"></div>
     </div>
 
-    <h1 class="mt-6 text-2xl font-black text-slate-900 tracking-tight">Page not found</h1>
-    <p class="mt-2 text-sm text-slate-600">
-      The page you’re looking for doesn’t exist or may have been moved.
-    </p>
+    <div class="max-w-2xl w-full relative z-10">
 
-    <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-      <a routerLink="/app/dashboard"
-        class="px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl shadow-lg hover:shadow-xl hover:from-blue-700 hover:to-blue-600 transition-all duration-200">
-        Go to Dashboard
-      </a>
-      <a routerLink="/login"
-        class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50 transition-all duration-200">
-        Back to Login
-      </a>
+        <div class="bg-white/95 backdrop-blur-xl border border-white/20 rounded-3xl px-8 py-12 shadow-2xl text-center">
+
+            <div class="relative mx-auto w-48 h-48 mb-8">
+                <div
+                    class="absolute inset-0 bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 rounded-full blur-2xl opacity-30 animate-pulse">
+                </div>
+                <div
+                    class="relative w-full h-full rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-600 flex items-center justify-center shadow-2xl ring-4 ring-white/50">
+                    <svg class="w-24 h-24 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+            </div>
+
+
+            <div class="mb-4">
+                <h2
+                    class="text-8xl font-black bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    404
+                </h2>
+            </div>
+
+
+            <h1 class="text-3xl font-black text-slate-900 tracking-tight mb-3">
+                Oops! Page Not Found
+            </h1>
+
+
+            <p class="text-base text-slate-600 max-w-md mx-auto leading-relaxed mb-8">
+                Looks like you've ventured into uncharted territory. The page you're looking for doesn't exist or may
+                have been moved to a new location.
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <a routerLink="/app/dashboard"
+                    class="group px-8 py-4 text-base font-bold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center gap-2">
+                    <svg class="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Back to Dashboard
+                </a>
+
+                <button onclick="window.history.back()"
+                    class="px-8 py-4 text-base font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-2xl shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Go Back
+                </button>
+            </div>
+
+
+            <div class="mt-10 pt-8 border-t border-slate-200">
+                <p class="text-sm text-slate-500">
+                    Need help?
+                    <a href="#" class="text-blue-600 hover:text-blue-700 font-semibold hover:underline ml-1">
+                        Contact Support
+                    </a>
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-6 text-center">
+            <p class="text-sm text-white/60">
+                Error Code: 404 • Page Not Found
+            </p>
+        </div>
     </div>
-  </div>
+
+
 </main>
