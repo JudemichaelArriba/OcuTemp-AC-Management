@@ -1,7 +1,7 @@
 import { Component, ChangeDetectorRef } from '@angular/core';
 import { Auth, sendPasswordResetEmail } from '@angular/fire/auth';
 import { RouterModule } from '@angular/router';
-
+import { DialogService } from '../../services/dialog.service';
 @Component({
   selector: 'app-forgot-password',
   standalone: true,
@@ -14,8 +14,9 @@ export class ForgotPasswordComponent {
 
   constructor(
     private auth: Auth,
-    private cdr: ChangeDetectorRef
-  ) {}
+    private cdr: ChangeDetectorRef,
+    private dialog: DialogService
+  ) { }
 
   async resetPassword(event: Event) {
     event.preventDefault();
@@ -36,18 +37,16 @@ export class ForgotPasswordComponent {
     try {
       await sendPasswordResetEmail(this.auth, email);
 
-  
+
       this.isSending = false;
       this.cdr.detectChanges();
 
-      setTimeout(() => {
-        alert('Password reset link sent. Please check your email.');
-        form.reset();
-      }, 100);
+      this.dialog.success('Email Sent', 'Password reset link sent. Please check your email.');
+      form.reset();
 
     } catch (err: any) {
 
-    
+
       this.isSending = false;
       this.cdr.detectChanges();
 
@@ -56,9 +55,8 @@ export class ForgotPasswordComponent {
         message = 'No account found with this email.';
       }
 
-      setTimeout(() => {
-        alert(message);
-      }, 100);
+      this.dialog.error('Reset Failed', message);
+
     }
   }
 }
