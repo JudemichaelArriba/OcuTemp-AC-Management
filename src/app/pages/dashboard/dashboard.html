@@ -135,7 +135,7 @@
           </h3>
         </div>
 
-        <div class="grid grid-cols-[repeat(auto-fit,minmax(14.5rem,14.5rem))] gap-3">
+        <div class="grid grid-cols-[repeat(1,14.5rem)] sm:grid-cols-[repeat(2,14.5rem)] md:grid-cols-[repeat(3,14.5rem)] lg:grid-cols-[repeat(4,14.5rem)] justify-center gap-3">
           @if (isLoading) {
           @for (_ of [1,2,3,4]; track $index) {
           <div class="h-56 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 animate-pulse">

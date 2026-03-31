@@ -97,7 +97,7 @@
   </div>
 
   <div class="px-6 pb-6 pt-3 flex-1 overflow-y-auto">
-    <div class="max-w-[1800px] mx-auto grid grid-cols-[repeat(auto-fit,minmax(14.5rem,14.5rem))] gap-4">
+    <div class="max-w-[1800px] mx-auto grid grid-cols-[repeat(1,14.5rem)] sm:grid-cols-[repeat(2,14.5rem)] md:grid-cols-[repeat(3,14.5rem)] lg:grid-cols-[repeat(4,14.5rem)] justify-center gap-4">
       @if (isLoading) {
       @for (_ of [1,2,3,4]; track $index) {
 
