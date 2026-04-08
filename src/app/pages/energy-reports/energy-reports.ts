@@ -10,18 +10,18 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
-import { 
-  Chart, 
-  LineController, 
-  LineElement, 
-  PointElement, 
-  BarController, 
-  BarElement, 
-  LinearScale, 
-  CategoryScale, 
+import {
+  Chart,
+  LineController,
+  LineElement,
+  PointElement,
+  BarController,
+  BarElement,
+  LinearScale,
+  CategoryScale,
   Tooltip,
-  Filler, 
-  Legend
+  Filler,
+  Legend,
 } from 'chart.js';
 
 import { RoomService } from '../../services/room.service';
@@ -39,13 +39,13 @@ import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
 
 Chart.register(
-  LineController, 
-  LineElement, 
-  PointElement, 
-  BarController, 
-  BarElement, 
-  LinearScale, 
-  CategoryScale, 
+  LineController,
+  LineElement,
+  PointElement,
+  BarController,
+  BarElement,
+  LinearScale,
+  CategoryScale,
   Tooltip,
   Filler,
   Legend
@@ -68,7 +68,6 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   filterMode: FilterMode = 'daily';
   isLoading = true;
 
-
   totalKwhDisplay = '–';
   totalRuntimeDisplay = '–';
   currentMonthLabel = '';
@@ -79,7 +78,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   private rooms: Room[] = [];
   private energyData: Record<string, Record<string, EnergyDaily>> = {};
 
-  private chartsReady = false;
+
   private energyLoaded = false;
 
   private unsubEnergy: (() => void) | null = null;
@@ -98,12 +97,11 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
       timeZone: 'Asia/Manila',
     });
 
-
     this.unsubRooms = this.roomService.streamRooms((rooms) => {
       this.rooms = rooms.filter((r) => r.status === 'active');
       this.tryRender();
+      this.cdr.markForCheck();
     });
-
 
     this.unsubEnergy = this.energyService.AllEnergyDaily((data) => {
       this.energyData = data;
@@ -116,8 +114,10 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
+
     this.buildChartInstances();
-    this.chartsReady = true;
+
+ 
     this.tryRender();
   }
 
@@ -128,18 +128,18 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     this.roomChart?.destroy();
   }
 
-  // Called from the filter buttons in the template
   setFilter(mode: FilterMode): void {
     if (this.filterMode === mode) return;
     this.filterMode = mode;
-    this.refreshOverallChart();
+    if (this.overallChart && this.energyLoaded) {
+      this.refreshOverallChart();
+    }
   }
 
-  // ─── Private ────────────────────────────────────────────────────────────
 
   private buildChartInstances(): void {
     const overallCtx = this.overallChartCanvas?.nativeElement?.getContext('2d');
-    if (overallCtx) {
+    if (overallCtx && !this.overallChart) {
       this.overallChart = new Chart(overallCtx, {
         type: 'line',
         data: {
@@ -161,6 +161,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: { duration: 600, easing: 'easeInOutQuart' },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -188,7 +189,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const roomCtx = this.roomChartCanvas?.nativeElement?.getContext('2d');
-    if (roomCtx) {
+    if (roomCtx && !this.roomChart) {
       this.roomChart = new Chart(roomCtx, {
         type: 'bar',
         data: {
@@ -204,6 +205,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: { duration: 600, easing: 'easeInOutQuart' },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -231,8 +233,9 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+
   private tryRender(): void {
-    if (!this.chartsReady || !this.energyLoaded) return;
+    if (!this.overallChart || !this.roomChart || !this.energyLoaded) return;
     this.refreshOverallChart();
     this.refreshRoomChart();
   }
@@ -290,7 +293,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
 
   private refreshSummaryCards(): void {
     const today = getTodayKey();
-    const monthKey = today.slice(0, 7); // YYYY-MM
+    const monthKey = today.slice(0, 7);
 
     let totalKwh = 0;
     let totalSec = 0;
