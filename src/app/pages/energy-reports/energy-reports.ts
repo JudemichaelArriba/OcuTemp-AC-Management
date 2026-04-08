@@ -9,7 +9,20 @@ import {
   ChangeDetectorRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Chart, registerables } from 'chart.js';
+
+import { 
+  Chart, 
+  LineController, 
+  LineElement, 
+  PointElement, 
+  BarController, 
+  BarElement, 
+  LinearScale, 
+  CategoryScale, 
+  Tooltip,
+  Filler, 
+  Legend
+} from 'chart.js';
 
 import { RoomService } from '../../services/room.service';
 import {
@@ -25,7 +38,18 @@ import {
 import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
 
-Chart.register(...registerables);
+Chart.register(
+  LineController, 
+  LineElement, 
+  PointElement, 
+  BarController, 
+  BarElement, 
+  LinearScale, 
+  CategoryScale, 
+  Tooltip,
+  Filler,
+  Legend
+);
 
 type FilterMode = 'daily' | 'weekly' | 'monthly';
 
