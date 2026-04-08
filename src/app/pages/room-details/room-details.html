@@ -10,10 +10,7 @@
                 <span class="font-bold text-sm">Back to Rooms</span>
             </button>
 
-            <button
-                (click)="editRoom()"
-                [disabled]="loading || !room"
-                class="group flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-all
+            <button (click)="editRoom()" [disabled]="loading || !room" class="group flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-all
                        disabled:opacity-50 disabled:cursor-not-allowed">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -92,12 +89,14 @@
                     <div
                         class="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Created</p>
-                        <p class="text-xs font-bold text-gray-900">{{ room.createdAt ? (room.createdAt | date:'MMM d, y, h:mm a') : 'N/A' }}</p>
+                        <p class="text-xs font-bold text-gray-900">{{ room.createdAt ? (room.createdAt | date:'MMM d, y,
+                            h:mm a') : 'N/A' }}</p>
                     </div>
                     <div
                         class="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:border-blue-300 transition-all">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Updated</p>
-                        <p class="text-xs font-bold text-gray-900">{{ room.updatedAt ? (room.updatedAt | date:'MMM d, y, h:mm a') : 'N/A' }}</p>
+                        <p class="text-xs font-bold text-gray-900">{{ room.updatedAt ? (room.updatedAt | date:'MMM d, y,
+                            h:mm a') : 'N/A' }}</p>
                     </div>
                 </div>
             </div>
@@ -116,9 +115,10 @@
                                 </p>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-xl font-black text-gray-900">
-                                        {{ environmentalTemperature !== null ? (environmentalTemperature | number:'1.1-1') : '--' }}
+                                        {{ environmentalTemperature !== null ? (environmentalTemperature |
+                                        number:'1.1-1') : '--' }}
                                     </span>
-                                    <span class="text-sm font-bold text-gray-400">°C</span>
+                                    <span class="text-sm font-bold text-gray-400">&deg;C</span>
                                 </div>
                             </div>
                             <div class="bg-orange-50 p-2 rounded-lg">
@@ -135,7 +135,8 @@
                                 </p>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-xl font-black text-gray-900">
-                                        {{ environmentalHumidity !== null ? (environmentalHumidity | number:'1.1-1') : '--' }}
+                                        {{ environmentalHumidity !== null ? (environmentalHumidity | number:'1.1-1') :
+                                        '--' }}
                                     </span>
                                     <span class="text-sm font-bold text-gray-400">%</span>
                                 </div>
@@ -154,7 +155,8 @@
                                 </p>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-xl font-black text-gray-900">
-                                        {{ environmentalOccupancy !== null ? (environmentalOccupancy ? 'Occupied' : 'Vacant') : '--' }}
+                                        {{ environmentalOccupancy !== null ? (environmentalOccupancy ? 'Occupied' :
+                                        'Vacant') : '--' }}
                                     </span>
                                 </div>
                             </div>
@@ -165,6 +167,295 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- MANUAL OVERRIDE SECTION — REDESIGNED WITH HALF-WHEEL           -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            @if (room.device) {
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+
+                <!-- Section Header -->
+                <div class="flex items-center justify-between mb-5">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-50 p-2 rounded-xl border border-blue-100">
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4">
+                                </path>
+                            </svg>
+                        </div>
+                        <h2 class="text-sm font-black text-slate-900">Manual Override</h2>
+                    </div>
+                    <span [class]="overrideStatusBadgeClass"
+                        class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide">
+                        {{ overrideStatusText }}
+                    </span>
+                </div>
+
+                <!-- Current Override Status Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Current Target
+                        </p>
+                        <p class="text-base font-black text-gray-900">
+                            {{ deviceData?.control?.targetTemp ?? '--' }}
+                            <span class="text-xs text-gray-400">&deg;C</span>
+                        </p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Override Until
+                        </p>
+                        <p class="text-xs font-black text-gray-900">
+                            {{ deviceData?.control?.overrideUntil ? (deviceData?.control?.overrideUntil | date:'MMMM d,
+                            yyyy, h:mm a') : '--' }}
+                        </p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Requested By</p>
+                        <p class="text-xs font-black text-gray-900">{{ deviceData?.control?.requestedBy || '--' }}</p>
+                    </div>
+                </div>
+
+                <!-- Permission Denied State -->
+                @if (!canManualOverride) {
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-600 font-semibold">
+                    Only approved staff or admins can set manual override.
+                </div>
+
+                } @else {
+
+                <!-- ─── Controls Grid ─────────────────────────────────────── -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
+
+                    <!-- ┌─────────────────────────────────────────────┐ -->
+                    <!-- │  COLUMN 1 — Interactive Half-Wheel Temp      │ -->
+                    <!-- └─────────────────────────────────────────────┘ -->
+                    <div
+                        class="bg-gradient-to-b from-blue-50/80 to-white rounded-2xl p-5 border border-blue-100 shadow-sm flex flex-col items-center">
+
+                        <!-- Card label -->
+                        <div class="flex items-center gap-2 mb-1 self-start">
+                            <span class="text-[10px] text-blue-600 uppercase font-black tracking-widest">Set
+                                Temperature</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 font-semibold mb-4 self-start">Drag the arc to adjust</p>
+
+                        <!-- SVG Half-Wheel -->
+                        <svg viewBox="0 0 220 128" class="w-full max-w-[230px] select-none" style="touch-action: none;"
+                            [style.cursor]="isDraggingTemp ? 'grabbing' : 'grab'"
+                            (pointerdown)="onTempPointerDown($event)" (pointermove)="onTempPointerMove($event)"
+                            (pointerup)="onTempPointerUp()" (pointercancel)="onTempPointerUp()">
+
+                            <defs>
+                                <!-- Blue gradient for the progress arc -->
+                                <linearGradient id="arcGradientOverride" x1="22" y1="0" x2="198" y2="0"
+                                    gradientUnits="userSpaceOnUse">
+                                    <stop offset="0%" stop-color="#93c5fd" /><!-- blue-300 -->
+                                    <stop offset="55%" stop-color="#3b82f6" /><!-- blue-500 -->
+                                    <stop offset="100%" stop-color="#1d4ed8" /><!-- blue-700 -->
+                                </linearGradient>
+                                <!-- Thumb drop-shadow glow -->
+                                <filter id="thumbGlowOverride" x="-80%" y="-80%" width="260%" height="260%">
+                                    <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur" />
+                                    <feMerge>
+                                        <feMergeNode in="blur" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
+
+                            <!-- ── Track (background arc) ── -->
+                            <path d="M 22 112 A 88 88 0 0 1 198 112" fill="none" stroke="#e2e8f0" stroke-width="13"
+                                stroke-linecap="round" />
+
+                            <!-- ── Progress arc (filled up to current temp) ── -->
+                            <path d="M 22 112 A 88 88 0 0 1 198 112" fill="none" stroke="url(#arcGradientOverride)"
+                                stroke-width="13" stroke-linecap="round" stroke-dasharray="276.46"
+                                [attr.stroke-dashoffset]="arcDashOffset"
+                                style="transition: stroke-dashoffset 0.08s ease-out;" />
+
+                            <!-- ── Tick marks (radiate outward from arc) ── -->
+                            @for (tick of tempTicks; track tick.temp) {
+                            <line [attr.x1]="tick.x1" [attr.y1]="tick.y1" [attr.x2]="tick.x2" [attr.y2]="tick.y2"
+                                [attr.stroke]="tick.active ? '#3b82f6' : '#cbd5e1'"
+                                [attr.stroke-width]="tick.isMajor ? 2.5 : 1.5" stroke-linecap="round" />
+                            }
+
+                            <!-- ── Temperature value (large, inside arc) ── -->
+                            <text x="110" y="90" text-anchor="middle" font-size="46" font-weight="900" fill="#0f172a"
+                                font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+                                style="font-variant-numeric: tabular-nums;">{{ overrideTemp }}</text>
+
+                            <!-- ── °C superscript ── -->
+                            <text x="148" y="73" text-anchor="start" font-size="15" font-weight="700" fill="#93c5fd"
+                                font-family="system-ui, -apple-system, sans-serif">&deg;C</text>
+
+                            <!-- ── Min label ── -->
+                            <text x="20" y="122" text-anchor="middle" font-size="9" font-weight="700" fill="#94a3b8"
+                                font-family="system-ui, sans-serif">{{ overrideMinTemp }}&deg;</text>
+
+                            <!-- ── Max label ── -->
+                            <text x="200" y="122" text-anchor="middle" font-size="9" font-weight="700" fill="#94a3b8"
+                                font-family="system-ui, sans-serif">{{ overrideMaxTemp }}&deg;</text>
+
+                            <!-- ── Thumb: outer glow ring ── -->
+                            <circle [attr.cx]="thumbPos.x" [attr.cy]="thumbPos.y" r="14" fill="#3b82f6"
+                                opacity="0.15" />
+
+                            <!-- ── Thumb: white body with blue border & shadow ── -->
+                            <circle [attr.cx]="thumbPos.x" [attr.cy]="thumbPos.y" r="10" fill="white" stroke="#3b82f6"
+                                stroke-width="3" filter="url(#thumbGlowOverride)" />
+
+                            <!-- ── Thumb: center dot ── -->
+                            <circle [attr.cx]="thumbPos.x" [attr.cy]="thumbPos.y" r="4" fill="#3b82f6" />
+
+                        </svg>
+
+                        <!-- Range fine-tuning note -->
+                        <div class="flex items-center justify-between w-full max-w-[230px] mt-1 px-1">
+                            <span class="text-[10px] font-black text-blue-300">{{ overrideMinTemp }}&deg;C min</span>
+                            <span class="text-[10px] font-black text-blue-600">{{ overrideMaxTemp }}&deg;C max</span>
+                        </div>
+                    </div>
+
+                    <!-- ┌─────────────────────────────────────────────┐ -->
+                    <!-- │  COLUMN 2 — Duration                         │ -->
+                    <!-- └─────────────────────────────────────────────┘ -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col">
+
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-[10px] text-blue-600 uppercase font-black tracking-widest">Duration</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 font-semibold mb-5">How long to hold the override</p>
+
+                        <!-- Stepper control -->
+                        <div class="flex items-center justify-center gap-3 mb-5">
+                            <button type="button" (click)="adjustDuration(-15)"
+                                [disabled]="overrideDurationMinutes <= overrideMinMinutes"
+                                class="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600
+                                       hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200
+                                       disabled:opacity-40 disabled:cursor-not-allowed
+                                       flex items-center justify-center font-black text-xl leading-none transition-all">
+                                &minus;
+                            </button>
+
+                            <div class="text-center min-w-[90px]">
+                                <span class="text-4xl font-black text-slate-800 tabular-nums">{{ overrideDurationMinutes
+                                    }}</span>
+                                <span class="text-sm font-bold text-slate-400 ml-1.5">min</span>
+                            </div>
+
+                            <button type="button" (click)="adjustDuration(15)"
+                                [disabled]="overrideDurationMinutes >= overrideMaxMinutes"
+                                class="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600
+                                       hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200
+                                       disabled:opacity-40 disabled:cursor-not-allowed
+                                       flex items-center justify-center font-black text-xl leading-none transition-all">
+                                &#43;
+                            </button>
+                        </div>
+
+                        <!-- Divider -->
+                        <div class="border-t border-slate-100 mb-4"></div>
+
+                        <!-- Preset buttons -->
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3">Quick Select</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            @for (preset of durationPresets; track preset.value) {
+                            <button type="button" (click)="setOverrideDuration(preset.value)"
+                                [class]="overrideDurationMinutes === preset.value
+                                    ? 'py-2.5 rounded-xl text-xs font-black bg-blue-600 text-white border border-blue-600 shadow-sm'
+                                    : 'py-2.5 rounded-xl text-xs font-black bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700 border border-transparent hover:border-blue-100'"
+                                class="transition-all">
+                                {{ preset.label }}
+                            </button>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- ┌─────────────────────────────────────────────┐ -->
+                    <!-- │  COLUMN 3 — Override Preview                 │ -->
+                    <!-- └─────────────────────────────────────────────┘ -->
+                    <div
+                        class="bg-gradient-to-b from-blue-600 to-blue-700 rounded-2xl p-5 flex flex-col justify-between shadow-sm">
+
+                        <!-- Header -->
+                        <div>
+                            <p class="text-[10px] text-blue-200 uppercase font-black tracking-widest mb-1">Override
+                                Preview</p>
+                            <p class="text-[10px] text-blue-300 font-semibold">Estimated end time</p>
+                        </div>
+
+                        <!-- Preview content -->
+                        <div class="flex-1 flex flex-col items-center justify-center py-6 text-center">
+                            <div class="bg-white/10 rounded-2xl p-4 w-full border border-white/10">
+                                <!-- Temp summary -->
+                                <div class="flex items-baseline justify-center gap-1 mb-3">
+                                    <span class="text-4xl font-black text-white tabular-nums">{{ overrideTemp }}</span>
+                                    <span class="text-lg font-bold text-blue-300">&deg;C</span>
+                                </div>
+                                <div class="flex items-center justify-center gap-1.5 text-blue-200 mb-4">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="text-xs font-bold">{{ overrideDurationMinutes }} min</span>
+                                </div>
+                                <!-- Divider -->
+                                <div class="border-t border-white/10 mb-3"></div>
+                                <!-- End time -->
+                                <p class="text-[10px] text-blue-300 font-bold uppercase tracking-wider mb-1">Ends at</p>
+                                @if (overrideUntilPreview) {
+                                <p class="text-base font-black text-white leading-tight">
+                                    {{ overrideUntilPreview | date:'MMM d, yyyy' }}
+                                </p>
+                                <p class="text-xl font-black text-blue-200 mt-0.5">
+                                    {{ overrideUntilPreview | date:'h:mm a' }}
+                                </p>
+                                } @else {
+                                <p class="text-base font-black text-blue-300">--</p>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Status indicator -->
+                        <div class="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2 border border-white/10">
+                            <div class="w-2 h-2 rounded-full"
+                                [class]="overrideIsActive && !overrideIsExpired ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'">
+                            </div>
+                            <span class="text-[10px] font-black text-blue-200 uppercase tracking-wider">
+                                Override {{ overrideIsActive && !overrideIsExpired ? 'Active' : 'Inactive' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <!-- ─── End Controls Grid ──────────────────────────────── -->
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap items-center justify-end gap-3 mt-5 pt-5 border-t border-slate-100">
+                    <p class="text-[10px] text-slate-400 font-bold mr-auto">
+                        ESP32 writes to: <span class="text-slate-600">devices/{{ room.device }}/control</span>
+                    </p>
+
+                    <button type="button" (click)="clearManualOverride()"
+                        [disabled]="isSavingOverride || !overrideIsActive" class="px-5 py-2.5 rounded-xl text-sm font-black bg-white border border-slate-200 text-slate-600
+                               hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                        Disable Override
+                    </button>
+
+                    <button type="button" (click)="applyManualOverride()" [disabled]="isSavingOverride"
+                        class="px-5 py-2.5 rounded-xl text-sm font-black bg-blue-600 text-white hover:bg-blue-700
+                               shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                        {{ isSavingOverride ? 'Applying...' : 'Enable Override' }}
+                    </button>
+                </div>
+
+                }
+            </div>
+            }
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- END MANUAL OVERRIDE SECTION                                     -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
 
             @if (room.device) {
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
@@ -189,7 +480,7 @@
                                 <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Current
                                     Temp</p>
                                 <p class="text-blue-950 font-black text-sm">{{ deviceData.acState.currentTemp || '--' }}
-                                    °C</p>
+                                    &deg;C</p>
                             </div>
                             <div class="bg-white rounded-lg p-3 border border-blue-100">
                                 <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Source</p>
@@ -198,7 +489,8 @@
                             <div class="bg-white rounded-lg p-3 border border-blue-100">
                                 <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Updated At
                                 </p>
-                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ? (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}</p>
+                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ?
+                                    (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}</p>
                             </div>
                         </div>
                     </div>
@@ -263,9 +555,5 @@
 </div>
 
 @if (isEditModalOpen && room) {
-  <app-room-edit-modal
-    [room]="room"
-    (closed)="onEditModalClosed()"
-    (roomUpdated)="onRoomUpdated($event)"
-  />
+<app-room-edit-modal [room]="room" (closed)="onEditModalClosed()" (roomUpdated)="onRoomUpdated($event)" />
 }

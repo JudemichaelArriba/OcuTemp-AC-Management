@@ -10,4 +10,13 @@ export interface Device {
     source?: string;
     updatedAt?: string;
   };
+  // NEW: Manual override control fields
+  control?: {
+    overrideActive?: boolean;
+    targetTemp?: number;
+    overrideUntil?: string;
+    requestedAt?: string;
+    requestedBy?: string;
+    roomUid?: string;
+  };
 }

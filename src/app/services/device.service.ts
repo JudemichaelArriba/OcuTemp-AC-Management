@@ -1,5 +1,15 @@
 import { Injectable } from '@angular/core';
-import { Database, get, onValue, ref } from '@angular/fire/database';
+import { Database, get, onValue, ref, update } from '@angular/fire/database';
+
+// NEW: Manual override control shape
+export interface DeviceControl {
+  overrideActive?: boolean;
+  targetTemp?: number;
+  overrideUntil?: string;
+  requestedAt?: string;
+  requestedBy?: string;
+  roomUid?: string;
+}
 
 export interface DeviceTelemetry {
   temperature?: number;
@@ -12,6 +22,8 @@ export interface DeviceTelemetry {
     source?: string;
     updatedAt?: string;
   };
+  // NEW: Manual override control
+  control?: DeviceControl;
 }
 
 @Injectable({
@@ -107,8 +119,6 @@ export class DeviceService {
     return [currentDeviceId, ...list];
   }
 
-
-
   streamDevicesByIds(
     deviceIds: string[],
     callback: (devices: Record<string, DeviceTelemetry>) => void
@@ -139,4 +149,29 @@ export class DeviceService {
     };
   }
 
+  // NEW: Apply manual override safely
+  async applyManualOverride(
+    deviceId: string,
+    payload: { targetTemp: number; overrideUntil: string; requestedBy?: string; roomUid?: string }
+  ): Promise<void> {
+    const controlRef = ref(this.db, `devices/${deviceId}/control`);
+    await update(controlRef, {
+      overrideActive: true,
+      targetTemp: payload.targetTemp,
+      overrideUntil: payload.overrideUntil,
+      requestedAt: new Date().toISOString(),
+      requestedBy: payload.requestedBy ?? 'unknown',
+      roomUid: payload.roomUid ?? ''
+    });
+  }
+
+  // NEW: Clear manual override safely
+  async clearManualOverride(deviceId: string, requestedBy?: string): Promise<void> {
+    const controlRef = ref(this.db, `devices/${deviceId}/control`);
+    await update(controlRef, {
+      overrideActive: false,
+      requestedAt: new Date().toISOString(),
+      requestedBy: requestedBy ?? 'unknown'
+    });
+  }
 }
