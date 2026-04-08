@@ -271,54 +271,105 @@
             }
 
             @if (room.device) {
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <h2 class="text-sm font-black text-slate-900 mb-4 flex items-center gap-2">
-                    Device Information
-                </h2>
-
-                @if (deviceData) {
-                <div class="space-y-4">
-                    @if (deviceData.acState) {
-                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
-                        <h3 class="font-bold text-blue-900 mb-3 text-xs flex items-center gap-2">
-                            <span class="size-1.5 bg-blue-600 rounded-full"></span>
-                            AC State Details
-                        </h3>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div class="bg-white rounded-lg p-3 border border-blue-100">
-                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Power</p>
-                                <p class="text-blue-950 font-black text-sm">{{ acPowerText }}</p>
-                            </div>
-                            <div class="bg-white rounded-lg p-3 border border-blue-100">
-                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Current
-                                    Temp</p>
-                                <p class="text-blue-950 font-black text-sm">{{ deviceData.acState.currentTemp || '--' }}
-                                    &deg;C</p>
-                            </div>
-                            <div class="bg-white rounded-lg p-3 border border-blue-100">
-                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Source</p>
-                                <p class="text-blue-950 font-black text-sm">{{ deviceData.acState.source || '--' }}</p>
-                            </div>
-                            <div class="bg-white rounded-lg p-3 border border-blue-100">
-                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Updated At
-                                </p>
-                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ?
-                                    (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}</p>
-                            </div>
-                        </div>
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h2 class="text-lg font-black text-slate-900 tracking-tight">Manual Control</h2>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Direct Hardware
+                            Override</p>
                     </div>
-                    }
+                    <span [class]="overrideStatusBadgeClass"
+                        class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider">
+                        {{ overrideStatusText }}
+                    </span>
+                </div>
+
+                @if (!canManualOverride) {
+                <div
+                    class="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-sm text-slate-500 font-medium text-center">
+                    Administrative privileges required for manual adjustments.
                 </div>
                 } @else {
-                <div class="text-center py-8 text-slate-500">
-                    <div class="bg-slate-100 w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-3">
-                        <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4">
-                            </path>
-                        </svg>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+
+                    <div class="relative flex flex-col items-center justify-center py-4">
+                        <div class="relative w-64 h-32 overflow-hidden">
+                            <div class="absolute top-0 left-0 w-64 h-64 border-[16px] border-slate-100 rounded-full">
+                            </div>
+                            <div class="absolute top-0 left-0 w-64 h-64 border-[16px] border-blue-500 rounded-full transition-all duration-500"
+                                [style.clip-path]="'polygon(50% 50%, -50% 100%, 150% 100%)'"
+                                style="transform: rotate(0deg);"></div>
+
+                            <div class="absolute inset-0 flex flex-col items-center justify-end pb-2">
+                                <span class="text-5xl font-black text-slate-900 leading-none">{{ overrideTemp }}</span>
+                                <span
+                                    class="text-xs font-bold text-slate-400 uppercase tracking-tighter">&deg;Celsius</span>
+                            </div>
+                        </div>
+
+                        <input name="overrideTemp" type="range" [min]="overrideMinTemp" [max]="overrideMaxTemp" step="1"
+                            [(ngModel)]="overrideTemp"
+                            class="w-64 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600 mt-6" />
+
+                        <div class="w-64 flex justify-between mt-2 px-1">
+                            <span class="text-[10px] font-black text-slate-400">{{overrideMinTemp}}°</span>
+                            <span class="text-[10px] font-black text-slate-400">{{overrideMaxTemp}}°</span>
+                        </div>
                     </div>
-                    <p class="font-semibold text-sm text-slate-600">No device data available</p>
+
+                    <div class="space-y-6">
+                        <div class="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                            <label
+                                class="block text-[10px] text-slate-400 uppercase mb-4 font-black tracking-widest">Duration
+                                (Minutes)</label>
+                            <div class="flex items-center gap-4 mb-4">
+                                <input name="overrideDuration" type="number" [(ngModel)]="overrideDurationMinutes"
+                                    class="w-20 bg-transparent text-2xl font-black text-slate-900 focus:outline-none" />
+                                <div class="flex gap-2">
+                                    <button (click)="setOverrideDuration(30)"
+                                        class="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white border border-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition-all">30M</button>
+                                    <button (click)="setOverrideDuration(60)"
+                                        class="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white border border-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition-all">1H</button>
+                                    <button (click)="setOverrideDuration(120)"
+                                        class="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white border border-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition-all">2H</button>
+                                </div>
+                            </div>
+
+                            <div class="pt-4 border-t border-slate-200/60">
+                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Override
+                                    Until</p>
+                                <p class="text-sm font-bold text-blue-600">
+                                    {{ overrideUntilPreview ? (overrideUntilPreview | date:'MMMM d, y, h:mm a') : 'No
+                                    timer set' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button (click)="applyManualOverride()" [disabled]="isSavingOverride"
+                                class="flex-1 px-6 py-4 rounded-2xl text-xs font-black bg-slate-900 text-white hover:bg-blue-600 disabled:opacity-30 transition-all shadow-lg shadow-slate-200">
+                                SET TEMPERATURE
+                            </button>
+                            <button (click)="clearManualOverride()" [disabled]="isSavingOverride || !overrideIsActive"
+                                class="px-6 py-4 rounded-2xl text-xs font-black bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all">
+                                RESET
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mt-8 pt-8 border-t border-slate-100">
+                    <div>
+                        <p class="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-1">Active Target</p>
+                        <p class="text-sm font-bold text-slate-900">{{ deviceData?.control?.targetTemp ?? '--' }}°C</p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-1">Expires At</p>
+                        <p class="text-sm font-bold text-slate-900">
+                            {{ deviceData?.control?.overrideUntil ? (deviceData?.control?.overrideUntil | date:'MMMM d,
+                            y, h:mm a') : '--' }}
+                        </p>
+                    </div>
                 </div>
                 }
             </div>
