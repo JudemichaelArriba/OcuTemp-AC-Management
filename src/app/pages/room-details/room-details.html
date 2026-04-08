@@ -168,19 +168,18 @@
                 </div>
             </div>
 
-            <!-- NEW: Manual override controls -->
             @if (room.device) {
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center justify-between mb-6">
                     <h2 class="text-sm font-black text-slate-900">Manual Override</h2>
                     <span [class]="overrideStatusBadgeClass"
-                        class="px-3 py-1.5 rounded-lg text-xs font-black uppercase">
+                        class="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide">
                         {{ overrideStatusText }}
                     </span>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Current Target
                         </p>
                         <p class="text-base font-black text-gray-900">
@@ -188,17 +187,17 @@
                             <span class="text-xs text-gray-400">&deg;C</span>
                         </p>
                     </div>
-                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Override Until
                         </p>
-                        <p class="text-xs font-bold text-gray-900">
-                            {{ deviceData?.control?.overrideUntil ? (deviceData?.control?.overrideUntil | date:'MMM d,
-                            y, h:mm a') : '--' }}
+                        <p class="text-xs font-black text-gray-900">
+                            {{ deviceData?.control?.overrideUntil ? (deviceData?.control?.overrideUntil | date:'MMMM d,
+                            yyyy, h:mm a') : '--' }}
                         </p>
                     </div>
-                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                         <p class="text-[10px] text-gray-500 uppercase mb-1.5 font-bold tracking-wider">Requested By</p>
-                        <p class="text-xs font-bold text-gray-900">{{ deviceData?.control?.requestedBy || '--' }}</p>
+                        <p class="text-xs font-black text-gray-900">{{ deviceData?.control?.requestedBy || '--' }}</p>
                     </div>
                 </div>
 
@@ -207,169 +206,157 @@
                     Only approved staff or admins can set manual override.
                 </div>
                 } @else {
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div class="bg-white rounded-xl p-4 border border-slate-200">
-                        <label class="block text-[10px] text-gray-500 uppercase mb-2 font-bold tracking-wider">
-                            Target Temperature (&deg;C)
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+
+                    <div
+                        class="bg-white rounded-2xl p-6 border border-slate-100 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.1)] flex flex-col items-center justify-center">
+                        <label
+                            class="block text-[10px] text-gray-400 uppercase mb-4 font-bold tracking-widest text-center">
+                            Set Temperature
                         </label>
-                        <input name="overrideTemp" type="number" [min]="overrideMinTemp" [max]="overrideMaxTemp"
-                            step="1" [(ngModel)]="overrideTemp"
-                            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+                        <div class="relative w-48 h-24 mb-6">
+                            <svg viewBox="0 0 100 50" class="w-full h-full overflow-visible absolute top-0 left-0">
+                                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f1f5f9" stroke-width="8"
+                                    stroke-linecap="round" />
+                                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#3b82f6" stroke-width="8"
+                                    stroke-linecap="round" stroke-dasharray="126"
+                                    [attr.stroke-dashoffset]="126 - ((overrideTemp - overrideMinTemp) / ((overrideMaxTemp - overrideMinTemp) || 1)) * 126"
+                                    class="transition-all duration-300 ease-out" />
+                            </svg>
+
+                            <div
+                                class="absolute bottom-0 left-0 w-full text-center flex flex-col items-center justify-end h-full pb-1">
+                                <div class="flex items-start">
+                                    <span class="text-5xl font-black text-slate-800 tracking-tighter">{{ overrideTemp
+                                        }}</span>
+                                    <span class="text-lg font-bold text-slate-400 mt-1">&deg;C</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="w-full px-2">
+                            <input name="overrideTemp" type="range" [min]="overrideMinTemp" [max]="overrideMaxTemp"
+                                step="1" [(ngModel)]="overrideTemp"
+                                class="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all" />
+                            <div class="flex justify-between w-full mt-2 text-[10px] font-black text-slate-400">
+                                <span>{{ overrideMinTemp }}&deg;</span>
+                                <span>{{ overrideMaxTemp }}&deg;</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="bg-white rounded-xl p-4 border border-slate-200">
-                        <label class="block text-[10px] text-gray-500 uppercase mb-2 font-bold tracking-wider">
-                            Duration (minutes)
+                    <div
+                        class="bg-white rounded-2xl p-6 border border-slate-100 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.1)] flex flex-col justify-center">
+                        <label
+                            class="block text-[10px] text-gray-400 uppercase mb-4 font-bold tracking-widest text-center">
+                            Duration
                         </label>
-                        <input name="overrideDuration" type="number" [min]="overrideMinMinutes"
-                            [max]="overrideMaxMinutes" step="5" [(ngModel)]="overrideDurationMinutes"
-                            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <div class="flex flex-wrap gap-2 mt-2">
+
+                        <div class="flex items-center justify-center gap-3 mb-6">
+                            <input name="overrideDuration" type="number" [min]="overrideMinMinutes"
+                                [max]="overrideMaxMinutes" step="5" [(ngModel)]="overrideDurationMinutes"
+                                class="w-24 text-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-2xl font-black text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all" />
+                            <span class="text-sm font-bold text-slate-400">min</span>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
                             <button type="button" (click)="setOverrideDuration(30)"
-                                class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200">
+                                class="py-2.5 rounded-xl text-xs font-black bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors border border-transparent hover:border-blue-100">
                                 30m
                             </button>
                             <button type="button" (click)="setOverrideDuration(60)"
-                                class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200">
+                                class="py-2.5 rounded-xl text-xs font-black bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors border border-transparent hover:border-blue-100">
                                 60m
                             </button>
                             <button type="button" (click)="setOverrideDuration(120)"
-                                class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200">
+                                class="py-2.5 rounded-xl text-xs font-black bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition-colors border border-transparent hover:border-blue-100">
                                 120m
                             </button>
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl p-4 border border-slate-200">
-                        <p class="text-[10px] text-gray-500 uppercase mb-2 font-bold tracking-wider">Ends At (Preview)
+                    <div
+                        class="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col justify-center items-center text-center">
+                        <p class="text-[10px] text-gray-400 uppercase mb-3 font-bold tracking-widest">Ends At (Preview)
                         </p>
-                        <p class="text-xs font-bold text-gray-900">
-                            {{ overrideUntilPreview ? (overrideUntilPreview | date:'MMM d, y, h:mm a') : '--' }}
+                        <p class="text-xl font-black text-slate-800">
+                            {{ overrideUntilPreview ? (overrideUntilPreview | date:'MMMM d, yyyy') : '--' }}
+                        </p>
+                        <p class="text-base font-bold text-blue-600 mt-1">
+                            {{ overrideUntilPreview ? (overrideUntilPreview | date:'h:mm a') : '' }}
                         </p>
                     </div>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2 mt-4">
-                    <button type="button" (click)="applyManualOverride()" [disabled]="isSavingOverride"
-                        class="px-4 py-2 rounded-xl text-xs font-black bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                        Enable Override
-                    </button>
+                <div class="flex flex-wrap items-center justify-end gap-3 mt-6 pt-6 border-t border-slate-100">
+                    <p class="text-[10px] text-slate-400 font-bold mr-auto">
+                        ESP32 writes to: <span class="text-slate-600">devices/{{ room.device }}/control</span>
+                    </p>
+
                     <button type="button" (click)="clearManualOverride()"
                         [disabled]="isSavingOverride || !overrideIsActive"
-                        class="px-4 py-2 rounded-xl text-xs font-black bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                        class="px-5 py-2.5 rounded-xl text-sm font-black bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
                         Disable Override
                     </button>
+                    <button type="button" (click)="applyManualOverride()" [disabled]="isSavingOverride"
+                        class="px-5 py-2.5 rounded-xl text-sm font-black bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                        Enable Override
+                    </button>
                 </div>
-
-                <p class="text-[11px] text-slate-500 font-semibold mt-3">
-                    This writes to <span class="font-black">devices/{{ room.device }}/control</span>. ESP32 should read
-                    <span class="font-black">overrideActive</span>, <span class="font-black">targetTemp</span>, and
-                    <span class="font-black">overrideUntil</span>.
-                </p>
                 }
             </div>
             }
 
             @if (room.device) {
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
-                <div class="flex items-center justify-between mb-8">
-                    <div>
-                        <h2 class="text-lg font-black text-slate-900 tracking-tight">Manual Control</h2>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Direct Hardware
-                            Override</p>
-                    </div>
-                    <span [class]="overrideStatusBadgeClass"
-                        class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider">
-                        {{ overrideStatusText }}
-                    </span>
-                </div>
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-sm font-black text-slate-900 mb-4 flex items-center gap-2">
+                    Device Information
+                </h2>
 
-                @if (!canManualOverride) {
-                <div
-                    class="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-sm text-slate-500 font-medium text-center">
-                    Administrative privileges required for manual adjustments.
+                @if (deviceData) {
+                <div class="space-y-4">
+                    @if (deviceData.acState) {
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                        <h3 class="font-bold text-blue-900 mb-3 text-xs flex items-center gap-2">
+                            <span class="size-1.5 bg-blue-600 rounded-full"></span>
+                            AC State Details
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div class="bg-white rounded-lg p-3 border border-blue-100">
+                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Power</p>
+                                <p class="text-blue-950 font-black text-sm">{{ acPowerText }}</p>
+                            </div>
+                            <div class="bg-white rounded-lg p-3 border border-blue-100">
+                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Current
+                                    Temp</p>
+                                <p class="text-blue-950 font-black text-sm">{{ deviceData.acState.currentTemp || '--' }}
+                                    &deg;C</p>
+                            </div>
+                            <div class="bg-white rounded-lg p-3 border border-blue-100">
+                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Source</p>
+                                <p class="text-blue-950 font-black text-sm">{{ deviceData.acState.source || '--' }}</p>
+                            </div>
+                            <div class="bg-white rounded-lg p-3 border border-blue-100">
+                                <p class="text-blue-700 font-bold text-[10px] uppercase tracking-wider mb-1">Updated At
+                                </p>
+                                <p class="text-blue-950 font-black text-xs">{{ deviceData.acState.updatedAt ?
+                                    (deviceData.acState.updatedAt | date:'MMM d, y, h:mm a') : '--' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    }
                 </div>
                 } @else {
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-
-                    <div class="relative flex flex-col items-center justify-center py-4">
-                        <div class="relative w-64 h-32 overflow-hidden">
-                            <div class="absolute top-0 left-0 w-64 h-64 border-[16px] border-slate-100 rounded-full">
-                            </div>
-                            <div class="absolute top-0 left-0 w-64 h-64 border-[16px] border-blue-500 rounded-full transition-all duration-500"
-                                [style.clip-path]="'polygon(50% 50%, -50% 100%, 150% 100%)'"
-                                style="transform: rotate(0deg);"></div>
-
-                            <div class="absolute inset-0 flex flex-col items-center justify-end pb-2">
-                                <span class="text-5xl font-black text-slate-900 leading-none">{{ overrideTemp }}</span>
-                                <span
-                                    class="text-xs font-bold text-slate-400 uppercase tracking-tighter">&deg;Celsius</span>
-                            </div>
-                        </div>
-
-                        <input name="overrideTemp" type="range" [min]="overrideMinTemp" [max]="overrideMaxTemp" step="1"
-                            [(ngModel)]="overrideTemp"
-                            class="w-64 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600 mt-6" />
-
-                        <div class="w-64 flex justify-between mt-2 px-1">
-                            <span class="text-[10px] font-black text-slate-400">{{overrideMinTemp}}°</span>
-                            <span class="text-[10px] font-black text-slate-400">{{overrideMaxTemp}}°</span>
-                        </div>
+                <div class="text-center py-8 text-slate-500">
+                    <div class="bg-slate-100 w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-3">
+                        <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4">
+                            </path>
+                        </svg>
                     </div>
-
-                    <div class="space-y-6">
-                        <div class="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                            <label
-                                class="block text-[10px] text-slate-400 uppercase mb-4 font-black tracking-widest">Duration
-                                (Minutes)</label>
-                            <div class="flex items-center gap-4 mb-4">
-                                <input name="overrideDuration" type="number" [(ngModel)]="overrideDurationMinutes"
-                                    class="w-20 bg-transparent text-2xl font-black text-slate-900 focus:outline-none" />
-                                <div class="flex gap-2">
-                                    <button (click)="setOverrideDuration(30)"
-                                        class="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white border border-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition-all">30M</button>
-                                    <button (click)="setOverrideDuration(60)"
-                                        class="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white border border-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition-all">1H</button>
-                                    <button (click)="setOverrideDuration(120)"
-                                        class="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white border border-slate-200 text-slate-600 hover:bg-blue-600 hover:text-white transition-all">2H</button>
-                                </div>
-                            </div>
-
-                            <div class="pt-4 border-t border-slate-200/60">
-                                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Override
-                                    Until</p>
-                                <p class="text-sm font-bold text-blue-600">
-                                    {{ overrideUntilPreview ? (overrideUntilPreview | date:'MMMM d, y, h:mm a') : 'No
-                                    timer set' }}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div class="flex gap-3">
-                            <button (click)="applyManualOverride()" [disabled]="isSavingOverride"
-                                class="flex-1 px-6 py-4 rounded-2xl text-xs font-black bg-slate-900 text-white hover:bg-blue-600 disabled:opacity-30 transition-all shadow-lg shadow-slate-200">
-                                SET TEMPERATURE
-                            </button>
-                            <button (click)="clearManualOverride()" [disabled]="isSavingOverride || !overrideIsActive"
-                                class="px-6 py-4 rounded-2xl text-xs font-black bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all">
-                                RESET
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4 mt-8 pt-8 border-t border-slate-100">
-                    <div>
-                        <p class="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-1">Active Target</p>
-                        <p class="text-sm font-bold text-slate-900">{{ deviceData?.control?.targetTemp ?? '--' }}°C</p>
-                    </div>
-                    <div>
-                        <p class="text-[9px] text-slate-400 uppercase font-black tracking-widest mb-1">Expires At</p>
-                        <p class="text-sm font-bold text-slate-900">
-                            {{ deviceData?.control?.overrideUntil ? (deviceData?.control?.overrideUntil | date:'MMMM d,
-                            y, h:mm a') : '--' }}
-                        </p>
-                    </div>
+                    <p class="font-semibold text-sm text-slate-600">No device data available</p>
                 </div>
                 }
             </div>
