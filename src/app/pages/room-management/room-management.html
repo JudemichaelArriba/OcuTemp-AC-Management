@@ -87,11 +87,11 @@
   </div>
 
   <div class="flex-1 overflow-y-auto min-h-0">
-    <div class="max-w-[1800px] mx-auto grid grid-cols-[repeat(1,14.5rem)] sm:grid-cols-[repeat(2,14.5rem)] md:grid-cols-[repeat(3,14.5rem)] lg:grid-cols-[repeat(4,14.5rem)] justify-center gap-6 pb-10">
+    <div class="max-w-[1200px] w-full mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10">
       
       @if (isLoading) {
-        @for (_ of [1,2,3,4,5,6,7,8]; track $index) {
-          <article class="bg-white/60 border border-white rounded-[2rem] shadow-sm overflow-hidden animate-pulse h-[320px]">
+        @for (_ of [1,2,3,4,5,6]; track $index) {
+          <article class="w-full bg-white/60 border border-white rounded-[2rem] shadow-sm overflow-hidden animate-pulse h-[320px]">
             <div class="p-6 space-y-4">
               <div class="flex justify-between">
                 <div class="w-12 h-12 bg-slate-200 rounded-2xl"></div>
@@ -110,7 +110,7 @@
 
       @if (!isLoading) {
         @for (room of filteredRooms; track room.uid) {
-          <app-room-card [room]="room" class="hover:-translate-y-2 transition-transform duration-300"></app-room-card>
+          <app-room-card class="w-full hover:-translate-y-2 transition-transform duration-300" [room]="room"></app-room-card>
         }
       }
     </div>
