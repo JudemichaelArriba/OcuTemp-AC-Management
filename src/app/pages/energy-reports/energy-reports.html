@@ -1,187 +1,170 @@
-<main class="flex-1 flex flex-col font-sans min-h-0 bg-gradient-to-br from-slate-50 to-blue-50/30 overflow-hidden">
+<main class="flex-1 flex flex-col min-h-0 overflow-hidden bg-slate-50 p-4 md:p-6 lg:p-8 gap-6 font-sans">
 
+  <header class="relative overflow-hidden bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl shadow-blue-200/40 shrink-0">
+    <div class="absolute inset-0 opacity-[0.05] pointer-events-none"
+      style="background-image: radial-gradient(#2563eb 0.8px, transparent 0.8px); background-size: 20px 20px;"></div>
+    <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl"></div>
 
-  <header class="px-6 pt-4 shrink-0">
-    <div class="max-w-[1600px] mx-auto">
-      <div
-        class="px-6 py-3.5 flex justify-between items-center border border-slate-200/60 bg-white/90 backdrop-blur-xl shadow-sm rounded-xl">
-        <div>
-          <h2 class="text-lg font-black tracking-tight text-slate-900">
-            Energy Reports
-          </h2>
-          <p class="text-[11px] text-slate-600 mt-0.5">
-            {{ currentMonthLabel }} · Facility-wide AC usage
-          </p>
+    <div class="max-w-[1800px] mx-auto px-8 md:px-12 py-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+      <div>
+        <div class="flex items-center gap-2 mb-3">
+          <span class="px-3 py-1 rounded-full text-[10px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">System Telemetrics</span>
         </div>
+        <h1 class="text-4xl font-black text-slate-900 tracking-tight leading-none">
+          Facility <span class="text-blue-600">Insights</span>
+        </h1>
+        <p class="text-slate-500 text-sm mt-3 max-w-lg font-medium flex items-center gap-2">
+          <span class="text-blue-600 font-bold uppercase tracking-widest text-[10px]">{{ currentMonthLabel }}</span>
+          <span class="w-1 h-1 bg-slate-300 rounded-full"></span>
+          Analytics and energy consumption breakdown.
+        </p>
+      </div>
 
-        <div class="flex items-center gap-2">
-          <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
-            <button (click)="setFilter('daily')" [class.bg-white]="filterMode === 'daily'"
-              [class.text-blue-600]="filterMode === 'daily'" [class.shadow-sm]="filterMode === 'daily'"
-              [class.text-slate-500]="filterMode !== 'daily'"
-              class="px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-150">
-              Daily
-            </button>
-            <button (click)="setFilter('weekly')" [class.bg-white]="filterMode === 'weekly'"
-              [class.text-blue-600]="filterMode === 'weekly'" [class.shadow-sm]="filterMode === 'weekly'"
-              [class.text-slate-500]="filterMode !== 'weekly'"
-              class="px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-150">
-              Weekly
-            </button>
-            <button (click)="setFilter('monthly')" [class.bg-white]="filterMode === 'monthly'"
-              [class.text-blue-600]="filterMode === 'monthly'" [class.shadow-sm]="filterMode === 'monthly'"
-              [class.text-slate-500]="filterMode !== 'monthly'"
-              class="px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-150">
-              Monthly
-            </button>
-          </div>
-        </div>
+      <div class="flex items-center bg-slate-100/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/50 shadow-inner">
+        <button (click)="setFilter('daily')"
+          [class]="filterMode === 'daily' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:text-blue-600'"
+          class="px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-300">
+          Daily
+        </button>
+        <button (click)="setFilter('weekly')"
+          [class]="filterMode === 'weekly' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:text-blue-600'"
+          class="px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-300">
+          Weekly
+        </button>
+        <button (click)="setFilter('monthly')"
+          [class]="filterMode === 'monthly' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:text-blue-600'"
+          class="px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-300">
+          Monthly
+        </button>
       </div>
     </div>
   </header>
 
+  <div class="flex-1 overflow-y-auto custom-scrollbar">
+    <div class="max-w-[1800px] mx-auto space-y-6">
 
-  <div class="flex-1 overflow-y-auto custom-scrollbar px-6 py-4">
-    <div class="max-w-[1600px] mx-auto space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-
-     
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-
-
-        @if (isLoading) {
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <div class="animate-pulse">
-              <div class="flex justify-between items-start mb-3">
-                <div class="space-y-2">
-                  <div class="h-2 w-32 bg-slate-200 rounded"></div>
-                  <div class="h-7 w-20 bg-slate-200 rounded mt-1"></div>
-                </div>
-                <div class="w-9 h-9 bg-slate-200 rounded-lg"></div>
-              </div>
-              <div class="pt-2.5 border-t border-slate-100">
-                <div class="h-2 w-36 bg-slate-100 rounded"></div>
-              </div>
-            </div>
-          </div>
-        } @else {
-          <div
-            class="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-400 shadow-sm transition-all duration-200">
-            <div class="flex justify-between items-start mb-3">
-              <div>
-                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-                  Total Runtime · This Month
-                </p>
-                <p class="text-2xl font-black text-slate-900 tracking-tight">
-                  {{ totalRuntimeDisplay }}
-                </p>
-              </div>
-              <div class="bg-gradient-to-br from-blue-500 to-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
-                <span class="material-symbols-outlined text-white text-[20px]">timer</span>
-              </div>
-            </div>
-            <div class="pt-2.5 border-t border-slate-100">
-              <span class="text-[10px] text-slate-500">Across all active rooms</span>
-            </div>
-          </div>
-        }
-
-
-        @if (isLoading) {
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <div class="animate-pulse">
-              <div class="flex justify-between items-start mb-3">
-                <div class="space-y-2">
-                  <div class="h-2 w-36 bg-slate-200 rounded"></div>
-                  <div class="h-7 w-24 bg-slate-200 rounded mt-1"></div>
-                </div>
-                <div class="w-9 h-9 bg-slate-200 rounded-lg"></div>
-              </div>
-              <div class="pt-2.5 border-t border-slate-100">
-                <div class="h-2 w-44 bg-slate-100 rounded"></div>
-              </div>
-            </div>
-          </div>
-        } @else {
-          <div
-            class="bg-white p-4 rounded-xl border border-slate-200 hover:border-amber-400 shadow-sm transition-all duration-200">
-            <div class="flex justify-between items-start mb-3">
-              <div>
-                <p class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-                  Energy Consumed · This Month
-                </p>
-                <p class="text-2xl font-black text-slate-900 tracking-tight">
-                  {{ totalKwhDisplay }}<span class="text-sm text-slate-600 font-semibold ml-1">kWh</span>
-                </p>
-              </div>
-              <div class="bg-gradient-to-br from-amber-500 to-amber-600 p-2 rounded-lg shadow-lg shadow-amber-500/20">
-                <span class="material-symbols-outlined text-white text-[20px]">bolt</span>
-              </div>
-            </div>
-            <div class="pt-2.5 border-t border-slate-100">
-              <span class="text-[10px] text-slate-500">Based on device energy profiles</span>
-            </div>
-          </div>
-        }
-
-      </div>
-
-
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-    
-        <div
-          class="bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-300 shadow-sm transition-all duration-200">
-          <div class="mb-4">
+        <div class="relative overflow-hidden rounded-[2rem] border border-white bg-white/80 backdrop-blur-md shadow-xl shadow-slate-200/50 group transition-all duration-500 hover:-translate-y-2">
+          <div class="p-8">
             @if (isLoading) {
-              <div class="animate-pulse space-y-1.5">
-                <div class="h-3 w-40 bg-slate-200 rounded"></div>
-                <div class="h-2 w-56 bg-slate-100 rounded"></div>
+              <div class="animate-pulse space-y-4">
+                <div class="h-3 w-24 bg-slate-100 rounded-full"></div>
+                <div class="h-10 w-40 bg-slate-200 rounded-xl"></div>
               </div>
             } @else {
-              <h3 class="text-sm font-bold text-slate-900 mb-0.5">Facility Energy Trend</h3>
-              <p class="text-[10px] text-slate-500">
-                @if (filterMode === 'daily') { Last 7 days · kWh per day }
-                @if (filterMode === 'weekly') { Last 8 weeks · kWh per week }
-                @if (filterMode === 'monthly') { Last 12 months · kWh per month }
-              </p>
-            }
-          </div>
-
-        
-          <div class="relative h-[200px]">
-            <canvas #overallChartCanvas></canvas>
-            @if (isLoading) {
-              <div class="absolute inset-0 rounded-lg overflow-hidden">
-                <div class="animate-pulse w-full h-full bg-slate-100 rounded-lg"></div>
+              <div class="flex items-start justify-between">
+                <div class="space-y-4">
+                  <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Monthly Runtime</p>
+                  <h3 class="text-4xl font-black text-slate-900 tracking-tighter leading-none">{{ totalRuntimeDisplay }}</h3>
+                  <div class="inline-flex items-center gap-2 text-[9px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-xl uppercase tracking-widest">
+                    <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
+                    System Active
+                  </div>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <span class="material-symbols-outlined text-3xl">schedule</span>
+                </div>
               </div>
             }
           </div>
         </div>
 
-
-        <div
-          class="bg-white p-5 rounded-xl border border-slate-200 hover:border-blue-300 shadow-sm transition-all duration-200">
-          <div class="mb-4">
+        <div class="relative overflow-hidden rounded-[2rem] border border-white bg-white/80 backdrop-blur-md shadow-xl shadow-slate-200/50 group transition-all duration-500 hover:-translate-y-2">
+          <div class="p-8">
             @if (isLoading) {
-              <div class="animate-pulse space-y-1.5">
-                <div class="h-3 w-36 bg-slate-200 rounded"></div>
-                <div class="h-2 w-52 bg-slate-100 rounded"></div>
+              <div class="animate-pulse space-y-4">
+                <div class="h-3 w-24 bg-slate-100 rounded-full"></div>
+                <div class="h-10 w-40 bg-slate-200 rounded-xl"></div>
               </div>
             } @else {
-              <h3 class="text-sm font-bold text-slate-900 mb-0.5">Room Comparison · Today</h3>
-              <p class="text-[10px] text-slate-500">Energy consumed per room for today</p>
-            }
-          </div>
-
-          <div class="relative h-[200px]">
-            <canvas #roomChartCanvas></canvas>
-            @if (isLoading) {
-              <div class="absolute inset-0 rounded-lg overflow-hidden">
-                <div class="animate-pulse w-full h-full bg-slate-100 rounded-lg"></div>
+              <div class="flex items-start justify-between">
+                <div class="space-y-4">
+                  <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Total Consumption</p>
+                  <div class="flex items-baseline gap-2">
+                    <h3 class="text-4xl font-black text-slate-900 tracking-tighter leading-none">{{ totalKwhDisplay }}</h3>
+                    <span class="text-xs font-black text-blue-600 uppercase tracking-widest">kWh</span>
+                  </div>
+                  <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Estimated Load Profiles</p>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <span class="material-symbols-outlined text-3xl">electric_bolt</span>
+                </div>
               </div>
             }
+          </div>
+        </div>
+
+        <div class="relative overflow-hidden rounded-[2rem] border border-white bg-white/80 backdrop-blur-md shadow-xl shadow-slate-200/50 group transition-all duration-500 hover:-translate-y-2">
+          <div class="p-8">
+            @if (isLoading) {
+              <div class="animate-pulse space-y-4">
+                <div class="h-3 w-24 bg-slate-100 rounded-full"></div>
+                <div class="h-10 w-40 bg-slate-200 rounded-xl"></div>
+              </div>
+            } @else {
+              <div class="flex items-start justify-between">
+                <div class="space-y-4">
+                  <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Monitored Units</p>
+                  <h3 class="text-4xl font-black text-slate-900 tracking-tighter leading-none">
+                    {{ activeRoomsCount }} <span class="text-lg text-slate-400 font-bold uppercase ml-1">Rooms</span>
+                  </h3>
+                  <div class="inline-flex items-center gap-2 text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl uppercase tracking-widest">
+                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                    Live Stream
+                  </div>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <span class="material-symbols-outlined text-3xl">hub</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-6">
+        
+        <div class="relative overflow-hidden rounded-[2.5rem] border border-white bg-white shadow-2xl shadow-slate-200/60 transition-all duration-300">
+          <div class="p-8">
+            <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-2 h-8 bg-blue-600 rounded-full"></div>
+                <div>
+                  <h3 class="text-sm font-black text-slate-900 uppercase tracking-[0.15em]">Consumption Trend</h3>
+                  <p class="text-xs text-slate-400 font-medium">Historical performance across the facility</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-4 py-2 rounded-xl tracking-widest uppercase">
+                  kWh Units
+                </span>
+              </div>
+            </div>
+            <div class="h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
+              <canvas #overallChartCanvas></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="relative overflow-hidden rounded-[2.5rem] border border-white bg-white shadow-2xl shadow-slate-200/60 transition-all duration-300">
+          <div class="p-8">
+            <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-2 h-8 bg-indigo-600 rounded-full"></div>
+                <div>
+                  <h3 class="text-sm font-black text-slate-900 uppercase tracking-[0.15em]">Room Distribution</h3>
+                  <p class="text-xs text-slate-400 font-medium">Energy breakdown per individual unit</p>
+                </div>
+              </div>
+              <span class="text-[10px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-xl tracking-widest uppercase">
+                Real-Time View
+              </span>
+            </div>
+            <div class="h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
+              <canvas #roomChartCanvas></canvas>
+            </div>
           </div>
         </div>
 

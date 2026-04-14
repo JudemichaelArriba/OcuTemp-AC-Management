@@ -68,8 +68,9 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   filterMode: FilterMode = 'daily';
   isLoading = true;
 
-  totalKwhDisplay = '–';
-  totalRuntimeDisplay = '–';
+  totalKwhDisplay = '0.00';
+  totalRuntimeDisplay = '0m';
+  activeRoomsCount = 0;
   currentMonthLabel = '';
 
   private overallChart: Chart | null = null;
@@ -77,7 +78,6 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
 
   private rooms: Room[] = [];
   private energyData: Record<string, Record<string, EnergyDaily>> = {};
-
 
   private energyLoaded = false;
 
@@ -99,6 +99,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
 
     this.unsubRooms = this.roomService.streamRooms((rooms) => {
       this.rooms = rooms.filter((r) => r.status === 'active');
+      this.activeRoomsCount = this.rooms.length;
       this.tryRender();
       this.cdr.markForCheck();
     });
@@ -114,10 +115,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-
     this.buildChartInstances();
-
- 
     this.tryRender();
   }
 
@@ -136,7 +134,6 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-
   private buildChartInstances(): void {
     const overallCtx = this.overallChartCanvas?.nativeElement?.getContext('2d');
     if (overallCtx && !this.overallChart) {
@@ -148,40 +145,64 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
             {
               data: [],
               borderColor: '#2563EB',
-              backgroundColor: 'rgba(37,99,235,0.08)',
+              backgroundColor: (context) => {
+                const chart = context.chart;
+                const {ctx, chartArea} = chart;
+                if (!chartArea) return 'rgba(37,99,235,0.08)';
+                const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                gradient.addColorStop(0, 'rgba(37,99,235,0.15)');
+                gradient.addColorStop(1, 'rgba(37,99,235,0.01)');
+                return gradient;
+              },
               fill: true,
               tension: 0.4,
-              pointBackgroundColor: '#2563EB',
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              borderWidth: 2,
+              pointBackgroundColor: '#FFFFFF',
+              pointBorderColor: '#2563EB',
+              pointBorderWidth: 2,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              borderWidth: 2.5,
             },
           ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: { duration: 600, easing: 'easeInOutQuart' },
+          animation: { duration: 800, easing: 'easeOutQuart' },
           plugins: {
             legend: { display: false },
             tooltip: {
+              backgroundColor: '#1e293b',
+              padding: 12,
+              titleFont: { size: 12, weight: 'bold' },
+              bodyFont: { size: 12 },
+              cornerRadius: 8,
+              displayColors: false,
               callbacks: {
-                label: (ctx) => ` ${Number(ctx.parsed.y).toFixed(3)} kWh`,
+                label: (ctx) => `Consumption: ${Number(ctx.parsed.y).toFixed(3)} kWh`,
               },
             },
           },
           scales: {
             y: {
               beginAtZero: true,
+              border: { display: false },
               grid: { color: '#f1f5f9' },
               ticks: {
-                font: { size: 10 },
+                font: { size: 10, family: 'Inter' },
+                color: '#64748b',
+                padding: 10,
                 callback: (v) => `${v} kWh`,
               },
             },
             x: {
+              border: { display: false },
               grid: { display: false },
-              ticks: { font: { size: 10 } },
+              ticks: { 
+                font: { size: 10, family: 'Inter' },
+                color: '#64748b',
+                padding: 10
+              },
             },
           },
         },
@@ -197,42 +218,53 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
           datasets: [
             {
               data: [],
-              backgroundColor: 'rgba(37,99,235,0.8)',
-              borderRadius: 6,
+              backgroundColor: '#3b82f6',
+              hoverBackgroundColor: '#2563eb',
+              borderRadius: 4,
+              barThickness: 24,
             },
           ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: { duration: 600, easing: 'easeInOutQuart' },
+          animation: { duration: 800, easing: 'easeOutQuart' },
           plugins: {
             legend: { display: false },
             tooltip: {
+              backgroundColor: '#1e293b',
+              padding: 12,
+              cornerRadius: 8,
+              displayColors: false,
               callbacks: {
-                label: (ctx) => ` ${Number(ctx.parsed.y).toFixed(3)} kWh`,
+                label: (ctx) => `Usage: ${Number(ctx.parsed.y).toFixed(3)} kWh`,
               },
             },
           },
           scales: {
             y: {
               beginAtZero: true,
+              border: { display: false },
               grid: { color: '#f1f5f9' },
               ticks: {
                 font: { size: 10 },
+                color: '#64748b',
                 callback: (v) => `${v} kWh`,
               },
             },
             x: {
+              border: { display: false },
               grid: { display: false },
-              ticks: { font: { size: 10 } },
+              ticks: { 
+                font: { size: 10 },
+                color: '#64748b'
+              },
             },
           },
         },
       });
     }
   }
-
 
   private tryRender(): void {
     if (!this.overallChart || !this.roomChart || !this.energyLoaded) return;
@@ -242,13 +274,12 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
 
   private refreshOverallChart(): void {
     if (!this.overallChart) return;
-
     let labels: string[] = [];
     let values: number[] = [];
 
     if (this.filterMode === 'daily') {
       const days = getLast7DayKeys();
-      labels = days.map((d) => d.slice(5)); // MM-DD
+      labels = days.map((d) => d.slice(5));
       values = days.map((d) => sumKwhByDate(this.energyData, d));
     } else if (this.filterMode === 'weekly') {
       const weeks = getLast8WeekRanges();
@@ -267,15 +298,12 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.overallChart.data.labels = labels;
-    this.overallChart.data.datasets[0].data = values.map((v) =>
-      parseFloat(v.toFixed(4))
-    );
+    this.overallChart.data.datasets[0].data = values.map((v) => parseFloat(v.toFixed(4)));
     this.overallChart.update();
   }
 
   private refreshRoomChart(): void {
     if (!this.roomChart) return;
-
     const today = getTodayKey();
     const labels: string[] = [];
     const values: number[] = [];
@@ -294,7 +322,6 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   private refreshSummaryCards(): void {
     const today = getTodayKey();
     const monthKey = today.slice(0, 7);
-
     let totalKwh = 0;
     let totalSec = 0;
 
@@ -308,7 +335,6 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     }
 
     this.totalKwhDisplay = totalKwh.toFixed(2);
-
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
     this.totalRuntimeDisplay = h > 0 ? `${h}h ${m}m` : `${m}m`;
