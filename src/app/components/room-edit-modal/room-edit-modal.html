@@ -1,99 +1,103 @@
 @if (visible) {
-<div class="eu-backdrop fixed inset-0 z-[60] flex items-center justify-center p-4" (click)="onBackdropClick($event)">
-  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-180 ease-out"
+<div class="fixed inset-0 z-[70] flex items-center justify-center p-4 transition-all duration-300" (click)="onBackdropClick($event)">
+  <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-md transition-opacity duration-300 ease-out"
     [class.opacity-100]="animating" [class.opacity-0]="!animating"></div>
-  <div class="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200/80
-             transition-all duration-180 ease-out flex flex-col max-h-[90vh]" [class.opacity-100]="animating"
-    [class.opacity-0]="!animating" [class.scale-100]="animating" [class.scale-95]="!animating"
-    [class.translate-y-0]="animating" [class.-translate-y-2]="!animating" (click)="$event.stopPropagation()"
-    role="dialog" aria-modal="true">
 
-    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-      <div class="flex items-center gap-3">
-        <div
-          class="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
-          <span class="material-symbols-outlined text-white text-[20px]">edit</span>
+  <div class="relative w-full max-w-4xl bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white
+               transition-all duration-300 ease-out flex flex-col max-h-[90vh] overflow-hidden" 
+    [class.opacity-100]="animating" [class.opacity-0]="!animating" 
+    [class.scale-100]="animating" [class.scale-95]="!animating"
+    [class.translate-y-0]="animating" [class.-translate-y-4]="!animating" 
+    (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+
+    <div class="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-gradient-to-br from-white to-blue-50/30">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-200">
+          <span class="material-symbols-outlined text-white text-2xl">edit_note</span>
         </div>
         <div>
-          <h3 class="text-base font-bold text-slate-800">Edit Room</h3>
-          <p class="text-[11px] text-slate-500 mt-0.5">Update room info, device, and schedules</p>
+          <h3 class="text-xl font-black text-slate-900 tracking-tight leading-none">Edit Room</h3>
+          <p class="text-[11px] font-bold text-blue-500 mt-1.5 uppercase tracking-widest">Configuration & Scheduling</p>
         </div>
       </div>
-      <button (click)="close()" [disabled]="isSaving" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700
-                 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-        <span class="material-symbols-outlined text-[20px]">close</span>
+      <button (click)="close()" [disabled]="isSaving" 
+        class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all disabled:opacity-40 border border-transparent hover:border-slate-100">
+        <span class="material-symbols-outlined">close</span>
       </button>
     </div>
 
-    <div class="px-4 py-4 space-y-4 overflow-y-auto flex-1">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="space-y-4">
-          <h4 class="text-sm font-semibold text-slate-700">Room Details</h4>
-
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-2">
-              Room Name <span class="text-red-500">*</span>
-            </label>
-            <input type="text" [(ngModel)]="roomName" maxlength="50" placeholder="Enter room name" [disabled]="isSaving"
-              class="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800
-                       focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
-                       disabled:bg-slate-50 disabled:text-slate-400 transition-all placeholder:text-slate-400" />
+    <div class="px-8 py-8 space-y-8 overflow-y-auto flex-1 custom-scrollbar">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <div class="lg:col-span-5 space-y-6">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-1.5 h-4 bg-blue-600 rounded-full"></div>
+            <h4 class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">General Details</h4>
           </div>
 
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-2">
-              Device UID <span class="text-red-500">*</span>
+          <div class="space-y-2">
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+              Room Identity <span class="text-blue-500">*</span>
+            </label>
+            <input type="text" [(ngModel)]="roomName" maxlength="50" placeholder="e.g. Server Room A" [disabled]="isSaving"
+              class="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-800
+                       focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600
+                       disabled:bg-slate-50 disabled:text-slate-400 transition-all placeholder:text-slate-300" />
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+              Hardware Link <span class="text-blue-500">*</span>
             </label>
             <app-drop-down [options]="deviceOptions" [value]="selectedDevice" [disabled]="isSaving || isLoadingDevices"
-              placeholder="Select a device UID" variant="device" icon="memory"
+              placeholder="Assign Device UID" variant="device" icon="memory"
               (valueChange)="selectedDevice = $event" />
           </div>
 
-          <div>
-            <label class="block text-sm font-semibold text-slate-700 mb-2">
-              Status <span class="text-red-500">*</span>
+          <div class="space-y-2">
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+              Operational Status <span class="text-blue-500">*</span>
             </label>
-            <div class="flex items-center gap-2">
-              <button type="button" (click)="setStatus('active')" [disabled]="isSaving" class="px-3.5 py-2 text-sm font-semibold rounded-xl border transition-colors
-                         disabled:opacity-50 disabled:cursor-not-allowed" [class.bg-blue-600]="status === 'active'"
-                [class.text-white]="status === 'active'" [class.border-blue-600]="status === 'active'"
-                [class.bg-white]="status !== 'active'" [class.text-slate-600]="status !== 'active'"
-                [class.border-slate-200]="status !== 'active'">
+            <div class="flex items-center gap-2 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200/50">
+              <button type="button" (click)="setStatus('active')" [disabled]="isSaving" 
+                class="flex-1 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                [class.bg-blue-600]="status === 'active'" [class.text-white]="status === 'active'" [class.shadow-lg]="status === 'active'" [class.shadow-blue-500/30]="status === 'active'"
+                [class.text-slate-400]="status !== 'active'" [class.hover:text-blue-600]="status !== 'active'">
                 Active
               </button>
-              <button type="button" (click)="setStatus('inactive')" [disabled]="isSaving" class="px-3.5 py-2 text-sm font-semibold rounded-xl border transition-colors
-                         disabled:opacity-50 disabled:cursor-not-allowed" [class.bg-slate-700]="status === 'inactive'"
-                [class.text-white]="status === 'inactive'" [class.border-slate-700]="status === 'inactive'"
-                [class.bg-white]="status !== 'inactive'" [class.text-slate-600]="status !== 'inactive'"
-                [class.border-slate-200]="status !== 'inactive'">
+              <button type="button" (click)="setStatus('inactive')" [disabled]="isSaving" 
+                class="flex-1 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                [class.bg-slate-800]="status === 'inactive'" [class.text-white]="status === 'inactive'" [class.shadow-lg]="status === 'inactive'"
+                [class.text-slate-400]="status !== 'inactive'" [class.hover:text-slate-600]="status !== 'inactive'">
                 Inactive
               </button>
             </div>
           </div>
-
         </div>
 
-        <app-schedule-builder [schedules]="schedules" (schedulesChange)="schedules = $event" [disabled]="isSaving"
-          variant="edit" heading="Schedule Builder" />
+        <div class="lg:col-span-7">
+          <div class="bg-slate-50/50 border border-slate-100 rounded-3xl p-2 transition-all hover:bg-white hover:shadow-inner">
+            <app-schedule-builder [schedules]="schedules" (schedulesChange)="schedules = $event" [disabled]="isSaving"
+              variant="edit" heading="Automation Logic" />
+          </div>
+        </div>
       </div>
     </div>
 
-
-    <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
-      <button (click)="close()" [disabled]="isSaving" class="px-4 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-200
-                 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors
-                 disabled:opacity-50 disabled:cursor-not-allowed">
-        Cancel
+    <div class="flex items-center justify-end gap-3 px-8 py-6 border-t border-slate-100 bg-slate-50/80 backdrop-blur-md">
+      <button (click)="close()" [disabled]="isSaving" 
+        class="px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-white rounded-2xl transition-all disabled:opacity-50">
+        Discard
       </button>
-      <button (click)="onSave()" [disabled]="isSaving" class="px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700
-                 rounded-xl shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                 flex items-center gap-2">
+      <button (click)="onSave()" [disabled]="isSaving" 
+        class="group flex items-center gap-3 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50">
         @if (isSaving) {
-        <span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+          <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+          <span>Syncing...</span>
         } @else {
-        <span class="material-symbols-outlined text-[18px]">check</span>
+          <span class="material-symbols-outlined text-lg transition-transform group-hover:rotate-12">check_circle</span>
+          <span>Commit Changes</span>
         }
-        {{ isSaving ? 'Saving...' : 'Save Changes' }}
       </button>
     </div>
   </div>

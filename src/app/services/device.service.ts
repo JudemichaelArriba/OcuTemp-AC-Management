@@ -174,4 +174,14 @@ export class DeviceService {
       requestedBy: requestedBy ?? 'unknown'
     });
   }
+
+  async sendForcedOff(deviceId: string, requestedBy?: string): Promise<void> {
+  const controlRef = ref(this.db, `devices/${deviceId}/control`);
+  await update(controlRef, {
+    forcedOff: true,
+    overrideActive: false,
+    requestedAt: new Date().toISOString(),
+    requestedBy: requestedBy ?? 'unknown',
+  });
+}
 }
