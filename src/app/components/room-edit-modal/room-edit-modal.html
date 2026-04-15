@@ -1,5 +1,5 @@
 @if (visible) {
-<div class="fixed inset-0 z-[70] flex items-center justify-center p-4 transition-all duration-300" (click)="onBackdropClick($event)">
+<div class="fixed inset-0 z-[70] flex items-center justify-center p-4 transition-all duration-300 eu-backdrop" (click)="onBackdropClick($event)">
   <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-md transition-opacity duration-300 ease-out"
     [class.opacity-100]="animating" [class.opacity-0]="!animating"></div>
 
@@ -50,7 +50,7 @@
               Hardware Link <span class="text-blue-500">*</span>
             </label>
             <app-drop-down [options]="deviceOptions" [value]="selectedDevice" [disabled]="isSaving || isLoadingDevices"
-              placeholder="Assign Device UID" variant="device" icon="memory"
+              placeholder="Assign Device UID" variant="device" 
               (valueChange)="selectedDevice = $event" />
           </div>
 

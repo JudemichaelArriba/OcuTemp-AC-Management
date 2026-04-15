@@ -266,7 +266,7 @@ export class RoomEditModal implements OnChanges {
               }, 50);
             });
           } catch (err) {
-            this.logger.error('Failed to update room:', err)
+            this.logger.error('Failed to update room:', err);
             this.isSaving = false;
             this.cdr.markForCheck();
             this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');

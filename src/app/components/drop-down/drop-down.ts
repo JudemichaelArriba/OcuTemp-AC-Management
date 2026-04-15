@@ -1,14 +1,14 @@
-import { CommonModule } from '@angular/common';
-import {
-  ChangeDetectionStrategy,
+import { 
+  Component, 
+  Input, 
+  Output, 
+  EventEmitter, 
+  HostListener, 
+  ElementRef, 
   ChangeDetectorRef,
-  Component,
-  ElementRef,
-  EventEmitter,
-  HostListener,
-  Input,
-  Output,
+  ChangeDetectionStrategy 
 } from '@angular/core';
+import { CommonModule } from '@angular/common';
 
 export interface DropDownOption {
   value: string;
@@ -19,6 +19,7 @@ export interface DropDownOption {
 @Component({
   selector: 'app-drop-down',
   standalone: true,
+  imports: [CommonModule],
   templateUrl: './drop-down.html',
   styleUrl: './drop-down.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,115 +27,127 @@ export interface DropDownOption {
 export class DropDown {
   @Input() options: DropDownOption[] = [];
   @Input() placeholder = 'Select';
-  @Input() value = '';
   @Input() disabled = false;
-  @Input() icon = 'expand_more';
+  @Input() label: string = '';
   @Input() variant: 'device' | 'day' | 'time' = 'device';
 
   @Output() valueChange = new EventEmitter<string>();
 
+  private _value: string = '';
+
+  @Input()
+  get value(): string { return this._value; }
+  set value(val: string) {
+    if (this._value !== val) {
+      this._value = val;
+      if (this.variant === 'time' && val) {
+        this.parseCurrentTime(val);
+      }
+      // CRITICAL FIX: Triggers change detection when value is updated externally by room-edit
+      this.cdr.markForCheck(); 
+    }
+  }
+
   isOpen = false;
-  activeIndex = -1;
+  isDropdownAbove = false;
+  
+  hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+  periods = ['AM', 'PM'];
 
-  constructor(
-    private elementRef: ElementRef<HTMLElement>,
-    private cdr: ChangeDetectorRef
-  ) {}
+  selectedHour = '08';
+  selectedMinute = '00';
+  selectedPeriod = 'AM';
 
-  get selectedOption(): DropDownOption | undefined {
-    return this.options.find((option) => option.value === this.value);
-  }
+  constructor(private elementRef: ElementRef, private cdr: ChangeDetectorRef) {}
 
-  toggle(): void {
-    if (this.disabled) return;
-    this.isOpen ? this.close() : this.open();
-  }
-
-  open(): void {
-    if (this.disabled || this.isOpen) return;
-    this.isOpen = true;
-    this.activeIndex = this.getSelectedIndex();
-    if (this.activeIndex < 0 && this.options.length > 0) {
-      this.activeIndex = 0;
+  get selectedLabel(): string {
+    if (this.variant === 'time' && this._value) {
+      // Returns a clean 12-hour format for the UI label based on internal states, 
+      // keeping the frontend user-friendly while emitting strict 24-hour HH:mm
+      return `${this.selectedHour}:${this.selectedMinute} ${this.selectedPeriod}`;
     }
-    this.cdr.markForCheck();
-  }
-
-  close(): void {
-    if (!this.isOpen) return;
-    this.isOpen = false;
-    this.activeIndex = -1;
-    this.cdr.markForCheck();
-  }
-
-  select(value: string): void {
-    if (this.disabled) return;
-    this.valueChange.emit(value);
-    this.close();
-  }
-
-  onKeyDown(event: KeyboardEvent): void {
-    if (this.disabled) return;
-
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        if (!this.isOpen) {
-          this.open();
-          return;
-        }
-        this.moveActive(1);
-        return;
-      case 'ArrowUp':
-        event.preventDefault();
-        if (!this.isOpen) {
-          this.open();
-          return;
-        }
-        this.moveActive(-1);
-        return;
-      case 'Enter':
-      case ' ':
-        event.preventDefault();
-        if (!this.isOpen) {
-          this.open();
-          return;
-        }
-        if (this.activeIndex >= 0 && this.activeIndex < this.options.length) {
-          this.select(this.options[this.activeIndex].value);
-        }
-        return;
-      case 'Escape':
-        if (this.isOpen) {
-          event.preventDefault();
-          this.close();
-        }
-        return;
-      default:
-        return;
-    }
+    const option = this.options.find(opt => opt.value === this._value);
+    return option ? option.label : this.placeholder;
   }
 
   @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
-    if (!this.isOpen) return;
-    const target = event.target as Node | null;
-    if (target && !this.elementRef.nativeElement.contains(target)) {
-      this.close();
+  onDocumentClick(event: MouseEvent) {
+    if (!this.elementRef.nativeElement.contains(event.target)) {
+      if (this.isOpen) {
+        this.isOpen = false;
+        this.cdr.markForCheck();
+      }
     }
   }
 
-  private moveActive(step: number): void {
-    if (this.options.length === 0) return;
-    if (this.activeIndex === -1) {
-      this.activeIndex = 0;
-    } else {
-      this.activeIndex = (this.activeIndex + step + this.options.length) % this.options.length;
+  toggle() {
+    if (this.disabled) return;
+    this.isOpen = !this.isOpen;
+    if (this.isOpen) {
+      // Auto-emit the default value immediately if opened and empty to prevent validation errors
+      if (this.variant === 'time' && !this._value) {
+        this._value = this.getFormattedTime24();
+        this.valueChange.emit(this._value);
+      }
+      requestAnimationFrame(() => {
+        this.checkSpace();
+        this.cdr.markForCheck();
+      });
     }
+  }
+
+  private parseCurrentTime(val: string) {
+    if (!val) return;
+    const match12 = val.match(/(\d{1,2}):(\d{2})\s?(AM|PM)/i);
+    if (match12) {
+      this.selectedHour = match12[1].padStart(2, '0');
+      this.selectedMinute = match12[2].padStart(2, '0');
+      this.selectedPeriod = match12[3].toUpperCase();
+      return;
+    }
+    
+    const match24 = val.match(/^(\d{1,2}):(\d{2})$/);
+    if (match24) {
+      let h = parseInt(match24[1], 10);
+      this.selectedPeriod = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      this.selectedHour = h.toString().padStart(2, '0');
+      this.selectedMinute = match24[2].padStart(2, '0');
+    }
+  }
+
+  select(option: DropDownOption) {
+    this._value = option.value;
+    this.valueChange.emit(this._value);
+    this.isOpen = false;
     this.cdr.markForCheck();
   }
 
-  private getSelectedIndex(): number {
-    return this.options.findIndex((option) => option.value === this.value);
+  selectTimePart(type: 'h' | 'm' | 'p', val: string) {
+    if (type === 'h') this.selectedHour = val;
+    if (type === 'm') this.selectedMinute = val;
+    if (type === 'p') this.selectedPeriod = val;
+
+    this._value = this.getFormattedTime24();
+    this.valueChange.emit(this._value);
+    this.cdr.markForCheck();
+  }
+
+  private getFormattedTime24(): string {
+    let h = parseInt(this.selectedHour, 10);
+    if (this.selectedPeriod === 'PM' && h < 12) h += 12;
+    if (this.selectedPeriod === 'AM' && h === 12) h = 0;
+    return `${h.toString().padStart(2, '0')}:${this.selectedMinute}`;
+  }
+
+  private checkSpace(): void {
+    if (typeof window === 'undefined') return;
+    const rect = this.elementRef.nativeElement.getBoundingClientRect();
+    const dropdownHeight = this.variant === 'time' ? 260 : 240; 
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    
+    this.isDropdownAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
   }
 }
