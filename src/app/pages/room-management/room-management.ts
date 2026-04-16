@@ -7,6 +7,8 @@ import { RoomService } from '../../services/room.service';
 import { DeviceService, DeviceTelemetry } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
+import { AuthStateService } from '../../services/auth-state.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-room-management',
@@ -21,20 +23,28 @@ export class RoomManagement implements OnInit, OnDestroy {
   searchQuery = '';
   rooms: Room[] = [];
   filteredRooms: Room[] = [];
+  isAdmin = false;
 
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
   private stopRoomsStream?: () => void;
   private stopDevicesStream?: () => void;
+  private authSub?: Subscription;
 
   constructor(
     private roomService: RoomService,
     private deviceService: DeviceService,
     private dialogService: DialogService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private authState: AuthStateService
   ) {}
 
   ngOnInit(): void {
+    this.authSub = this.authState.currentUser$.subscribe((user) => {
+      this.isAdmin = user?.role === 'admin';
+      this.cdr.markForCheck();
+    });
+
     this.stopRoomsStream = this.roomService.streamRooms((rooms) => {
       this.baseRooms = rooms;
       this.isLoading = false;
@@ -50,6 +60,7 @@ export class RoomManagement implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.stopRoomsStream?.();
     this.stopDevicesStream?.();
+    this.authSub?.unsubscribe();
   }
 
   onSearch(): void {
