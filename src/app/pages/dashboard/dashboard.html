@@ -1,8 +1,7 @@
 <main class="flex-1 flex flex-col font-sans min-h-0 bg-slate-50/60">
   <header class="px-4 pt-6 pb-2">
     <div class="max-w-[1800px] mx-auto">
-      <div
-        class="relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white/70 backdrop-blur-xl border border-white rounded-[2rem] px-8 py-6 shadow-xl shadow-slate-200/60">
+      <div class="relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white/70 backdrop-blur-xl border border-white rounded-[2rem] px-8 py-6 shadow-xl shadow-slate-200/60">
         
         <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl pointer-events-none"></div>
         <div class="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-400/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -36,19 +35,20 @@
 
   <div class="px-4 pt-4 pb-4">
     <div class="max-w-[1800px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
+      
       <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-blue-300 shadow-sm transition-all group active:scale-[0.98]">
         <div class="flex justify-between items-start mb-4">
           <div class="bg-blue-50 p-3 rounded-2xl text-blue-600 transition-colors duration-300">
             <span class="material-symbols-outlined text-xl">bolt</span>
           </div>
-          <span class="inline-flex items-center gap-1 text-emerald-600 text-[10px] font-black bg-emerald-50 px-2 py-1 rounded-lg">
-            <span class="material-symbols-outlined text-xs">trending_down</span> 12%
+          <span class="inline-flex items-center gap-1 text-slate-500 text-[10px] font-black bg-slate-50 px-2 py-1 rounded-lg uppercase tracking-widest">
+            Today
           </span>
         </div>
         <div>
           <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Energy Consumption</p>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-slate-900 tracking-tight">1,240</span>
+            <span class="text-2xl font-black text-slate-900 tracking-tight">{{ totalEnergyToday | number:'1.0-1' }}</span>
             <span class="text-xs font-bold text-slate-400">kWh</span>
           </div>
         </div>
@@ -60,47 +60,56 @@
             <span class="material-symbols-outlined text-xl">device_thermostat</span>
           </div>
           <span class="inline-flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg uppercase tracking-tighter">
-            <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Optimal
+            <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
           </span>
         </div>
         <div>
           <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Climate Average</p>
-          <span class="text-2xl font-black text-slate-900 tracking-tight">22.8<span class="text-orange-500">°C</span></span>
+          <span class="text-2xl font-black text-slate-900 tracking-tight">
+            @if (avgTemperature > 0) {
+              {{ avgTemperature | number:'1.1-1' }}<span class="text-orange-500">°C</span>
+            } @else {
+              -- <span class="text-orange-500">°C</span>
+            }
+          </span>
         </div>
       </div>
 
       <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-emerald-300 shadow-sm transition-all group active:scale-[0.98]">
         <div class="flex justify-between items-start mb-4">
           <div class="bg-emerald-50 p-3 rounded-2xl text-emerald-600 transition-colors duration-300">
-            <span class="material-symbols-outlined text-xl">meeting_room</span>
+            <span class="material-symbols-outlined text-xl">directions_walk</span>
           </div>
-          <span class="text-[10px] font-black text-slate-900 bg-slate-50 px-2 py-1 rounded-lg">18 / 24</span>
+          <span class="text-[10px] font-black text-slate-900 bg-slate-50 px-2 py-1 rounded-lg">{{ occupiedZones }} / {{ totalRooms }}</span>
         </div>
         <div class="space-y-3">
-          <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest">Zone Utilization</p>
+          <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest">Occupied Zones</p>
           <div class="flex items-center gap-3">
             <div class="flex-grow bg-slate-100 rounded-full h-2.5 overflow-hidden">
-              <div class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000" style="width: 75%"></div>
+              <div class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000" [style.width.%]="totalRooms ? (occupiedZones / totalRooms * 100) : 0"></div>
             </div>
-            <span class="text-sm font-black text-slate-900">75%</span>
+            <span class="text-sm font-black text-slate-900">{{ totalRooms ? (occupiedZones / totalRooms * 100 | number:'1.0-0') : 0 }}%</span>
           </div>
         </div>
       </div>
 
-      <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-indigo-300 shadow-sm transition-all group active:scale-[0.98]">
+      <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-rose-300 shadow-sm transition-all group active:scale-[0.98]">
         <div class="flex justify-between items-start mb-4">
-          <div class="bg-indigo-50 p-3 rounded-2xl text-indigo-600 transition-colors duration-300">
-            <span class="material-symbols-outlined text-xl">check_circle</span>
+          <div class="bg-rose-50 p-3 rounded-2xl text-rose-600 transition-colors duration-300">
+            <span class="material-symbols-outlined text-xl">admin_panel_settings</span>
           </div>
-          <div class="size-6 flex items-center justify-center">
-            <span class="size-2 rounded-full bg-indigo-500 animate-ping"></span>
-          </div>
+          @if (activeOverrides > 0) {
+            <div class="size-6 flex items-center justify-center">
+              <span class="size-2 rounded-full bg-rose-500 animate-ping"></span>
+            </div>
+          }
         </div>
         <div>
-          <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Sensor Network</p>
-          <span class="text-2xl font-black text-slate-900 tracking-tight">99.2<span class="text-indigo-500">%</span></span>
+          <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Active Overrides</p>
+          <span class="text-2xl font-black text-slate-900 tracking-tight">{{ activeOverrides }}<span class="text-slate-400 text-sm ml-1">rooms</span></span>
         </div>
       </div>
+
     </div>
   </div>
 

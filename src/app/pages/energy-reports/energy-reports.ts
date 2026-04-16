@@ -272,6 +272,16 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     this.refreshRoomChart();
   }
 
+  // Helper method to safely format YYYY-MM-DD into "MMM D" without timezone bugs
+  private formatShortDate(dateStr: string): string {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [y, m, d] = parts;
+    const date = new Date(+y, +m - 1, +d); // Month is 0-indexed in JS Date
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
   private refreshOverallChart(): void {
     if (!this.overallChart) return;
     let labels: string[] = [];
@@ -283,7 +293,8 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
       values = days.map((d) => sumKwhByDate(this.energyData, d));
     } else if (this.filterMode === 'weekly') {
       const weeks = getLast8WeekRanges();
-      labels = weeks.map((w) => w.label);
+      // Use the actual calendar dates from the start and end string provided by the service
+      labels = weeks.map((w) => `${this.formatShortDate(w.start)} - ${this.formatShortDate(w.end)}`);
       values = weeks.map((w) => sumKwhByWeek(this.energyData, w.start, w.end));
     } else {
       const months = getLast12MonthKeys();

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
-import { Database, ref, get, push, set, onValue, update } from '@angular/fire/database';
+import { Database, ref, get, push, set, onValue, update, remove, query, orderByChild, equalTo } from '@angular/fire/database';
 import { Room, Schedule } from '../models/room.model';
-import {query, orderByChild, equalTo} from '@angular/fire/database';
+// import {query, orderByChild, equalTo} from '@angular/fire/database';
 
 @Injectable({
   providedIn: 'root'
@@ -78,22 +78,25 @@ export class RoomService {
 
 
   streamRoomsByStatus(status: Room['status'], callback: (rooms: Room[]) => void): () => void {
-  const roomsRef = ref(this.db, 'rooms');
-  const q = query(roomsRef, orderByChild('status'), equalTo(status));
-  return onValue(q, (snapshot) => {
-    if (!snapshot.exists()) {
-      callback([]);
-      return;
-    }
-    const rawRooms = snapshot.val() as Record<string, Omit<Room, 'uid'> & Partial<Pick<Room, 'uid'>>>;
-    const rooms = Object.entries(rawRooms).map(([uid, room]) => ({
-      ...room,
-      uid: room.uid ?? uid,
-    })) as Room[];
-    callback(rooms);
-  });
-}
+    const roomsRef = ref(this.db, 'rooms');
+    const q = query(roomsRef, orderByChild('status'), equalTo(status));
+    return onValue(q, (snapshot) => {
+      if (!snapshot.exists()) {
+        callback([]);
+        return;
+      }
+      const rawRooms = snapshot.val() as Record<string, Omit<Room, 'uid'> & Partial<Pick<Room, 'uid'>>>;
+      const rooms = Object.entries(rawRooms).map(([uid, room]) => ({
+        ...room,
+        uid: room.uid ?? uid,
+      })) as Room[];
+      callback(rooms);
+    });
+  }
 
 
-
+  async deleteRoom(uid: string): Promise<void> {
+    const roomRef = ref(this.db, `rooms/${uid}`);
+    await remove(roomRef);
+  }
 }

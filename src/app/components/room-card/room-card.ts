@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal } from '@angular/core';
 import { Room } from '../../models/room.model';
 import { Router } from '@angular/router';
 import { DeviceService } from '../../services/device.service';
@@ -14,6 +14,9 @@ import { DeviceService } from '../../services/device.service';
 })
 export class RoomCard {
   @Input({ required: true }) room!: Room;
+  @Input() allowDelete: boolean = false;
+  
+  @Output() deleteRequest = new EventEmitter<Room>();
 
   isDropdownOpen = signal(false);
   isForcingOff = signal(false);
@@ -37,7 +40,7 @@ export class RoomCard {
   }
 
   async forcePowerOff() {
-    // Guard: no device linked, already off, or request in flight
+
     if (!this.room.device || this.room.power === false || this.isForcingOff()) return;
 
     this.closeDropdown();
@@ -52,7 +55,10 @@ export class RoomCard {
     }
   }
 
-  // ── Derived display helpers ──────────────────────────────────────────────
+  requestDelete() {
+    this.closeDropdown();
+    this.deleteRequest.emit(this.room);
+  }
 
   get isRoomOff(): boolean {
     return this.room.power !== true;

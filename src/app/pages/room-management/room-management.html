@@ -110,7 +110,12 @@
 
       @if (!isLoading) {
         @for (room of filteredRooms; track room.uid) {
-          <app-room-card class="w-full hover:-translate-y-2 transition-transform duration-300" [room]="room"></app-room-card>
+          <app-room-card 
+            class="w-full hover:-translate-y-2 transition-transform duration-300" 
+            [room]="room"
+            [allowDelete]="true"
+            (deleteRequest)="onDeleteRoom($event)">
+          </app-room-card>
         }
       }
     </div>

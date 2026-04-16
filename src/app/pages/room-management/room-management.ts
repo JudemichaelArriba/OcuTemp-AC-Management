@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { RoomCard } from '../../components/room-card/room-card';
 import { RoomService } from '../../services/room.service';
 import { DeviceService, DeviceTelemetry } from '../../services/device.service';
+import { DialogService } from '../../services/dialog.service';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 
 @Component({
@@ -29,6 +30,7 @@ export class RoomManagement implements OnInit, OnDestroy {
   constructor(
     private roomService: RoomService,
     private deviceService: DeviceService,
+    private dialogService: DialogService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -49,8 +51,6 @@ export class RoomManagement implements OnInit, OnDestroy {
     this.stopRoomsStream?.();
     this.stopDevicesStream?.();
   }
-
-
 
   onSearch(): void {
     this.mergeRoomTelemetryAndFilter();
@@ -78,6 +78,25 @@ export class RoomManagement implements OnInit, OnDestroy {
 
   get roomsWithoutDevice(): number {
     return this.rooms.filter((room) => !room.device).length;
+  }
+
+  onDeleteRoom(room: Room): void {
+    this.dialogService.confirm(
+      'Delete Room',
+      `Are you sure you want to delete "${room.roomName}"? This action cannot be undone.`,
+      async () => {
+        try {
+          await this.roomService.deleteRoom(room.uid);
+          this.dialogService.success('Room Deleted', `The room "${room.roomName}" has been successfully removed.`);
+        } catch (error) {
+          console.error('[RoomManagement] Error deleting room:', error);
+          this.dialogService.error('Error', 'An error occurred while deleting the room. Please try again.');
+        }
+      },
+      undefined,
+      'Delete',
+      'Cancel'
+    );
   }
 
   private mergeRoomTelemetryAndFilter(): void {
