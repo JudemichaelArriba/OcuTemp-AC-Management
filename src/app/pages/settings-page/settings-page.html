@@ -1,224 +1,182 @@
-<main class="min-h-full font-sans bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-    <div class="max-w-5xl mx-auto space-y-6">
-        <header class="px-4 pt-4 pb-2">
-            <div class="max-w-[1800px] mx-auto">
-                <div
-                    class="bg-gradient-to-br from-blue-500 to-blue-600 border border-blue-400/30 rounded-2xl px-5 py-4 shadow-lg shadow-blue-500/20">
-                    <h1 class="text-xl font-black text-white tracking-tight">Settings</h1>
-                    <p class="text-xs text-blue-100 font-medium mt-1">Manage your profile and app preferences</p>
-                </div>
-            </div>
-        </header>
-        <section
-            class="bg-white/90 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300">
+<main class="flex-1 flex flex-col font-sans min-h-0 bg-slate-50 p-4 md:p-6 lg:p-8 gap-6 overflow-y-auto">
 
-            <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
-                <span class="w-1 h-6 bg-gradient-to-b from-blue-600 to-blue-500 rounded-full"></span>
-                Profile
+    <header
+        class="relative overflow-hidden bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl shadow-blue-200/40 shrink-0">
+        <div class="absolute inset-0 opacity-[0.05] pointer-events-none"
+            style="background-image: radial-gradient(#2563eb 0.8px, transparent 0.8px); background-size: 20px 20px;">
+        </div>
+        <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl"></div>
+        <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl"></div>
+
+        <div
+            class="max-w-7xl mx-auto px-8 md:px-12 py-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <span
+                        class="px-3 py-1 rounded-full text-[10px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">System
+                        Preferences</span>
+                </div>
+                <h1 class="text-4xl font-black text-slate-900 tracking-tight leading-none">
+                    App <span class="text-blue-600">Settings</span>
+                </h1>
+                <p class="text-slate-500 text-sm mt-3 max-w-lg font-medium flex items-center gap-2">
+                    Manage your personal profile, security credentials, and support options.
+                </p>
+            </div>
+        </div>
+    </header>
+
+    <div class="max-w-7xl mx-auto w-full space-y-6">
+
+        <section
+            class="bg-white/80 backdrop-blur-md border border-white rounded-[2.5rem] p-8 shadow-xl shadow-blue-100/40">
+            <h2 class="text-lg font-black text-slate-900 mb-8 flex items-center gap-3">
+                <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                Personal Profile
             </h2>
 
             @if (currentUser$ | async; as user) {
+            <div class="flex flex-col lg:flex-row gap-10">
 
-            <div class="flex flex-col sm:flex-row gap-8">
-
-
-                <div class="flex items-center gap-5">
+                <div class="flex flex-col items-center gap-4">
                     <div class="relative">
                         <div
-                            class="w-24 h-24 rounded-full bg-gradient-to-br from-blue-600 via-blue-500 to-blue-600 text-white flex items-center justify-center font-black text-3xl shadow-xl ring-4 ring-blue-100">
+                            class="w-28 h-28 rounded-[2rem] bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black text-4xl shadow-2xl shadow-blue-200 ring-4 ring-white">
                             {{ getUserInitials(user) }}
                         </div>
-
                         <div
-                            class="absolute -bottom-1 -right-1 w-7 h-7 bg-green-500 rounded-full border-4 border-white shadow-md">
+                            class="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-500 rounded-xl border-4 border-white shadow-lg flex items-center justify-center">
+                            <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
                         </div>
                     </div>
-
-                    <div>
-                        <p class="text-lg font-bold text-slate-900">
-                            {{ user.fullName || 'Unknown' }}
+                    <div class="text-center">
+                        <p class="text-sm font-black text-slate-900 uppercase tracking-wider">{{ user.role || 'User' }}
                         </p>
-                        <p class="text-sm text-slate-500 mt-0.5">
-                            {{ user.email || '--' }}
+                        <p class="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1">Status: Active
                         </p>
                     </div>
                 </div>
 
-
-                <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-5">
-
-                    <div>
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                            Full Name
-                        </label>
-
+                <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Full
+                            Name</label>
                         <input type="text" [value]="isEditing ? fullNameDraft : (user.fullName || '')"
-                            [disabled]="!isEditing" (input)="fullNameDraft = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-           transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isEditing"
+                            [disabled]="!isEditing" (input)="fullNameDraft = $any($event.target).value"
+                            class="w-full px-5 py-4 border rounded-2xl text-sm font-bold transition-all outline-none"
+                            [class.bg-white]="isEditing" [class.border-blue-500]="isEditing"
+                            [class.shadow-[0_0_15px_rgba(37,99,235,0.1)]]="isEditing"
+                            [class.bg-slate-50/50]="!isEditing" [class.border-slate-100]="!isEditing"
+                            [class.text-slate-900]="isEditing" [class.text-slate-500]="!isEditing"
                             [class.cursor-not-allowed]="!isEditing" />
                     </div>
 
-                    <div>
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                            Role
-                        </label>
-
-                        <input type="text" [value]="user.role || ''" disabled
-                            class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-500 cursor-not-allowed" />
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Email
+                            Address</label>
+                        <input type="text" [value]="user.email || '--'" disabled
+                            class="w-full px-5 py-4 bg-slate-50/50 border border-slate-100 rounded-2xl text-sm font-medium text-slate-400 cursor-not-allowed outline-none shadow-sm" />
                     </div>
-
                 </div>
-
             </div>
 
-
-
-            <div class="mt-8 flex justify-end">
-                <button (click)="isEditing ? saveChanges(user) : startEdit(user.fullName)" [disabled]="isSaving" class="relative px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500
-         rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl
-         transform hover:-translate-y-0.5 transition-all duration-200
-         disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden">
-
-                    @if (isSaving) {
-                    <div class="absolute inset-0 bg-white/20" style="animation: progress 1.5s ease-in-out infinite;">
-                    </div>
-                    }
-
-                    <span class="relative z-10 flex items-center justify-center gap-2">
-                        @if (isSaving) {
-                        <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
-                            viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                            </circle>
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z">
-                            </path>
-                        </svg>
-                        }
-                        {{ isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Edit Profile') }}
-                    </span>
-                </button>
-
-
-
-
+            <div class="mt-10 flex justify-end gap-3 border-t border-slate-50 pt-8">
                 @if (isEditing) {
                 <button (click)="isEditing = false"
-                    class="ml-2 px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50">
+                    class="px-8 py-4 text-xs font-black text-slate-500 hover:bg-slate-50 rounded-2xl transition-all uppercase tracking-widest">
                     Cancel
                 </button>
                 }
+                <button (click)="isEditing ? saveChanges(user) : startEdit(user.fullName)" [disabled]="isSaving"
+                    class="group flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50">
+                    <span *ngIf="!isSaving" class="material-symbols-outlined text-sm">@if (isEditing) { check_circle }
+                        @else { edit_square }</span>
+                    <span *ngIf="isSaving"
+                        class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    {{ isSaving ? 'SAVING...' : (isEditing ? 'SAVE CHANGES' : 'EDIT PROFILE') }}
+                </button>
             </div>
             } @else {
-
-            <div class="text-sm text-slate-400">
-                Loading user...
-            </div>
-
+            <div class="py-10 text-center text-slate-400 font-bold animate-pulse uppercase tracking-[0.3em] text-xs">
+                Synchronizing User Data...</div>
             }
-
-
-
         </section>
 
         <section
-            class="bg-white/90 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300">
-            <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
-                <span class="w-1 h-6 bg-gradient-to-b from-blue-600 to-blue-500 rounded-full"></span>
-                Security
+            class="bg-white/80 backdrop-blur-md border border-white rounded-[2.5rem] p-8 shadow-xl shadow-blue-100/40">
+            <h2 class="text-lg font-black text-slate-900 mb-8 flex items-center gap-3">
+                <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                Security Credentials
             </h2>
-            <div class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                            Current Password
-                        </label>
-                        <input type="password" [value]="currentPassword" [disabled]="!isPasswordEditing"
-                            (input)="currentPassword = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
-               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-               transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isPasswordEditing"
-                            [class.cursor-not-allowed]="!isPasswordEditing" />
-                    </div>
 
-                    <div>
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                            New Password
-                        </label>
-                        <input type="password" [value]="newPassword" [disabled]="!isPasswordEditing"
-                            (input)="newPassword = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
-               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-               transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isPasswordEditing"
-                            [class.cursor-not-allowed]="!isPasswordEditing" />
-                    </div>
-
-                    <div>
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                            Confirm Password
-                        </label>
-                        <input type="password" [value]="confirmPassword" [disabled]="!isPasswordEditing"
-                            (input)="confirmPassword = $any($event.target).value" class="mt-2 w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm
-               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-               transition-all hover:border-slate-300 bg-white" [class.bg-slate-50]="!isPasswordEditing"
-                            [class.cursor-not-allowed]="!isPasswordEditing" />
-                    </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="space-y-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Current
+                        Password</label>
+                    <input type="password" [value]="currentPassword" [disabled]="!isPasswordEditing"
+                        (input)="currentPassword = $any($event.target).value"
+                        class="w-full px-5 py-4 border rounded-2xl text-sm font-bold transition-all outline-none"
+                        [class.bg-white]="isPasswordEditing" [class.border-blue-500]="isPasswordEditing"
+                        [class.shadow-[0_0_15px_rgba(37,99,235,0.1)]]="isPasswordEditing"
+                        [class.bg-slate-50/50]="!isPasswordEditing" [class.border-slate-100]="!isPasswordEditing" />
                 </div>
-
-                <div class="flex justify-end gap-2 pt-2">
-                    <button (click)="isPasswordEditing ? savePassword() : startPasswordEdit()"
-                        [disabled]="isPasswordSaving" class="relative px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-blue-500
-             rounded-xl hover:from-blue-700 hover:to-blue-600 shadow-lg hover:shadow-xl
-             transform hover:-translate-y-0.5 transition-all duration-200
-             disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden">
-
-                        @if (isPasswordSaving) {
-                        <div class="absolute inset-0 bg-white/20"
-                            style="animation: progress 1.5s ease-in-out infinite;"></div>
-                        }
-
-                        <span class="relative z-10 flex items-center justify-center gap-2">
-                            @if (isPasswordSaving) {
-                            <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                    stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z">
-                                </path>
-                            </svg>
-                            }
-                            {{ isPasswordSaving ? 'Saving...' : (isPasswordEditing ? 'Save Password' : 'Edit Password')
-                            }}
-                        </span>
-                    </button>
-
-                    @if (isPasswordEditing) {
-                    <button (click)="cancelPasswordEdit()"
-                        class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50">
-                        Cancel
-                    </button>
-                    }
+                <div class="space-y-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">New
+                        Password</label>
+                    <input type="password" [value]="newPassword" [disabled]="!isPasswordEditing"
+                        (input)="newPassword = $any($event.target).value"
+                        class="w-full px-5 py-4 border rounded-2xl text-sm font-bold transition-all outline-none"
+                        [class.bg-white]="isPasswordEditing" [class.border-blue-500]="isPasswordEditing"
+                        [class.shadow-[0_0_15px_rgba(37,99,235,0.1)]]="isPasswordEditing"
+                        [class.bg-slate-50/50]="!isPasswordEditing" [class.border-slate-100]="!isPasswordEditing" />
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Confirm New
+                        Password</label>
+                    <input type="password" [value]="confirmPassword" [disabled]="!isPasswordEditing"
+                        (input)="confirmPassword = $any($event.target).value"
+                        class="w-full px-5 py-4 border rounded-2xl text-sm font-bold transition-all outline-none"
+                        [class.bg-white]="isPasswordEditing" [class.border-blue-500]="isPasswordEditing"
+                        [class.shadow-[0_0_15px_rgba(37,99,235,0.1)]]="isPasswordEditing"
+                        [class.bg-slate-50/50]="!isPasswordEditing" [class.border-slate-100]="!isPasswordEditing" />
                 </div>
             </div>
 
+            <div class="mt-10 flex justify-end gap-3 border-t border-slate-50 pt-8">
+                @if (isPasswordEditing) {
+                <button (click)="cancelPasswordEdit()"
+                    class="px-8 py-4 text-xs font-black text-slate-500 hover:bg-slate-50 rounded-2xl transition-all uppercase tracking-widest">
+                    Cancel
+                </button>
+                }
+                <button (click)="isPasswordEditing ? savePassword() : startPasswordEdit()" [disabled]="isPasswordSaving"
+                    class="group flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-xs transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50">
+                    <span *ngIf="!isPasswordSaving" class="material-symbols-outlined text-sm">lock</span>
+                    <span *ngIf="isPasswordSaving"
+                        class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    {{ isPasswordSaving ? 'UPDATING...' : (isPasswordEditing ? 'UPDATE PASSWORD' : 'CHANGE PASSWORD') }}
+                </button>
+            </div>
         </section>
-        <section
-            class="bg-white/90 backdrop-blur-sm border border-slate-200/60 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300">
-            <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
-                <span class="w-1 h-6 bg-gradient-to-b from-blue-600 to-blue-500 rounded-full"></span>
-                Support
-            </h2>
 
-            <div
-                class="p-4 rounded-xl border border-slate-200 hover:bg-slate-50/50 transition-colors flex items-center justify-between">
-                <div>
-                    <p class="text-base font-semibold text-slate-900">Contact Support</p>
-                    <p class="text-sm text-slate-500 mt-1">Need help? Reach out to our support team.</p>
+        <section
+            class="bg-white/80 backdrop-blur-md border border-white rounded-[2.5rem] p-8 shadow-xl shadow-blue-100/40">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-center gap-6">
+                    <div
+                        class="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner">
+                        <span class="material-symbols-outlined text-3xl">contact_support</span>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black text-slate-900">Technical Support</h2>
+                        <p class="text-sm text-slate-400 font-medium">Have questions or experiencing issues? Our team is
+                            here to help.</p>
+                    </div>
                 </div>
 
                 <button (click)="openSupportDialog()"
-                    class="px-6 py-3 text-sm font-bold border-2 border-slate-300 rounded-xl hover:bg-slate-50 hover:border-slate-400 hover:shadow-md transition-all duration-200">
-                    Contact
+                    class="px-10 py-4 text-xs font-black text-blue-600 border-2 border-blue-100 rounded-2xl hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-xl hover:shadow-blue-200 transition-all duration-300 uppercase tracking-widest active:scale-95">
+                    Get Help Now
                 </button>
             </div>
         </section>

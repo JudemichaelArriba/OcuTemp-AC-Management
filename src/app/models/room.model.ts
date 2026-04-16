@@ -11,7 +11,7 @@ export interface Room {
   status: 'active' | 'inactive';
   temperature?: number;
   humidity?: number;
-  device?: string;
+  device: string;
   occupancy?: boolean;
   power?: boolean;
   createdAt?: string;

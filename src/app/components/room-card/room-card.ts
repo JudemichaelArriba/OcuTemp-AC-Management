@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal } from '@angular/core';
 import { Room } from '../../models/room.model';
 import { Router } from '@angular/router';
-
+import { DeviceService } from '../../services/device.service';
 
 @Component({
   selector: 'app-room-card',
@@ -14,24 +14,54 @@ import { Router } from '@angular/router';
 })
 export class RoomCard {
   @Input({ required: true }) room!: Room;
-
-
-  constructor(private router: Router) { }
+  @Input() allowDelete: boolean = false;
+  
+  @Output() deleteRequest = new EventEmitter<Room>();
 
   isDropdownOpen = signal(false);
+  isForcingOff = signal(false);
+
+  constructor(
+    private router: Router,
+    private deviceService: DeviceService,
+  ) {}
+
   toggleDropdown() {
-    this.isDropdownOpen.update(v => !v);
+    this.isDropdownOpen.update((v) => !v);
   }
 
   closeDropdown() {
     this.isDropdownOpen.set(false);
   }
 
-
-
   viewDetails() {
     this.closeDropdown();
     this.router.navigate(['app/room-details', this.room.uid]);
+  }
+
+  async forcePowerOff() {
+
+    if (!this.room.device || this.room.power === false || this.isForcingOff()) return;
+
+    this.closeDropdown();
+    this.isForcingOff.set(true);
+
+    try {
+      await this.deviceService.sendForcedOff(this.room.device);
+    } catch (err) {
+      console.error('[RoomCard] sendForcedOff failed:', err);
+    } finally {
+      this.isForcingOff.set(false);
+    }
+  }
+
+  requestDelete() {
+    this.closeDropdown();
+    this.deleteRequest.emit(this.room);
+  }
+
+  get isRoomOff(): boolean {
+    return this.room.power !== true;
   }
 
   get hasTelemetry(): boolean {
@@ -67,7 +97,6 @@ export class RoomCard {
   }
 
   get occupancyText(): string {
-
     if (this.room.occupancy === undefined) return '--';
     return this.room.occupancy ? 'Occupied' : 'Unoccupied';
   }

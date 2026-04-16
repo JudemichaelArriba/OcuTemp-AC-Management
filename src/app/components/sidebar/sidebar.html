@@ -1,193 +1,128 @@
 <aside
-  class="border-r border-gray-200 flex flex-col bg-white shrink-0 justify-between h-screen rounded-r-2xl shadow-lg overflow-visible transition-all duration-300 relative"
-  [class.w-64]="isOpen()" [class.w-25]="!isOpen()">
+  class="fixed left-4 top-4 bottom-4 border border-slate-200/60 flex flex-col bg-white/90 backdrop-blur-md shrink-0 justify-between rounded-[24px] shadow-2xl shadow-slate-200/50 transition-all duration-500 ease-in-out z-50"
+  [class.w-60]="isOpen()" [class.w-18]="!isOpen()">
 
   <button (click)="toggleSidebar()"
-    class="absolute -right-3 top-6 z-50 p-1.5 rounded-lg bg-white border border-gray-200 text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-all shadow-md"
+    class="absolute -right-3 top-12 z-[60] flex flex-col items-center justify-center w-6 h-12 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:shadow-[4px_0_10px_-2px_rgba(37,99,235,0.15)] transition-all duration-300 group shadow-sm"
     title="Toggle sidebar">
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polyline [attr.points]="isOpen() ? '15 18 9 12 15 6' : '9 18 15 12 9 6'" />
-    </svg>
+    <span class="material-symbols-outlined text-[16px] font-bold transition-transform duration-500"
+      [class.rotate-180]="!isOpen()">
+      chevron_left
+    </span>
   </button>
 
-  <div class="p-3 flex items-center border-b border-gray-100" [class.justify-between]="isOpen()"
-    [class.justify-center]="!isOpen()" [class.px-4]="isOpen()">
-
+  <div class="p-4 flex items-center shrink-0 overflow-hidden" [class.justify-center]="!isOpen()">
     <div class="flex items-center gap-3 min-w-0">
-      <div class="flex justify-center">
-        <img src="logo.png" alt="OcuTemp Logo" class="w-10 h-10 object-contain" />
+      <div class="shrink-0 relative">
+        <div class="bg-white w-10 h-10 rounded-xl flex items-center justify-center shadow-sm transform rotate-3 hover:rotate-0 transition-all border border-slate-100">
+           <img src="logo.png" alt="OcuTemp Logo" class="w-8 h-8 object-contain" />
+        </div>
       </div>
       @if (isOpen()) {
-      <div class="overflow-hidden">
-        <h1 class="text-base font-bold leading-none tracking-tight text-gray-900 whitespace-nowrap">OcuTemp</h1>
+      <div class="overflow-hidden animate-in fade-in slide-in-from-left-2 duration-300">
+        <h1 class="text-[13px] font-black leading-none tracking-tight text-slate-800 uppercase">OcuTemp</h1>
         @if (currentUser$ | async; as currentUser) {
-        <p class="text-[8.5px] font-semibold uppercase tracking-widest text-blue-600/70 mt-1 whitespace-nowrap">
-          IoT {{ isAdmin(currentUser) ? 'Admin' : 'Staff' }} Panel
-        </p>
+          <p class="text-[8px] font-extrabold uppercase tracking-widest text-blue-500 mt-1 opacity-80">
+            IoT {{ isAdmin(currentUser) ? 'Admin' : 'Staff' }} Panel
+          </p>
         } @else {
-        <p class="text-[8.5px] font-semibold uppercase tracking-widest text-blue-600/70 mt-1 whitespace-nowrap">
-          IoT Panel
-        </p>
+          <p class="text-[8px] font-extrabold uppercase tracking-widest text-blue-500 mt-1 opacity-80">
+            IoT Panel
+          </p>
         }
-
       </div>
       }
     </div>
   </div>
 
-  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+  <nav class="flex-1 px-2.5 py-4 space-y-1 overflow-y-auto no-scrollbar">
+    @if (isOpen()) {
+      <div class="px-3 mb-3">
+        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Management</span>
+      </div>
+    }
 
-    <a class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
-             hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
-             hover:text-blue-700 rounded-lg transition-all group" [class.justify-center]="!isOpen()"
-      [class.justify-start]="isOpen()" [routerLink]="['/app/dashboard']"
-      routerLinkActive="bg-gradient-to-r from-blue-50 to-blue-100/50 !text-blue-700 font-medium" title="Dashboard">
-      <span
-        class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform shrink-0">dashboard</span>
-      @if (isOpen()) {
-      <span class="text-[13px] font-semibold whitespace-nowrap" routerLinkActive="!font-bold">Dashboard</span>
-      }
-      <span
-        class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
-        routerLinkActive="!block"></span>
+    <a class="relative flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
+      [class.justify-center]="!isOpen()" [class.justify-start]="isOpen()" [routerLink]="['/app/dashboard']"
+      routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm" title="Dashboard">
+      <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">dashboard</span>
+      @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">Dashboard</span> }
+      <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300" routerLinkActive="scale-100"></span>
     </a>
 
-
-    <a class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
-             hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
-             hover:text-blue-700 rounded-lg transition-all group" [class.justify-center]="!isOpen()"
-      [class.justify-start]="isOpen()" [routerLink]="['/app/room-management']"
-      routerLinkActive="bg-gradient-to-r from-blue-50 to-blue-100/50 !text-blue-700 font-medium"
-      title="Room Management">
-      <span
-        class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform shrink-0">meeting_room</span>
-      @if (isOpen()) {
-      <span class="text-[13px] font-semibold whitespace-nowrap" routerLinkActive="!font-bold">Room Management</span>
-      }
-      <span
-        class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
-        routerLinkActive="!block"></span>
+    <a class="relative flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
+      [class.justify-center]="!isOpen()" [class.justify-start]="isOpen()" [routerLink]="['/app/room-management']"
+      routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm" title="Room Management">
+      <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">meeting_room</span>
+      @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">Rooms</span> }
+      <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300" routerLinkActive="scale-100"></span>
     </a>
 
-    <a class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
-             hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
-             hover:text-blue-700 rounded-lg transition-all group" [class.justify-center]="!isOpen()"
-      [class.justify-start]="isOpen()" [routerLink]="['/app/energy-reports']"
-      routerLinkActive="bg-gradient-to-r from-blue-50 to-blue-100/50 !text-blue-700 font-medium" title="Energy Reports">
-      <span
-        class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform shrink-0">bar_chart</span>
-      @if (isOpen()) {
-      <span class="text-[13px] font-semibold whitespace-nowrap" routerLinkActive="!font-bold">Energy Reports</span>
-      }
-      <span
-        class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
-        routerLinkActive="!block"></span>
+    <a class="relative flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
+      [class.justify-center]="!isOpen()" [class.justify-start]="isOpen()" [routerLink]="['/app/energy-reports']"
+      routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm" title="Energy Reports">
+      <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">bar_chart</span>
+      @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">Reports</span> }
+      <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300" routerLinkActive="scale-100"></span>
     </a>
-
 
     @if (currentUser$ | async; as currentUser) {
-    @if (isAdmin(currentUser)) {
-    <a class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
-                 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
-                 hover:text-blue-700 rounded-lg transition-all group" [class.justify-center]="!isOpen()"
-      [class.justify-start]="isOpen()" [routerLink]="['/app/user-management']"
-      routerLinkActive="bg-gradient-to-r from-blue-50 to-blue-100/50 !text-blue-700 font-medium"
-      title="User Management">
-      <span
-        class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform shrink-0">group</span>
-      @if (isOpen()) {
-      <span class="text-[13px] font-semibold whitespace-nowrap" routerLinkActive="!font-bold">User Management</span>
+      @if (isAdmin(currentUser)) {
+        <div class="pt-4 pb-2 px-3" *ngIf="isOpen()">
+          <span class="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Administration</span>
+        </div>
+        <a class="relative flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
+          [class.justify-center]="!isOpen()" [class.justify-start]="isOpen()" [routerLink]="['/app/user-management']"
+          routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm" title="User Management">
+          <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">group</span>
+          @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">Users</span> }
+          <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300" routerLinkActive="scale-100"></span>
+        </a>
       }
-      <span
-        class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
-        routerLinkActive="!block"></span>
-    </a>
     }
-    }
-
-
-    <div class="pt-3 pb-2">
-      <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent"></div>
-    </div>
-
-    <a class="relative flex items-center gap-3 px-3 py-2.5 text-gray-600
-             hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
-             hover:text-blue-700 rounded-lg transition-all group" [class.justify-center]="!isOpen()"
-      [class.justify-start]="isOpen()" [routerLink]="['/app/settings']"
-      routerLinkActive="bg-gradient-to-r from-blue-50 to-blue-100/50 !text-blue-700 font-medium" title="Settings">
-      <span
-        class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform shrink-0">settings</span>
-      @if (isOpen()) {
-      <span class="text-[13px] font-semibold whitespace-nowrap" routerLinkActive="!font-bold">Settings</span>
-      }
-      <span
-        class="absolute left-0 top-0 h-full w-[3px] bg-gradient-to-b from-blue-600 to-blue-500 rounded-l-full hidden"
-        routerLinkActive="!block"></span>
-    </a>
-
   </nav>
 
-  <div class="border-t border-gray-100 p-3">
-    @if (currentUser$ | async; as currentUser) {
-    <div (click)="onLogoutClick()" class="relative flex items-center gap-3 p-3 rounded-xl
-               bg-gradient-to-br from-gray-50/50 to-white
-               border border-gray-100/80
-               hover:shadow-md hover:shadow-red-100/50
-               hover:border-red-200/60
-               cursor-pointer transition-all duration-300
-               group" [class.flex-col]="!isOpen()" [class.flex-row]="isOpen()" title="Sign out" role="button"
-      tabindex="0" (keydown.enter)="onLogoutClick()" (keydown.space)="onLogoutClick()">
-
-      <div class="relative shrink-0">
-        <div
-          class="absolute -inset-0.5 bg-gradient-to-br from-red-500 to-red-400 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-sm">
-        </div>
-        <div class="relative w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-blue-500
-                   text-white font-bold flex items-center justify-center
-                   shadow-md shadow-blue-200/50
-                   ring-2 ring-white
-                   group-hover:scale-105 transition-transform duration-300 text-sm">
-          {{ getUserInitials(currentUser) }}
-        </div>
-        <div
-          class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white shadow-sm">
-        </div>
-      </div>
-
-
-      @if (isOpen()) {
-      <div class="flex-1 overflow-hidden">
-        <p class="text-[13px] font-bold text-gray-900 truncate leading-tight transition-colors">
-          {{ currentUser.fullName }}
-        </p>
-        <p class="text-[10.5px] font-semibold text-gray-500 truncate mt-0.5 uppercase tracking-wide">
-          {{ currentUser.role }}
-        </p>
-      </div>
-      }
-
-
-      @if (isOpen()) {
-      <div class="opacity-0 group-hover:opacity-100 transition-opacity">
-        <span class="material-symbols-outlined text-red-400 text-[18px]">logout</span>
-      </div>
-      }
-
+  <div class="shrink-0">
+    <div class="px-2.5 mb-1">
+      <a class="relative flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
+        [class.justify-center]="!isOpen()" [class.justify-start]="isOpen()" [routerLink]="['/app/settings']"
+        routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm" title="Settings">
+        <span class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">settings</span>
+        @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">Settings</span> }
+        <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300" routerLinkActive="scale-100"></span>
+      </a>
     </div>
-    } @else {
-    <div class="relative flex items-center gap-3 p-3 rounded-xl
-               bg-gray-100/50 animate-pulse border border-gray-100/80" [class.flex-col]="!isOpen()"
-      [class.flex-row]="isOpen()">
-      <div class="w-10 h-10 rounded-full bg-gray-300 shrink-0"></div>
-      @if (isOpen()) {
-      <div class="flex-1 space-y-2">
-        <div class="h-3 w-24 bg-gray-300 rounded"></div>
-        <div class="h-2 w-16 bg-gray-200 rounded"></div>
-      </div>
+
+    <div class="p-2.5">
+      @if (currentUser$ | async; as currentUser) {
+        <div (click)="onLogoutClick()"
+          class="group relative flex items-center gap-3 p-2 rounded-[18px] bg-slate-50 hover:bg-white hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer transition-all duration-300"
+          [class.flex-col]="!isOpen()" [class.flex-row]="isOpen()" title="Sign out">
+
+          <div class="relative shrink-0">
+            <div class="w-9 h-9 rounded-[12px] bg-gradient-to-tr from-blue-600 to-blue-500 text-white font-bold flex items-center justify-center shadow-sm text-[11px]">
+              {{ getUserInitials(currentUser) }}
+            </div>
+            <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white"></div>
+          </div>
+
+          @if (isOpen()) {
+            <div class="flex-1 overflow-hidden animate-in fade-in duration-300">
+              <p class="text-[11px] font-bold text-slate-800 truncate leading-tight">{{ currentUser.fullName }}</p>
+              <p class="text-[8px] font-bold text-blue-500 truncate mt-0.5 uppercase tracking-tighter opacity-70">{{ currentUser.role }}</p>
+            </div>
+            <span class="material-symbols-outlined text-slate-300 text-[18px] group-hover:text-red-500 group-hover:translate-x-0.5 transition-all duration-300">logout</span>
+          }
+        </div>
+      } @else {
+        <div class="flex items-center gap-3 p-2 rounded-[18px] bg-slate-50 animate-pulse" [class.flex-col]="!isOpen()">
+          <div class="w-9 h-9 rounded-[12px] bg-slate-200"></div>
+          <div class="flex-1 space-y-2" *ngIf="isOpen()">
+            <div class="h-2 w-20 bg-slate-200 rounded"></div>
+            <div class="h-1.5 w-12 bg-slate-100 rounded"></div>
+          </div>
+        </div>
       }
     </div>
-    }
   </div>
-
 </aside>

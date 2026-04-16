@@ -1,151 +1,113 @@
-<main class="flex-1 flex flex-col font-sans min-h-0 bg-gradient-to-br from-slate-50 to-blue-50/30">
+<div class="flex flex-col min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8 gap-6 font-sans">
 
+  <header class="relative overflow-hidden bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl shadow-blue-200/40">
+    <div class="absolute inset-0 opacity-[0.05] pointer-events-none"
+      style="background-image: radial-gradient(#2563eb 0.8px, transparent 0.8px); background-size: 20px 20px;"></div>
+    <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl"></div>
 
-  <header class="px-4 pt-4 pb-2">
-    <div class="max-w-[1800px] mx-auto">
-      <div
-        class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-gradient-to-br from-blue-500 to-blue-600 border border-blue-400/30 rounded-2xl px-5 py-4 shadow-lg shadow-blue-500/20">
-        <div>
-          <h2 class="text-xl font-black tracking-tight text-white">User Management</h2>
-          <p class="text-xs text-blue-100 font-medium mt-1 flex items-center gap-1.5">
-
-            Manage system administrators and technical staff
-          </p>
+    <div class="max-w-7xl mx-auto px-8 md:px-12 py-12 flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+      <div>
+        <div class="flex items-center gap-2 mb-3">
+          <span class="px-3 py-1 rounded-full text-[10px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">System Security</span>
         </div>
+        <h1 class="text-4xl font-black text-slate-900 tracking-tight leading-none">
+          User <span class="text-blue-600">Management</span>
+        </h1>
+        <p class="text-slate-500 text-sm mt-3 max-w-lg font-medium flex items-center gap-2">
+          Manage system administrators, technical staff, and access levels.
+        </p>
       </div>
     </div>
   </header>
 
-
-  <div class="px-6 py-2">
-    <div class="max-w-[1800px] mx-auto">
-      <div class="flex items-center gap-3">
-        <div class="relative flex-1 max-w-md">
-          <span
-            class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
-          <input type="text" placeholder="Search by name, email or role..." [(ngModel)]="searchQuery"
-            (ngModelChange)="onSearch()"
-            class="w-full pl-11 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 shadow-sm transition-all" />
-          @if (searchQuery) {
-          <button (click)="searchQuery = ''; onSearch()"
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-            <span class="material-symbols-outlined text-[18px]">close</span>
-          </button>
-          }
-        </div>
-      </div>
+  <div class="max-w-7xl w-full mx-auto bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/60 shadow-lg shadow-blue-100/50">
+    <div class="relative w-full md:max-w-md group">
+      <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 group-focus-within:text-blue-600 transition-colors">search</span>
+      <input
+        type="text"
+        [(ngModel)]="searchQuery"
+        (ngModelChange)="onSearch()"
+        placeholder="Search by name, email or role..."
+        class="w-full pl-12 pr-11 py-3.5 bg-white border border-slate-100 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 font-medium shadow-sm" />
+      @if (searchQuery) {
+        <button (click)="searchQuery = ''; onSearch()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      }
     </div>
   </div>
 
-
-  <div class="px-6 pb-6 flex-1 overflow-y-auto">
-    <div class="max-w-[1800px] mx-auto bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="min-w-[860px] w-full text-left border-collapse">
-          <thead class="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
-            <tr>
-              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">User Name</th>
-              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Role</th>
-              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Email</th>
-              <th
-                class="hidden md:table-cell px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">
-                Last Login</th>
-              <th class="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-right">Actions
-              </th>
+  <section class="max-w-7xl w-full mx-auto flex-grow pb-10">
+    <div class="bg-white rounded-[2.5rem] border border-white shadow-2xl shadow-blue-100/60 overflow-hidden flex flex-col h-full">
+      <div class="flex-grow overflow-x-auto lg:overflow-x-hidden">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-50/50 border-b border-slate-100">
+              <th class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">User Details</th>
+              <th class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Role</th>
+              <th class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Access Email</th>
+              <th class="hidden md:table-cell px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Activity</th>
+              <th class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100">
-
+          <tbody class="divide-y divide-slate-50">
             @if (isLoading) {
-            @for (_ of skeletonRows; track $index) {
-            <tr class="animate-pulse">
-              <td class="px-6 py-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-xl bg-slate-200"></div>
-                  <div class="h-4 bg-slate-200 rounded-lg w-32"></div>
-                </div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="h-6 bg-slate-200 rounded-lg w-16"></div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="h-4 bg-slate-200 rounded-lg w-44"></div>
-              </td>
-              <td class="hidden md:table-cell px-6 py-4">
-                <div class="h-4 bg-slate-200 rounded-lg w-24"></div>
-              </td>
-              <td class="px-6 py-4 text-right">
-                <div class="flex justify-end gap-2">
-                  <div class="w-9 h-9 bg-slate-200 rounded-lg"></div>
-                  <div class="w-9 h-9 bg-slate-200 rounded-lg"></div>
-                </div>
-              </td>
-            </tr>
-            }
+              @for (_ of skeletonRows; track $index) {
+                <tr class="animate-pulse">
+                  <td class="px-8 py-5"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-slate-100"></div><div class="h-4 bg-slate-100 rounded-lg w-32"></div></div></td>
+                  <td class="px-8 py-5"><div class="h-6 bg-slate-100 rounded-lg w-20"></div></td>
+                  <td class="px-8 py-5"><div class="h-4 bg-slate-100 rounded-lg w-40"></div></td>
+                  <td class="hidden md:table-cell px-8 py-5"><div class="h-4 bg-slate-100 rounded-lg w-24"></div></td>
+                  <td class="px-8 py-5 text-right"><div class="flex justify-end gap-2"><div class="w-9 h-9 bg-slate-100 rounded-lg"></div></div></td>
+                </tr>
+              }
             }
 
             @if (!isLoading) {
-            @for (user of filteredUsers; track user.uid) {
-            <app-user-card [user]="user"></app-user-card>
-            }
+              @for (user of filteredUsers; track user.uid) {
+                <app-user-card [user]="user"></app-user-card>
+              }
 
-            @if (filteredUsers.length === 0 && searchQuery) {
-            <tr>
-              <td colspan="5" class="px-6 py-16 text-center">
-                <div class="flex flex-col items-center gap-3">
-                  <span class="material-symbols-outlined text-slate-300 text-5xl">search_off</span>
-                  <p class="text-sm font-bold text-slate-400">No results for "{{ searchQuery }}"</p>
-                  <p class="text-xs text-slate-400">Try searching by a different name, email or role.</p>
-                </div>
-              </td>
-            </tr>
+              @if (filteredUsers.length === 0) {
+                <tr>
+                  <td colspan="5" class="px-8 py-24 text-center">
+                    <div class="flex flex-col items-center gap-4">
+                      <div class="p-4 bg-slate-50 rounded-full text-slate-300">
+                        <span class="material-symbols-outlined text-5xl">person_search</span>
+                      </div>
+                      <p class="text-sm font-black text-slate-400 uppercase tracking-widest">No matching staff found</p>
+                    </div>
+                  </td>
+                </tr>
+              }
             }
-
-            @if (users.length === 0 && !searchQuery) {
-            <tr>
-              <td colspan="5" class="px-6 py-16 text-center">
-                <div class="flex flex-col items-center gap-3">
-                  <span class="material-symbols-outlined text-slate-300 text-5xl">person_off</span>
-                  <p class="text-sm font-bold text-slate-400">No staff users found</p>
-                  <p class="text-xs text-slate-400">Users who sign up will appear here.</p>
-                </div>
-              </td>
-            </tr>
-            }
-            }
-
           </tbody>
         </table>
       </div>
 
-      <div
-        class="px-6 py-4 bg-gradient-to-r from-slate-50 to-slate-100/50 border-t border-slate-200 flex items-center justify-between">
-        <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">
-          @if (!isLoading) {
-          Showing {{ filteredUsers.length }}
-          @if (searchQuery) {
-          <span> of {{ users.length }}</span>
-          }
-          staff user{{ filteredUsers.length !== 1 ? 's' : '' }}
-          }
-          @if (isLoading) {
-          <span class="inline-block w-24 h-3 bg-slate-200 rounded animate-pulse"></span>
-          }
-        </p>
+      <div class="bg-slate-50/80 backdrop-blur-md border-t border-slate-100 px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <span class="p-2 bg-blue-100 rounded-lg">
+             <span class="material-symbols-outlined text-blue-600 text-sm">badge</span>
+          </span>
+          <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+            Total Staff <span class="text-blue-600 ml-1 text-sm">{{ users.length }}</span>
+          </p>
+        </div>
+        
         <div class="flex gap-2">
-          <button
-            class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all shadow-sm">
-            <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+          <button class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 border border-slate-200 bg-white hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm">
+            <span class="material-symbols-outlined text-sm">chevron_left</span>
           </button>
-          <button
-            class="w-9 h-9 flex items-center justify-center border border-blue-600 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white text-xs font-bold shadow-lg shadow-blue-500/30">1</button>
-          <button
-            class="w-9 h-9 flex items-center justify-center border border-slate-200 rounded-lg bg-white text-slate-400 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-all shadow-sm">
-            <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+          <div class="px-5 h-10 flex items-center justify-center rounded-xl text-xs font-black bg-blue-600 text-white shadow-xl shadow-blue-200">
+            1
+          </div>
+          <button class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 border border-slate-200 bg-white hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm">
+            <span class="material-symbols-outlined text-sm">chevron_right</span>
           </button>
         </div>
       </div>
     </div>
-  </div>
-
-</main>
+  </section>
+</div>

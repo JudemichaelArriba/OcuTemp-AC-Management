@@ -10,6 +10,14 @@ import { DialogService } from '../../services/dialog.service';
 import { AuthStateService } from '../../services/auth-state.service';
 import { LoggerService } from '../../services/logger.service';
 
+interface TempTick {
+  temp: number;
+  x1: number; y1: number;
+  x2: number; y2: number;
+  isMajor: boolean;
+  active: boolean;
+}
+
 @Component({
   selector: 'app-room-details',
   standalone: true,
@@ -30,7 +38,6 @@ export class RoomDetails implements OnInit, OnDestroy {
   private destroyed = false;
   private currentDeviceId: string | null = null;
 
-
   canManualOverride = false;
   overrideTemp = 24;
   overrideDurationMinutes = 60;
@@ -38,12 +45,10 @@ export class RoomDetails implements OnInit, OnDestroy {
   private overrideInitialized = false;
   private currentUserId: string | null = null;
 
-
   readonly overrideMinTemp = 16;
   readonly overrideMaxTemp = 30;
   readonly overrideMinMinutes = 15;
   readonly overrideMaxMinutes = 480;
-
 
   readonly durationPresets = [
     { label: '30 min', value: 30 },
@@ -51,7 +56,6 @@ export class RoomDetails implements OnInit, OnDestroy {
     { label: '2 hours', value: 120 },
     { label: '4 hours', value: 240 },
   ];
-
 
   private readonly ARC_CX = 110;
   private readonly ARC_CY = 112;
@@ -61,6 +65,14 @@ export class RoomDetails implements OnInit, OnDestroy {
   readonly arcLength = Math.PI * 88; 
 
   isDraggingTemp = false;
+
+  overrideUntilPreview: string | null = null; 
+  arcDashOffset: number = 0;
+  thumbPos: { x: number; y: number } = { x: 0, y: 0 };
+  tempTicks: TempTick[] = [];
+
+  // FIXED: Anchor time state is set exactly once upon component creation.
+  private previewBaseTime: number = Date.now();
 
   constructor(
     private route: ActivatedRoute,
@@ -74,6 +86,10 @@ export class RoomDetails implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
+    // Generate the initial string once.
+    this.updateTimePreview();
+    this.updateSvgCalculations();
+
     const uid = this.route.snapshot.paramMap.get('uid');
     if (!uid) {
       this.error = 'Room ID not found';
@@ -105,8 +121,14 @@ export class RoomDetails implements OnInit, OnDestroy {
           this.currentDeviceId = nextDeviceId;
           this.deviceData = null;
           this.overrideInitialized = false;
+          
           this.overrideTemp = 24;
           this.overrideDurationMinutes = 60;
+          
+          // FIXED: Removed previewBaseTime updates from this asynchronous callback.
+          // The preview string will no longer violently update mid-cycle when the stream resolves.
+          this.updateSvgCalculations();
+
           this.unsubscribeDevices?.();
           this.unsubscribeDevices = undefined;
           if (nextDeviceId) this.streamDeviceData(nextDeviceId);
@@ -129,7 +151,6 @@ export class RoomDetails implements OnInit, OnDestroy {
     this.clearLoadingTimeout();
   }
 
-
   private async loadCurrentUser(): Promise<void> {
     try {
       const user = await this.authState.getCurrentUserOnce();
@@ -146,19 +167,67 @@ export class RoomDetails implements OnInit, OnDestroy {
     this.unsubscribeDevices = this.deviceService.streamDevice(deviceId, (device) => {
       this.deviceData = device;
 
-
       if (!this.overrideInitialized) {
         const suggestedTemp = device?.control?.targetTemp ?? device?.acState?.currentTemp;
         if (typeof suggestedTemp === 'number') {
-          this.overrideTemp = Math.max(
+          const boundedTemp = Math.max(
             this.overrideMinTemp,
             Math.min(this.overrideMaxTemp, suggestedTemp)
           );
+          if (this.overrideTemp !== boundedTemp) {
+            this.overrideTemp = boundedTemp;
+            this.updateSvgCalculations();
+          }
         }
         this.overrideInitialized = true;
       }
 
       this.refreshView();
+    });
+  }
+
+  private updateTimePreview(): void {
+    const duration = Number(this.overrideDurationMinutes);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      this.overrideUntilPreview = null;
+      return;
+    }
+    this.overrideUntilPreview = new Date(this.previewBaseTime + duration * 60_000).toISOString();
+  }
+
+  private updateSvgCalculations(): void {
+    const range = this.overrideMaxTemp - this.overrideMinTemp || 1;
+    const tempRatio = (this.overrideTemp - this.overrideMinTemp) / range;
+
+    this.arcDashOffset = this.arcLength * (1 - tempRatio);
+
+    const angle = Math.PI * (1 - tempRatio);
+    this.thumbPos = {
+      x: this.ARC_CX + this.ARC_R * Math.cos(angle),
+      y: this.ARC_CY - this.ARC_R * Math.sin(angle),
+    };
+
+    const cx = this.ARC_CX;
+    const cy = this.ARC_CY;
+    const innerR = this.ARC_R + 6;   
+    const minorEnd = this.ARC_R + 11;
+    const majorEnd = this.ARC_R + 16;
+
+    this.tempTicks = Array.from({ length: range + 1 }, (_, i) => {
+      const temp = this.overrideMinTemp + i;
+      const t = i / range;
+      const tickAngle = Math.PI * (1 - t);
+      const isMajor = temp % 5 === 0 || temp === this.overrideMinTemp || temp === this.overrideMaxTemp;
+      const outerR = isMajor ? majorEnd : minorEnd;
+      return {
+        temp,
+        x1: cx + innerR * Math.cos(tickAngle),
+        y1: cy - innerR * Math.sin(tickAngle),
+        x2: cx + outerR * Math.cos(tickAngle),
+        y2: cy - outerR * Math.sin(tickAngle),
+        isMajor,
+        active: temp <= this.overrideTemp,
+      };
     });
   }
 
@@ -170,9 +239,10 @@ export class RoomDetails implements OnInit, OnDestroy {
   }
 
   private refreshView(): void {
-    if (!this.destroyed) this.cdr.detectChanges();
+    // FIXED: Swapped detectChanges() for markForCheck(). 
+    // This prevents Angular from forcing a synchronous re-render mid-cycle when observables emit.
+    if (!this.destroyed) this.cdr.markForCheck();
   }
-
 
   goBack() { this.router.navigate(['/app/room-management']); }
   editRoom() { if (!this.room || this.loading) return; this.isEditModalOpen = true; this.refreshView(); }
@@ -208,7 +278,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   get overrideIsExpired(): boolean {
     const until = this.parseOverrideUntil();
     if (!until) return false;
-    return until.getTime() < Date.now();
+    return until.getTime() < Date.now(); 
   }
 
   get overrideStatusText(): string {
@@ -223,69 +293,8 @@ export class RoomDetails implements OnInit, OnDestroy {
     return 'bg-slate-100 text-slate-600';
   }
 
-  get overrideUntilPreview(): string | null {
-    const duration = Number(this.overrideDurationMinutes);
-    if (!Number.isFinite(duration) || duration <= 0) return null;
-    return new Date(Date.now() + duration * 60_000).toISOString();
-  }
-
-
-  private get tempRatio(): number {
-    const range = this.overrideMaxTemp - this.overrideMinTemp || 1;
-    return (this.overrideTemp - this.overrideMinTemp) / range;
-  }
-
-
-  get arcDashOffset(): number {
-    return this.arcLength * (1 - this.tempRatio);
-  }
-
-  get thumbPos(): { x: number; y: number } {
-   
-    const angle = Math.PI * (1 - this.tempRatio);
-    return {
-      x: this.ARC_CX + this.ARC_R * Math.cos(angle),
-      y: this.ARC_CY - this.ARC_R * Math.sin(angle),
-    };
-  }
-
-
-  get tempTicks(): Array<{
-    temp: number;
-    x1: number; y1: number;
-    x2: number; y2: number;
-    isMajor: boolean;
-    active: boolean;
-  }> {
-    const range = this.overrideMaxTemp - this.overrideMinTemp;
-    const cx = this.ARC_CX;
-    const cy = this.ARC_CY;
-    const innerR = this.ARC_R + 6;   
-    const minorEnd = this.ARC_R + 11;
-    const majorEnd = this.ARC_R + 16;
-
-    return Array.from({ length: range + 1 }, (_, i) => {
-      const temp = this.overrideMinTemp + i;
-      const t = i / range;
-      const angle = Math.PI * (1 - t);
-      const isMajor = temp % 5 === 0 || temp === this.overrideMinTemp || temp === this.overrideMaxTemp;
-      const outerR = isMajor ? majorEnd : minorEnd;
-      return {
-        temp,
-        x1: cx + innerR * Math.cos(angle),
-        y1: cy - innerR * Math.sin(angle),
-        x2: cx + outerR * Math.cos(angle),
-        y2: cy - outerR * Math.sin(angle),
-        isMajor,
-        active: temp <= this.overrideTemp,
-      };
-    });
-  }
-
-
   onTempPointerDown(event: PointerEvent): void {
     const svg = event.currentTarget as SVGSVGElement;
-
     svg.setPointerCapture(event.pointerId);
     this.isDraggingTemp = true;
     this.applyTempFromPointer(event, svg);
@@ -303,7 +312,6 @@ export class RoomDetails implements OnInit, OnDestroy {
     this.isDraggingTemp = false;
   }
 
-
   private applyTempFromPointer(event: PointerEvent, svg: SVGSVGElement): void {
     const rect = svg.getBoundingClientRect();
     const x = (event.clientX - rect.left) * (this.ARC_VW / rect.width);
@@ -314,27 +322,34 @@ export class RoomDetails implements OnInit, OnDestroy {
     angle = Math.max(0, Math.min(Math.PI, angle));
     const t = 1 - angle / Math.PI;
 
-    this.overrideTemp = Math.round(
+    const newTemp = Math.round(
       this.overrideMinTemp + t * (this.overrideMaxTemp - this.overrideMinTemp)
     );
-    this.refreshView();
+
+    if (this.overrideTemp !== newTemp) {
+      this.overrideTemp = newTemp;
+      this.updateSvgCalculations();
+      this.refreshView();
+    }
   }
 
-
   setOverrideDuration(minutes: number): void {
+    this.previewBaseTime = Date.now(); 
     this.overrideDurationMinutes = minutes;
+    this.updateTimePreview();
     this.refreshView();
   }
 
   adjustDuration(delta: number): void {
+    this.previewBaseTime = Date.now(); 
     const next = this.overrideDurationMinutes + delta;
     this.overrideDurationMinutes = Math.max(
       this.overrideMinMinutes,
       Math.min(this.overrideMaxMinutes, next)
     );
+    this.updateTimePreview();
     this.refreshView();
   }
-
 
   applyManualOverride(): void {
     if (this.isSavingOverride) return;
@@ -416,8 +431,6 @@ export class RoomDetails implements OnInit, OnDestroy {
       'Cancel'
     );
   }
-
-
 
   get environmentalTemperature(): number | null {
     if (this.room?.device && this.deviceData?.temperature !== undefined) return this.deviceData.temperature;
