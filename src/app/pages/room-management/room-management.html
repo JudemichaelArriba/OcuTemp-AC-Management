@@ -19,11 +19,13 @@
         </p>
       </div>
 
-      <button (click)="showAddModal = true" 
-        class="group flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-600/20 whitespace-nowrap active:scale-95">
-        <span class="material-symbols-outlined text-[22px] transition-transform group-hover:rotate-12">add_circle</span>
-        Add New Room
-      </button>
+      @if (isAdmin) {
+        <button (click)="showAddModal = true" 
+          class="group flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-600/20 whitespace-nowrap active:scale-95">
+          <span class="material-symbols-outlined text-[22px] transition-transform group-hover:rotate-12">add_circle</span>
+          Add New Room
+        </button>
+      }
     </div>
   </header>
 
@@ -113,7 +115,7 @@
           <app-room-card 
             class="w-full hover:-translate-y-2 transition-transform duration-300" 
             [room]="room"
-            [allowDelete]="true"
+            [allowDelete]="isAdmin"
             (deleteRequest)="onDeleteRoom($event)">
           </app-room-card>
         }
