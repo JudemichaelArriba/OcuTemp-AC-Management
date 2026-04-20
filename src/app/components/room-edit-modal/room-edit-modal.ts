@@ -14,8 +14,8 @@ import { Room, Schedule } from '../../models/room.model';
 import { RoomService } from '../../services/room.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
-import { DropDown, DropDownOption } from '../drop-down/drop-down';
-import { ScheduleBuilder } from '../schedule-builder/schedule-builder';
+import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
+import { ScheduleBuilder } from '../shared/schedule-builder/schedule-builder';
 import {
   getRoomNameError,
   normalizeSchedule,

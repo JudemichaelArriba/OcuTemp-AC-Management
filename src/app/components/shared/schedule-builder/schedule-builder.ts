@@ -10,14 +10,14 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Schedule } from '../../models/room.model';
-import { DialogService } from '../../services/dialog.service';
+import { Schedule } from '../../../models/room.model';
+import { DialogService } from '../../../services/dialog.service';
 import { DropDown, DropDownOption } from '../drop-down/drop-down';
 import {
   getScheduleValidationError,
   isScheduleDay,
   normalizeSchedule,
-} from '../../helpers/room-validation';
+} from '../../../helpers/room-validation';
 
 type ScheduleBuilderVariant = 'add' | 'edit';
 

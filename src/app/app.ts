@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { DialogComponent } from './components/dialog/dialog';
+import { DialogComponent } from './components/shared/dialog/dialog';
 
 @Component({
   selector: 'app-root',
