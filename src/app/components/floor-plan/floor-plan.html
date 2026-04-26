@@ -1,491 +1,410 @@
-<div
-  class="relative w-full h-full bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm select-none">
-
-  <div class="absolute top-4 right-4 z-20 flex flex-col items-center gap-1.5">
-
-    <div class="bg-white/90 backdrop-blur-sm border border-slate-200/80 rounded-2xl px-3 py-1 shadow-sm">
-      <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest tabular-nums">{{ zoomPercent
-        }}%</span>
+<div class="relative w-full h-full bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-2xl select-none">
+  
+  <div class="absolute top-6 right-6 z-20 flex flex-col items-center gap-2">
+    <div class="bg-white/70 backdrop-blur-md border border-slate-200/50 rounded-3xl p-1.5 shadow-xl flex flex-col gap-1">
+      <button (click)="zoomIn($event)" class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-700 hover:bg-blue-600 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-[20px]">add</span>
+      </button>
+      <button (click)="zoomOut($event)" class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-700 hover:bg-blue-600 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-[20px]">remove</span>
+      </button>
+      <div class="h-[1px] bg-slate-200/50 mx-2"></div>
+      <button (click)="resetView($event)" class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-700 hover:bg-blue-600 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-[20px]">filter_center_focus</span>
+      </button>
     </div>
-
-    <button (click)="zoomIn($event)" title="Zoom In" class="w-9 h-9 bg-white/90 backdrop-blur-sm border border-slate-200/80 rounded-xl flex items-center justify-center text-slate-600
-             hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600
-             active:scale-90 transition-all duration-150 shadow-sm">
-      <span class="material-symbols-outlined text-[18px]">add</span>
-    </button>
-
-    <button (click)="zoomOut($event)" title="Zoom Out" class="w-9 h-9 bg-white/90 backdrop-blur-sm border border-slate-200/80 rounded-xl flex items-center justify-center text-slate-600
-             hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600
-             active:scale-90 transition-all duration-150 shadow-sm">
-      <span class="material-symbols-outlined text-[18px]">remove</span>
-    </button>
-
-    <button (click)="resetView($event)" title="Reset View" class="w-9 h-9 bg-white/90 backdrop-blur-sm border border-slate-200/80 rounded-xl flex items-center justify-center text-slate-600
-             hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600
-             active:scale-90 transition-all duration-150 shadow-sm">
-      <span class="material-symbols-outlined text-[18px]">fit_screen</span>
-    </button>
+    <div class="bg-slate-900/90 text-white px-4 py-1.5 rounded-full text-[11px] font-bold shadow-lg">
+      {{ zoomPercent }}%
+    </div>
   </div>
-
 
   @if (activeRoomId) {
-  <div class="absolute top-4 left-4 z-20 flex items-center gap-2
-                bg-blue-600 text-white text-[10px] font-black uppercase tracking-[0.15em]
-                px-4 py-2 rounded-2xl shadow-lg shadow-blue-200/60 pointer-events-none">
-    <span class="size-1.5 rounded-full bg-white opacity-80 animate-pulse"></span>
-    {{ activeRoomId.replace(/-/g, ' ') }}
-  </div>
+    <div class="absolute top-6 left-6 z-20 flex items-center gap-4 bg-white/80 backdrop-blur-xl border border-slate-200 p-2.5 pr-6 rounded-[20px] shadow-2xl animate-in fade-in slide-in-from-left-5">
+      <div class="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+        <span class="material-symbols-outlined">analytics</span>
+      </div>
+      <div>
+        <div class="text-[10px] uppercase font-black text-slate-400 tracking-widest leading-none mb-1">Active Monitoring</div>
+        <div class="text-sm font-bold text-slate-900 leading-none">{{ activeRoomId.replace(/-/g, ' ') }}</div>
+      </div>
+    </div>
   }
-
-
-  @if (!activeRoomId) {
-  <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none
-                flex items-center gap-2 bg-white/80 backdrop-blur-sm border border-slate-200/70
-                text-[10px] font-black text-slate-400 uppercase tracking-widest
-                px-4 py-2 rounded-2xl shadow-sm whitespace-nowrap">
-    <span class="material-symbols-outlined text-[13px]">touch_app</span>
-    Click a room · Scroll to zoom · Drag to pan
-  </div>
-  }
-
 
   <svg #svgEl [attr.viewBox]="viewBoxString" [style.cursor]="isPanning ? 'grabbing' : 'crosshair'" class="w-full h-full"
     xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1"
     (click)="onMapClick($event)" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)"
     (mouseup)="onMouseUp()" (mouseleave)="onMouseUp()">
 
-    <defs />
-    <rect fill="#f8fafc" width="100%" height="100%" x="0" y="0" />
+    <defs>
+      <pattern id="modernGrid" width="50" height="50" patternUnits="userSpaceOnUse">
+        <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#f1f5f9" stroke-width="1"/>
+      </pattern>
+    </defs>
+    
+    <rect width="100%" height="100%" fill="url(#modernGrid)" />
+
     <g>
       <g data-cell-id="0">
         <g data-cell-id="1">
           <g data-cell-id="3-Story-Building">
             <g>
-              <rect x="1" y="728" width="482" height="89" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="1" y="728" width="482" height="89" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-5">
             <g>
-              <rect x="1" y="757" width="67" height="60" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="1" y="757" width="67" height="60" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-6">
             <g>
-              <rect x="68" y="757" width="73" height="60" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="68" y="757" width="73" height="60" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-7">
             <g>
-              <rect x="141" y="757" width="61" height="60" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="141" y="757" width="61" height="60" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-10">
             <g>
-              <rect x="275" y="755" width="208" height="62" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="275" y="755" width="208" height="62" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-22">
             <g>
-              <rect x="423" y="755" width="60" height="62" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="423" y="755" width="60" height="62" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Comfort-Room">
             <g>
-              <rect x="381" y="203" width="57" height="33" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="381" y="203" width="57" height="33" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Library">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-24">
               <g>
-                <rect x="381" y="546" width="57" height="71" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="381" y="546" width="57" height="71" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-26">
               <g>
-                <rect x="381" y="485" width="57" height="61" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="381" y="485" width="57" height="61" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-27">
               <g>
-                <rect x="381" y="418" width="57" height="67" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="381" y="418" width="57" height="67" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Laboratory-1">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-28">
               <g>
-                <rect x="381" y="356" width="57" height="62" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="381" y="356" width="57" height="62" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-29">
               <g>
-                <rect x="381" y="296" width="57" height="60" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="381" y="296" width="57" height="60" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-30">
               <g>
-                <rect x="381" y="236" width="57" height="60" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="381" y="236" width="57" height="60" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Canteen">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-21">
               <g>
-                <rect x="278" y="617" width="116" height="84" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="278" y="617" width="116" height="84" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-23">
               <g>
-                <rect x="369" y="617" width="25" height="84" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="369" y="617" width="25" height="84" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Office-1">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-11">
               <g>
-                <rect x="70" y="633" width="145" height="74" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="70" y="633" width="145" height="74" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-12">
               <g>
-                <rect x="70" y="633" width="26" height="74" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="70" y="633" width="26" height="74" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-13">
               <g>
-                <rect x="96" y="670" width="26" height="37" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="96" y="670" width="26" height="37" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-14">
               <g>
-                <rect x="122" y="680" width="31" height="27" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="122" y="680" width="31" height="27" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-15">
               <g>
-                <rect x="153" y="680" width="31" height="27" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="153" y="680" width="31" height="27" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-17">
               <g>
-                <rect x="184" y="680" width="31" height="27" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="184" y="680" width="31" height="27" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-18">
               <g>
-                <rect x="122" y="633" width="31" height="27" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="122" y="633" width="31" height="27" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-19">
               <g>
-                <rect x="153" y="633" width="32" height="27" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="153" y="633" width="32" height="27" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-20">
               <g>
-                <rect x="185" y="633" width="30" height="27" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="185" y="633" width="30" height="27" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-48">
             <g>
-              <rect x="93" y="328" width="85" height="277" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="93" y="328" width="85" height="277" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-1">
             <g>
-              <rect x="93" y="488" width="33" height="56" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="93" y="488" width="33" height="56" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-3">
             <g>
-              <rect x="93" y="434" width="33" height="54" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="93" y="434" width="33" height="54" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-2">
             <g>
-              <rect x="145" y="488" width="33" height="56" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="145" y="488" width="33" height="56" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-4">
             <g>
-              <rect x="145" y="432" width="33" height="56" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="145" y="432" width="33" height="56" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-6">
             <g>
-              <rect x="145" y="380" width="33" height="52" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="145" y="380" width="33" height="52" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-5">
             <g>
-              <rect x="93" y="382" width="33" height="52" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="93" y="382" width="33" height="52" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-7">
             <g>
-              <rect x="93" y="328" width="33" height="54" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="93" y="328" width="33" height="54" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-8">
             <g>
-              <rect x="145" y="328" width="33" height="52" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="145" y="328" width="33" height="52" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Office-2">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-49">
               <g>
-                <rect x="93" y="544" width="33" height="61" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="93" y="544" width="33" height="61" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-55">
               <g>
-                <rect x="145" y="544" width="33" height="61" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="145" y="544" width="33" height="61" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Room-9">
             <g>
-              <rect x="5" y="601" width="59" height="61" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="5" y="601" width="59" height="61" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-10">
             <g>
-              <rect x="5" y="533" width="59" height="68" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="5" y="533" width="59" height="68" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Office-3">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-63">
               <g>
-                <rect x="5" y="662" width="59" height="48" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="5" y="662" width="59" height="48" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-64">
               <g>
-                <rect x="49" y="662" width="15" height="48" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="49" y="662" width="15" height="48" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Laboratory-2">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-72">
               <g>
-                <rect x="11" y="481" width="44" height="52" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="11" y="481" width="44" height="52" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-73">
               <g>
-                <rect x="11" y="434" width="44" height="47" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="11" y="434" width="44" height="47" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-74">
               <g>
-                <rect x="11" y="387" width="44" height="47" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="11" y="387" width="44" height="47" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-75">
               <g>
-                <rect x="11" y="336" width="44" height="51" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="11" y="336" width="44" height="51" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-76">
               <g>
-                <rect x="11" y="289" width="44" height="47" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="11" y="289" width="44" height="47" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="fSvWbD-bN31pjjYDjGuF-79">
             <g>
-              <rect x="129" y="194" width="48" height="87" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="129" y="194" width="48" height="87" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Office-4">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-78">
               <g>
-                <rect x="34" y="194" width="143" height="87" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="34" y="194" width="143" height="87" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-80">
               <g>
-                <rect x="55" y="194" width="59" height="30" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="55" y="194" width="59" height="30" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Office-5">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-82">
               <g>
-                <rect x="50" y="135" width="129" height="44" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="50" y="135" width="129" height="44" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-83">
               <g>
-                <rect x="97" y="158" width="33" height="21" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="97" y="158" width="33" height="21" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-85">
               <g>
-                <rect x="97" y="135" width="33" height="23" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="97" y="135" width="33" height="23" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-86">
               <g>
-                <rect x="129" y="135" width="25" height="23" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="129" y="135" width="25" height="23" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-87">
               <g>
-                <rect x="131" y="158" width="24" height="21" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="131" y="158" width="24" height="21" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-88">
               <g>
-                <rect x="155" y="158" width="24" height="21" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="155" y="158" width="24" height="21" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-89">
               <g>
-                <rect x="155" y="135" width="24" height="23" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="155" y="135" width="24" height="23" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Office-6">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-100">
               <g>
-                <rect x="81" y="83" width="98" height="45" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="81" y="83" width="98" height="45" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-101">
               <g>
-                <rect x="107" y="106" width="26" height="22" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="107" y="106" width="26" height="22" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-102">
               <g>
-                <rect x="107" y="83" width="26" height="23" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="107" y="83" width="26" height="23" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-103">
               <g>
-                <rect x="133" y="106" width="16" height="22" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="133" y="106" width="16" height="22" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>
           <g data-cell-id="Laboratory-3">
             <g>
-              <rect x="13" y="1" width="93" height="50" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="13" y="1" width="93" height="50" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-12">
             <g>
-              <rect x="434" y="23" width="54" height="60" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="434" y="23" width="54" height="60" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-11">
             <g>
-              <rect x="434" y="83" width="54" height="56" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="434" y="83" width="54" height="56" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-14">
             <g>
-              <rect x="501" y="23" width="54" height="59" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="501" y="23" width="54" height="59" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-13">
             <g>
-              <rect x="501" y="82" width="54" height="57" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="501" y="82" width="54" height="57" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-17">
             <g>
-              <rect x="565" y="23" width="54" height="59" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="565" y="23" width="54" height="59" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-16">
             <g>
-              <rect x="565" y="82" width="54" height="57" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="565" y="82" width="54" height="57" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Room-15">
             <g>
-              <rect x="565" y="139" width="54" height="57" fill="none" stroke="#000000" stroke-width="3"
-                pointer-events="all" />
+              <rect x="565" y="139" width="54" height="57" fill="none" pointer-events="all" />
             </g>
           </g>
           <g data-cell-id="Laboratory-4">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-113">
               <g>
-                <rect x="357" y="60" width="62" height="80" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="357" y="60" width="62" height="80" fill="none" pointer-events="all" />
               </g>
             </g>
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-114">
               <g>
-                <rect x="386" y="107" width="33" height="33" fill="none" stroke="#000000" stroke-width="3"
-                  pointer-events="all" />
+                <rect x="386" y="107" width="33" height="33" fill="none" pointer-events="all" />
               </g>
             </g>
           </g>

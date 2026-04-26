@@ -1,3 +1,4 @@
+// floor-plan.component.ts
 import {
   Component, Input, Output, EventEmitter, ElementRef, OnChanges,
   SimpleChanges, ViewChild, ChangeDetectionStrategy, Renderer2,
@@ -55,7 +56,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
-
     this.wheelHandler = (e: WheelEvent) => this.ngZone.run(() => this.onWheel(e));
     this.svgEl.nativeElement.addEventListener('wheel', this.wheelHandler, { passive: false });
   }
@@ -67,7 +67,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
 
   onMapClick(event: MouseEvent): void {
     if (this.panMoved) return; 
-
     const roomGroup = this.findNamedRoomGroup(event.target as Element);
     if (roomGroup) {
       const cellId = roomGroup.getAttribute('data-cell-id')!;
@@ -76,7 +75,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
       this.resetView();
     }
   }
-
 
   private findNamedRoomGroup(target: Element): Element | null {
     let el: Element | null = target;
@@ -97,16 +95,13 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   }
 
   private activateRoom(cellId: string, group: SVGGElement): void {
-
     if (this.activeRoomId) {
       const prev = this.el.nativeElement.querySelector(`[data-cell-id="${this.activeRoomId}"]`);
       if (prev) this.renderer.removeClass(prev, 'room-active');
     }
-
     this.activeRoomId = cellId;
     this.renderer.addClass(group, 'room-active');
     this.cdr.markForCheck();
-
 
     try {
       const bbox = group.getBBox();
@@ -114,8 +109,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
         const pad = 55;
         this.animateTo({ x: bbox.x - pad, y: bbox.y - pad, w: bbox.width + pad * 2, h: bbox.height + pad * 2 });
       }
-    } catch {  }
-
+    } catch { }
 
     const normalId = cellId.replace(/-/g, ' ').toLowerCase();
     const matched = this.rooms.find(r =>
@@ -125,7 +119,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     );
     if (matched) this.roomSelected.emit(matched);
   }
-
 
   zoomIn(event: Event): void {
     event.stopPropagation();
@@ -153,17 +146,14 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     this.animateTo({ ...this.DEFAULT });
   }
 
-
   onWheel(event: WheelEvent): void {
     event.preventDefault();
     const rect = this.svgEl.nativeElement.getBoundingClientRect();
     const mx = ((event.clientX - rect.left) / rect.width) * this.vb.w + this.vb.x;
     const my = ((event.clientY - rect.top) / rect.height) * this.vb.h + this.vb.y;
-
     const factor = event.deltaY > 0 ? 1.18 : 0.82;
     const nw = Math.min(Math.max(this.vb.w * factor, 60), this.DEFAULT.w * 1.8);
     const nh = Math.min(Math.max(this.vb.h * factor, 80), this.DEFAULT.h * 1.8);
-
     this.vb = {
       x: mx - (mx - this.vb.x) * (nw / this.vb.w),
       y: my - (my - this.vb.y) * (nh / this.vb.h),
@@ -171,7 +161,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     };
     this.cdr.markForCheck();
   }
-
 
   onMouseDown(event: MouseEvent): void {
     if (event.button !== 0) return;
@@ -189,7 +178,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     const dy = event.clientY - this.panStart.y;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) this.panMoved = true;
     if (!this.panMoved) return;
-
     const rect = this.svgEl.nativeElement.getBoundingClientRect();
     this.vb = {
       ...this.panStartVb,
@@ -204,14 +192,12 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-
   private animateTo(target: VBox): void {
     if (this.animFrame) cancelAnimationFrame(this.animFrame);
     const start = { ...this.vb };
     const dur = 430;
     const t0 = performance.now();
     const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-
     this.ngZone.runOutsideAngular(() => {
       const step = (now: number) => {
         const p = Math.min((now - t0) / dur, 1);
@@ -231,14 +217,11 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
 
   private syncTelemetryColors(): void {
     this.rooms.forEach(room => {
-
       const safeId = room.roomName.replace(/\s+/g, '-');
       const roomEl = this.el.nativeElement.querySelector(`[data-cell-id="${safeId}"]`);
       if (!roomEl) return;
-
       this.renderer.removeClass(roomEl, 'climate-optimal');
       this.renderer.removeClass(roomEl, 'climate-cooling');
-
       if (room.temperature && room.temperature > 25) {
         this.renderer.addClass(roomEl, 'climate-cooling');
       } else if (room.power) {
