@@ -1,0 +1,74 @@
+
+::ng-deep g[data-cell-id] rect,
+::ng-deep g[data-cell-id] path {
+  fill: #ffffff !important;
+  stroke: #023066 !important;
+  stroke-width: 1.5px !important;
+  cursor: pointer;
+  transition:
+    fill 0.2s ease,
+    stroke 0.2s ease,
+    stroke-width 0.2s ease;
+}
+
+
+::ng-deep g[data-cell-id="0"]>g>rect,
+::ng-deep g[data-cell-id="1"]>g>rect,
+::ng-deep g[data-cell-id="3-Story-Building"]>g>rect {
+  fill: none !important;
+  stroke: #cbd5e1 !important;
+  stroke-width: 2px !important;
+  cursor: default;
+}
+
+
+::ng-deep g[data-cell-id^="Room"]:hover rect,
+::ng-deep g[data-cell-id^="Office"]:hover rect,
+::ng-deep g[data-cell-id^="Laboratory"]:hover rect,
+::ng-deep g[data-cell-id^="Library"]:hover rect,
+::ng-deep g[data-cell-id^="Canteen"]:hover rect,
+::ng-deep g[data-cell-id^="Comfort"]:hover rect {
+  fill: #eff6ff !important;
+  stroke: #93c5fd !important;
+  stroke-width: 2px !important;
+}
+
+
+::ng-deep g[data-cell-id].room-active rect {
+  fill: #dbeafe !important;
+  stroke: #2563eb !important;
+  stroke-width: 2.5px !important;
+}
+
+
+::ng-deep g[data-cell-id].room-active g[data-cell-id] rect {
+  fill: #dbeafe !important;
+  stroke: #2563eb !important;
+  stroke-width: 2px !important;
+}
+
+
+::ng-deep g[data-cell-id].climate-optimal rect {
+  fill: #f0fdf4 !important;
+  stroke: #10b981 !important;
+  stroke-width: 2px !important;
+}
+
+::ng-deep g[data-cell-id].climate-cooling rect {
+  fill: #eff6ff !important;
+
+  stroke: #2563eb !important;
+
+  stroke-width: 2px !important;
+}
+
+
+::ng-deep g[data-cell-id] switch {
+  display: none !important;
+}
+
+
+::ng-deep g[data-cell-id] rect[style],
+::ng-deep g[data-cell-id] path[style] {
+  stroke: unset;
+}

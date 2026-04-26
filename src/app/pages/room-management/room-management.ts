@@ -9,11 +9,11 @@ import { DialogService } from '../../services/dialog.service';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { AuthStateService } from '../../services/auth-state.service';
 import { Subscription } from 'rxjs';
-
+import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 @Component({
   selector: 'app-room-management',
   standalone: true,
-  imports: [FormsModule, AddRoomModal, RoomCard],
+  imports: [FormsModule, AddRoomModal, RoomCard, FloorPlanComponent],
   templateUrl: './room-management.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -24,7 +24,8 @@ export class RoomManagement implements OnInit, OnDestroy {
   rooms: Room[] = [];
   filteredRooms: Room[] = [];
   isAdmin = false;
-
+viewMode: 'cards' | 'map' = 'cards';
+  selectedMapRoom: Room | undefined;
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
   private stopRoomsStream?: () => void;
@@ -127,5 +128,10 @@ export class RoomManagement implements OnInit, OnDestroy {
     }
 
     this.cdr.markForCheck();
+  }
+
+  onMapRoomSelected(room: Room): void {
+    this.selectedMapRoom = room;
+    // In the future, this will trigger the CRUD side-panel
   }
 }

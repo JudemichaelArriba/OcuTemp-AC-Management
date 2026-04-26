@@ -6,11 +6,11 @@ import { DeviceService, DeviceTelemetry } from '../../services/device.service';
 import { EnergyReportService, getTodayKey, sumKwhByDate } from '../../services/energy-report.service';
 import { RoomCard } from '../../components/room-card/room-card';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
-
+import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [RoomCard, DecimalPipe],
+  imports: [RoomCard, DecimalPipe, FloorPlanComponent],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -18,7 +18,8 @@ import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 export class Dashboard implements OnInit, OnDestroy {
   isLoading: boolean = true;
   rooms: Room[] = [];
-
+viewMode: 'cards' | 'map' = 'cards';
+  selectedMapRoom: Room | undefined;
   // Real data for dashboard cards
   totalEnergyToday: number = 0;
   avgTemperature: number = 0;
@@ -115,5 +116,9 @@ export class Dashboard implements OnInit, OnDestroy {
       defaultPower: false,
     });
     this.cdr.markForCheck();
+  }
+  onMapRoomSelected(room: Room): void {
+    this.selectedMapRoom = room;
+    // You can handle sidebar logic here if needed
   }
 }
