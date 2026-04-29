@@ -64,7 +64,7 @@ export class DialogComponent implements OnInit, OnDestroy {
   visible   = false;
   animating = false;
 
-  private sub!: Subscription;
+  private sub?: Subscription;
 
   constructor(
     private dialogService: DialogService,
@@ -92,7 +92,7 @@ export class DialogComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.sub.unsubscribe();
+    this.sub?.unsubscribe();
   }
 
   onConfirm(): void {

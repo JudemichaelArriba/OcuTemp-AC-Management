@@ -18,7 +18,7 @@ import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 export class Dashboard implements OnInit, OnDestroy {
   isLoading: boolean = true;
   rooms: Room[] = [];
-viewMode: 'cards' | 'map' = 'cards';
+  viewMode: 'cards' | 'map' = 'cards';
   selectedMapRoom: Room | undefined;
   // Real data for dashboard cards
   totalEnergyToday: number = 0;
@@ -117,7 +117,7 @@ viewMode: 'cards' | 'map' = 'cards';
     });
     this.cdr.markForCheck();
   }
-  onMapRoomSelected(room: Room): void {
+  onMapRoomSelected(room: Room | undefined): void {
     this.selectedMapRoom = room;
     // You can handle sidebar logic here if needed
   }

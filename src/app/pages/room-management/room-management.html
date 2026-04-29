@@ -1,15 +1,19 @@
 <main class="flex-1 flex flex-col font-sans min-h-0 bg-slate-50 p-4 md:p-6 lg:p-8 gap-6">
 
-  <header class="relative overflow-hidden bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl shadow-blue-200/40">
+  <header
+    class="relative overflow-hidden bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl shadow-blue-200/40">
     <div class="absolute inset-0 opacity-[0.05] pointer-events-none"
       style="background-image: radial-gradient(#2563eb 0.8px, transparent 0.8px); background-size: 20px 20px;"></div>
     <div class="absolute -top-24 -right-24 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl"></div>
     <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl"></div>
 
-    <div class="max-w-[1800px] mx-auto px-8 md:px-12 py-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+    <div
+      class="max-w-[1800px] mx-auto px-8 md:px-12 py-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
       <div>
         <div class="flex items-center gap-2 mb-3">
-          <span class="px-3 py-1 rounded-full text-[10px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">Facility Intelligence</span>
+          <span
+            class="px-3 py-1 rounded-full text-[10px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">Facility
+            Intelligence</span>
         </div>
         <h1 class="text-4xl font-black text-slate-900 tracking-tight leading-none">
           Room <span class="text-blue-600">Management</span>
@@ -20,38 +24,39 @@
       </div>
 
       @if (isAdmin) {
-        <button (click)="showAddModal = true" 
-          class="group flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-600/20 whitespace-nowrap active:scale-95">
-          <span class="material-symbols-outlined text-[22px] transition-transform group-hover:rotate-12">add_circle</span>
-          Add New Room
-        </button>
+      <button (click)="showAddModal = true"
+        class="group flex items-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-xl shadow-blue-600/20 whitespace-nowrap active:scale-95">
+        <span class="material-symbols-outlined text-[22px] transition-transform group-hover:rotate-12">add_circle</span>
+        Add New Room
+      </button>
       }
     </div>
   </header>
 
-  <div class="max-w-[1800px] w-full mx-auto bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/60 shadow-lg shadow-blue-100/50">
+  <div
+    class="max-w-[1800px] w-full mx-auto bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/60 shadow-lg shadow-blue-100/50">
     <div class="flex flex-col md:flex-row gap-4 items-center">
       <div class="relative w-full md:max-w-md group">
-        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 group-focus-within:text-blue-600 transition-colors">search</span>
-        <input
-          type="text"
-          [(ngModel)]="searchQuery"
-          (ngModelChange)="onSearch()"
+        <span
+          class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 group-focus-within:text-blue-600 transition-colors">search</span>
+        <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onSearch()"
           placeholder="Search by room name, ID or device UID..."
           class="w-full pl-12 pr-11 py-3.5 bg-white border border-slate-100 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 font-medium shadow-sm" />
         @if (searchQuery) {
-          <button (click)="searchQuery = ''; onSearch()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-            <span class="material-symbols-outlined text-[18px]">close</span>
-          </button>
+        <button (click)="searchQuery = ''; onSearch()"
+          class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
         }
       </div>
     </div>
   </div>
 
   <div class="max-w-[1800px] w-full mx-auto">
-    <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2.5rem] border border-white/20 shadow-2xl shadow-blue-500/30 relative overflow-hidden">
+    <div
+      class="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2.5rem] border border-white/20 shadow-2xl shadow-blue-500/30 relative overflow-hidden">
       <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-      
+
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-8 relative z-10">
         <div class="flex flex-col">
           <p class="text-blue-100/70 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Total Rooms</p>
@@ -88,20 +93,46 @@
     </div>
   </div>
 
-  <div class="max-w-[1800px] w-full mx-auto px-4 mt-2 mb-2 flex justify-end">
-    <div class="flex bg-slate-200/50 p-1.5 rounded-2xl">
-      <button (click)="viewMode = 'cards'" 
-              [class.bg-white]="viewMode === 'cards'" 
-              [class.shadow-sm]="viewMode === 'cards'" 
-              [class.text-blue-900]="viewMode === 'cards'"
-              class="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 transition-all">
+  <div
+    class="max-w-[1800px] w-full mx-auto px-4 mt-2 mb-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex bg-white/80 backdrop-blur-md border border-white/70 p-1.5 rounded-2xl shadow-sm">
+        @for (floorPlan of floorPlans; track floorPlan.id) {
+        <button (click)="selectFloorPlan(floorPlan.id)" [class.bg-blue-600]="selectedFloorPlanId === floorPlan.id"
+          [class.text-white]="selectedFloorPlanId === floorPlan.id"
+          [class.shadow-lg]="selectedFloorPlanId === floorPlan.id"
+          [class.shadow-blue-600/20]="selectedFloorPlanId === floorPlan.id"
+          [class.text-slate-500]="selectedFloorPlanId !== floorPlan.id"
+          class="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2">
+          <span class="material-symbols-outlined text-[16px]">map</span>
+          {{ floorPlan.name }}
+        </button>
+        }
+      </div>
+
+      @if (isAdmin && viewMode === 'map') {
+      <button (click)="toggleFloorPlanEditMode()" [class.bg-amber-500]="floorPlanEditMode"
+        [class.text-white]="floorPlanEditMode" [class.shadow-lg]="floorPlanEditMode"
+        [class.shadow-amber-200]="floorPlanEditMode" [class.bg-white]="!floorPlanEditMode"
+        [class.text-slate-600]="!floorPlanEditMode"
+        class="px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border border-white/70 backdrop-blur-md flex items-center gap-2">
+        <span class="material-symbols-outlined text-[17px]">{{ floorPlanEditMode ? 'edit_off' : 'edit_square' }}</span>
+        {{ floorPlanEditMode ? 'Editing On' : 'Edit Floorplan' }}
+      </button>
+      }
+    </div>
+
+
+    <div
+      class="flex items-center bg-slate-100/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/50 shadow-inner">
+      <button (click)="setViewMode('cards')"
+        [class]="viewMode === 'cards' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:text-blue-600'"
+        class="px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-300">
         Card Directory
       </button>
-      <button (click)="viewMode = 'map'" 
-              [class.bg-white]="viewMode === 'map'" 
-              [class.shadow-sm]="viewMode === 'map'" 
-              [class.text-blue-900]="viewMode === 'map'"
-              class="px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 transition-all">
+      <button (click)="setViewMode('map')"
+        [class]="viewMode === 'map' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:text-blue-600'"
+        class="px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all duration-300">
         Floor Plan
       </button>
     </div>
@@ -109,53 +140,52 @@
 
   <div class="flex-1 overflow-y-auto min-h-0 px-4">
     <div class="max-w-[1200px] w-full mx-auto pb-10">
-      
-      @if (viewMode === 'cards') {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          @if (isLoading) {
-            @for (_ of [1,2,3,4,5,6]; track $index) {
-              <article class="w-full bg-white/60 border border-white rounded-[2rem] shadow-sm overflow-hidden animate-pulse h-[320px]">
-                <div class="p-6 space-y-4">
-                  <div class="flex justify-between">
-                    <div class="w-12 h-12 bg-slate-200 rounded-2xl"></div>
-                    <div class="w-12 h-6 bg-slate-200 rounded-full"></div>
-                  </div>
-                  <div class="h-4 bg-slate-200 rounded w-3/4"></div>
-                  <div class="h-3 bg-slate-100 rounded w-1/2"></div>
-                  <div class="pt-4 grid grid-cols-2 gap-2">
-                    <div class="h-16 bg-slate-50 border border-slate-100 rounded-2xl"></div>
-                    <div class="h-16 bg-slate-50 border border-slate-100 rounded-2xl"></div>
-                  </div>
-                </div>
-              </article>
-            }
-          }
-          @if (!isLoading) {
-            @for (room of filteredRooms; track room.uid) {
-              <app-room-card 
-                class="w-full hover:-translate-y-2 transition-transform duration-300" 
-                [room]="room"
-                [allowDelete]="isAdmin"
-                (deleteRequest)="onDeleteRoom($event)">
-              </app-room-card>
-            }
-          }
-        </div>
 
-        @if (!isLoading && filteredRooms.length === 0) {
-          <div class="mt-6 max-w-[1800px] mx-auto bg-white/50 backdrop-blur-sm border border-dashed border-slate-300 rounded-[2.5rem] py-20 text-center shadow-sm">
-            <span class="material-symbols-outlined text-slate-300 text-7xl">search_off</span>
-            <p class="text-lg font-black text-slate-500 mt-4 uppercase tracking-widest">No matching rooms found</p>
-            <p class="text-sm text-slate-400 mt-2 font-medium">Try adjusting your filters or search keywords.</p>
+      @if (viewMode === 'cards') {
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        @if (isLoading) {
+        @for (_ of [1,2,3,4,5,6]; track $index) {
+        <article
+          class="w-full bg-white/60 border border-white rounded-[2rem] shadow-sm overflow-hidden animate-pulse h-[320px]">
+          <div class="p-6 space-y-4">
+            <div class="flex justify-between">
+              <div class="w-12 h-12 bg-slate-200 rounded-2xl"></div>
+              <div class="w-12 h-6 bg-slate-200 rounded-full"></div>
+            </div>
+            <div class="h-4 bg-slate-200 rounded w-3/4"></div>
+            <div class="h-3 bg-slate-100 rounded w-1/2"></div>
+            <div class="pt-4 grid grid-cols-2 gap-2">
+              <div class="h-16 bg-slate-50 border border-slate-100 rounded-2xl"></div>
+              <div class="h-16 bg-slate-50 border border-slate-100 rounded-2xl"></div>
+            </div>
           </div>
+        </article>
         }
+        }
+        @if (!isLoading) {
+        @for (room of filteredRooms; track room.uid) {
+        <app-room-card class="w-full hover:-translate-y-2 transition-transform duration-300" [room]="room"
+          [allowDelete]="isAdmin" (deleteRequest)="onDeleteRoom($event)">
+        </app-room-card>
+        }
+        }
+      </div>
+
+      @if (!isLoading && filteredRooms.length === 0) {
+      <div
+        class="mt-6 max-w-[1800px] mx-auto bg-white/50 backdrop-blur-sm border border-dashed border-slate-300 rounded-[2.5rem] py-20 text-center shadow-sm">
+        <span class="material-symbols-outlined text-slate-300 text-7xl">search_off</span>
+        <p class="text-lg font-black text-slate-500 mt-4 uppercase tracking-widest">No matching rooms found</p>
+        <p class="text-sm text-slate-400 mt-2 font-medium">Try adjusting your filters or search keywords.</p>
+      </div>
+      }
       } @else {
-        <div class="w-full h-[700px] bg-white rounded-3xl p-2 border border-slate-100 shadow-lg shadow-blue-100/40">
-          <app-floor-plan 
-            [rooms]="filteredRooms" 
-            (roomSelected)="onMapRoomSelected($event)">
-          </app-floor-plan>
-        </div>
+      <div class="w-full h-[700px] bg-white rounded-3xl p-2 border border-slate-100 shadow-lg shadow-blue-100/40">
+        <app-floor-plan [rooms]="filteredRooms" [floorPlanId]="selectedFloorPlanId" [editMode]="floorPlanEditMode"
+          (roomSelected)="onMapRoomSelected($event)"
+          (floorPlanCellEditRequested)="onFloorPlanCellEditRequested($event)">
+        </app-floor-plan>
+      </div>
       }
 
     </div>
@@ -163,10 +193,13 @@
 </main>
 
 @if (showAddModal) {
-  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-blue-900/20 backdrop-blur-sm p-4">
-    <app-add-room-modal 
-      class="w-full max-w-2xl animate-in fade-in zoom-in duration-300"
-      (closed)="showAddModal = false">
-    </app-add-room-modal>
-  </div>
+<div class="fixed inset-0 z-[60] flex items-center justify-center bg-blue-900/20 backdrop-blur-sm p-4">
+  <app-add-room-modal class="w-full max-w-2xl animate-in fade-in zoom-in duration-300" (closed)="showAddModal = false">
+  </app-add-room-modal>
+</div>
+}
+
+@if (selectedFloorPlanCell && isAdmin) {
+<app-floor-plan-room-modal [selection]="selectedFloorPlanCell" [rooms]="rooms" (closed)="closeFloorPlanModal()">
+</app-floor-plan-room-modal>
 }

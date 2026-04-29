@@ -1,0 +1,234 @@
+@if (visible) {
+<div class="eu-backdrop fixed inset-0 z-[70] flex items-center justify-center p-4 transition-all duration-300" (click)="onBackdropClick($event)">
+  <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-md transition-opacity duration-300 ease-out"
+    [class.opacity-100]="animating" [class.opacity-0]="!animating"></div>
+
+  <div class="relative w-full max-w-5xl bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white
+              transition-all duration-300 ease-out flex flex-col max-h-[92vh] overflow-hidden"
+    [class.opacity-100]="animating" [class.opacity-0]="!animating"
+    [class.scale-100]="animating" [class.scale-95]="!animating"
+    [class.translate-y-0]="animating" [class.-translate-y-4]="!animating"
+    (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+
+    <div class="flex items-center justify-between px-8 py-6 border-b border-slate-100 bg-gradient-to-br from-white to-blue-50/40">
+      <div class="flex items-center gap-4 min-w-0">
+        <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-200 shrink-0">
+          <span class="material-symbols-outlined text-white text-2xl">map</span>
+        </div>
+        <div class="min-w-0">
+          <h3 class="text-xl font-black text-slate-900 tracking-tight leading-none truncate">
+            {{ sourceRoom ? sourceRoom.roomName : 'Assign Floorplan Room' }}
+          </h3>
+          <p class="text-[11px] font-bold text-blue-500 mt-1.5 uppercase tracking-widest truncate">
+            {{ cellLabel }} / {{ selection?.floorPlanId }}
+          </p>
+        </div>
+      </div>
+      <button (click)="close()" [disabled]="isSaving"
+        class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-white hover:shadow-sm rounded-xl transition-all disabled:opacity-40 border border-transparent hover:border-slate-100">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto custom-scrollbar">
+      <aside class="lg:col-span-4 bg-slate-50/70 border-r border-slate-100 p-6 space-y-4">
+        <div class="rounded-[2rem] bg-white/80 backdrop-blur-md border border-white p-5 shadow-sm">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Cell Status</p>
+              <p class="text-base font-black text-slate-900 mt-1">{{ telemetryStatusText }}</p>
+            </div>
+            <span class="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest" [ngClass]="stateBadgeClass">
+              {{ selection?.state?.condition ?? 'NO TELEMETRY' }}
+            </span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-3xl bg-white/80 border border-white p-4 shadow-sm">
+            <p class="text-[9px] font-black uppercase tracking-widest text-orange-400">Temperature</p>
+            <p class="text-xl font-black text-slate-900 mt-2">{{ telemetryTemperatureText }}</p>
+          </div>
+          <div class="rounded-3xl bg-white/80 border border-white p-4 shadow-sm">
+            <p class="text-[9px] font-black uppercase tracking-widest text-blue-400">Humidity</p>
+            <p class="text-xl font-black text-slate-900 mt-2">{{ telemetryHumidityText }}</p>
+          </div>
+          <div class="rounded-3xl bg-white/80 border border-white p-4 shadow-sm col-span-2">
+            <p class="text-[9px] font-black uppercase tracking-widest text-emerald-500">Occupancy</p>
+            <p class="text-xl font-black text-slate-900 mt-2">{{ telemetryOccupancyText }}</p>
+          </div>
+        </div>
+
+        @if (sourceRoom) {
+          <div class="rounded-[2rem] bg-slate-900 text-white p-5 shadow-xl">
+            <p class="text-[9px] font-black uppercase tracking-widest text-white/40">Device Link</p>
+            <p class="text-sm font-black mt-2 truncate">{{ sourceRoom.device || 'Not linked' }}</p>
+            <div class="h-px bg-white/10 my-4"></div>
+            <p class="text-[9px] font-black uppercase tracking-widest text-white/40">Schedules</p>
+            <p class="text-sm font-black mt-2">{{ sourceRoom.schedules?.length ?? 0 }} entries</p>
+          </div>
+        } @else {
+          <div class="rounded-[2rem] bg-blue-50/80 border border-blue-100 p-5">
+            <span class="material-symbols-outlined text-blue-500">add_location_alt</span>
+            <p class="text-xs font-bold text-blue-700 mt-2 leading-relaxed">
+              This cell has no room assignment yet. Link an existing room or create one directly for this location.
+            </p>
+          </div>
+        }
+      </aside>
+
+      <section class="lg:col-span-8 p-6 md:p-8 space-y-6">
+        @if (!sourceRoom) {
+          <div class="flex bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/70 w-full sm:w-fit">
+            <button type="button" (click)="setMode('assign')"
+              class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+              [ngClass]="mode === 'assign' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-600'">
+              Assign Existing
+            </button>
+            <button type="button" (click)="setMode('create')"
+              class="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+              [ngClass]="mode === 'create' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-600'">
+              Create Room
+            </button>
+          </div>
+
+          @if (mode === 'assign') {
+            <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div class="space-y-2">
+                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                  Available Room
+                </label>
+                <app-drop-down [options]="availableRoomOptions" [value]="existingRoomUid"
+                  placeholder="Select unassigned room" variant="device" [disabled]="isSaving"
+                  (valueChange)="existingRoomUid = $event" />
+              </div>
+
+              @if (availableRoomOptions.length === 0) {
+                <div class="rounded-[1.5rem] bg-slate-50 border border-dashed border-slate-200 p-6 text-center">
+                  <span class="material-symbols-outlined text-slate-300 text-4xl">meeting_room</span>
+                  <p class="text-xs font-black text-slate-400 uppercase tracking-widest mt-2">
+                    No unassigned rooms available
+                  </p>
+                </div>
+              }
+            </div>
+          }
+
+          @if (mode === 'create') {
+            <div class="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div class="space-y-2">
+                  <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                    Room Name
+                  </label>
+                  <input type="text" [(ngModel)]="roomName" maxlength="50" [disabled]="isSaving"
+                    class="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 disabled:bg-slate-50 disabled:text-slate-400 transition-all" />
+                </div>
+                <div class="space-y-2">
+                  <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                    Device UID
+                  </label>
+                  <app-drop-down [options]="deviceOptions" [value]="selectedDevice"
+                    placeholder="Select hardware connection" variant="device"
+                    [disabled]="isSaving || isLoadingDevices" (valueChange)="selectedDevice = $event" />
+                </div>
+              </div>
+
+              <div class="bg-slate-50/60 border border-slate-100 rounded-3xl p-2">
+                <app-schedule-builder [schedules]="schedules" (schedulesChange)="schedules = $event"
+                  [disabled]="isSaving" variant="add" />
+              </div>
+            </div>
+          }
+        } @else {
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="space-y-2">
+              <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                Room Identity
+              </label>
+              <input type="text" [(ngModel)]="roomName" maxlength="50" [disabled]="isSaving"
+                class="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 disabled:bg-slate-50 disabled:text-slate-400 transition-all" />
+            </div>
+            <div class="space-y-2">
+              <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                Hardware Link
+              </label>
+              <app-drop-down [options]="deviceOptions" [value]="selectedDevice" [disabled]="isSaving || isLoadingDevices"
+                placeholder="Assign Device UID" variant="device" (valueChange)="selectedDevice = $event" />
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+              Operational Status
+            </label>
+            <div class="flex items-center gap-2 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200/50">
+              <button type="button" (click)="setStatus('active')" [disabled]="isSaving"
+                class="flex-1 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                [ngClass]="status === 'active' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'text-slate-400 hover:text-blue-600'">
+                Active
+              </button>
+              <button type="button" (click)="setStatus('inactive')" [disabled]="isSaving"
+                class="flex-1 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                [ngClass]="status === 'inactive' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'">
+                Inactive
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-slate-50/60 border border-slate-100 rounded-3xl p-2">
+            <app-schedule-builder [schedules]="schedules" (schedulesChange)="schedules = $event"
+              [disabled]="isSaving" variant="edit" heading="Automation Logic" />
+          </div>
+        }
+      </section>
+    </div>
+
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 px-8 py-6 border-t border-slate-100 bg-slate-50/80 backdrop-blur-md">
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        @if (sourceRoom) {
+          <button type="button" (click)="unassignRoom()" [disabled]="isSaving"
+            class="flex-1 sm:flex-none px-6 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all disabled:opacity-50">
+            Unassign
+          </button>
+          <button type="button" (click)="deleteRoom()" [disabled]="isSaving"
+            class="flex-1 sm:flex-none px-6 py-3.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-white border border-red-100 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50">
+            Delete
+          </button>
+        }
+      </div>
+
+      <div class="flex items-center justify-end gap-3 w-full sm:w-auto">
+        <button type="button" (click)="close()" [disabled]="isSaving"
+          class="px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:bg-white rounded-2xl transition-all disabled:opacity-50">
+          Cancel
+        </button>
+
+        @if (!sourceRoom && mode === 'assign') {
+          <button type="button" (click)="assignExistingRoom()" [disabled]="isSaving || !existingRoomUid"
+            class="group flex items-center gap-3 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50">
+            <span class="material-symbols-outlined text-lg">link</span>
+            <span>{{ isSaving ? 'Assigning...' : 'Assign Room' }}</span>
+          </button>
+        }
+
+        @if (!sourceRoom && mode === 'create') {
+          <button type="button" (click)="createAssignedRoom()" [disabled]="isSaving"
+            class="group flex items-center gap-3 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50">
+            <span class="material-symbols-outlined text-lg">add_task</span>
+            <span>{{ isSaving ? 'Creating...' : 'Create & Link' }}</span>
+          </button>
+        }
+
+        @if (sourceRoom) {
+          <button type="button" (click)="saveAssignedRoom()" [disabled]="isSaving"
+            class="group flex items-center gap-3 px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] transition-all shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50">
+            <span class="material-symbols-outlined text-lg">check_circle</span>
+            <span>{{ isSaving ? 'Saving...' : 'Save Changes' }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+</div>
+}

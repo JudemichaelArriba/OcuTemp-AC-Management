@@ -1,66 +1,64 @@
-/* floor-plan.css */
 :host {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-/* Room Styling - Soft Rounded Edges & Glassy Look */
+
+.custom-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(203, 213, 225, 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(203, 213, 225, 0.3) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+
 ::ng-deep g[data-cell-id] rect,
 ::ng-deep g[data-cell-id] path {
-  fill: rgba(255, 255, 255, 0.8) !important; /* Semi-transparent white */
-  stroke: #868686 !important; /* Visible slate border even without focus */
-  stroke-width: 1.2px !important;
+  fill: rgba(255, 255, 255, 0.6) !important;
+  stroke: #94a3b8 !important;
+  stroke-width: 1.8px !important;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  rx: 3; /* Rounded corners for the "Nice" feeling */
-  ry: 3;
+  rx: 6;
+  ry: 6;
 }
 
-/* Building Outlines - Sturdier Presence */
-::ng-deep g[data-cell-id="0"] > g > rect,
-::ng-deep g[data-cell-id="1"] > g > rect,
-::ng-deep g[data-cell-id="3-Story-Building"] > g > rect {
-  fill: #f8fafc !important;
-  stroke: #94a3b8 !important;
+
+::ng-deep g[data-cell-id="0"]>g>rect,
+::ng-deep g[data-cell-id="1"]>g>rect,
+::ng-deep g[data-cell-id="3-Story-Building"]>g>rect {
+  fill: rgba(226, 232, 240, 0.5) !important;
+  stroke: #64748b !important;
   stroke-width: 2.5px !important;
   cursor: default;
-  rx: 12;
-  ry: 12;
+  rx: 16;
+  ry: 16;
 }
 
-/* Hover States - Glow Effect from Dribbble */
-::ng-deep g[data-cell-id]:not([data-cell-id="0"]):not([data-cell-id="1"]):hover rect {
-  fill: #ffffff !important;
+
+::ng-deep g[data-cell-id].room-on rect {
+  fill: rgba(34, 197, 94, 0.25) !important;
+}
+
+::ng-deep g.floorplan-cell:hover rect {
   stroke: #3b82f6 !important;
-  stroke-width: 2px !important;
+  stroke-width: 2.5px !important;
   filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
 }
 
-/* Active Room - High Contrast Blue */
-::ng-deep g[data-cell-id].room-active rect {
-  fill: #eff6ff !important;
+
+::ng-deep g.room-active.room-on rect {
   stroke: #2563eb !important;
   stroke-width: 3px !important;
-  filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.2));
+  filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.4));
 }
 
-/* Climate States */
-::ng-deep g[data-cell-id].climate-optimal rect {
-  fill: #f0fdf4 !important;
-  stroke: #22c55e !important;
-  stroke-width: 2px !important;
-}
 
-::ng-deep g[data-cell-id].climate-cooling rect {
-  fill: #fff7ed !important;
-  stroke: #f97316 !important;
-  stroke-width: 2px !important;
-}
-
-/* Grid Pattern for Visibility */
-.grid-pattern {
-  fill: none;
-  stroke: #f1f5f9;
-  stroke-width: 0.8;
+::ng-deep g.room-active.room-off rect,
+::ng-deep g.room-active.floorplan-state-no-telemetry rect {
+  fill: rgba(59, 130, 246, 0.25) !important;
+  stroke: #2563eb !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.3));
 }

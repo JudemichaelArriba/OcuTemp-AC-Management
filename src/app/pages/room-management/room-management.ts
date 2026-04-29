@@ -9,11 +9,14 @@ import { DialogService } from '../../services/dialog.service';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { AuthStateService } from '../../services/auth-state.service';
 import { Subscription } from 'rxjs';
-import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
+import { FloorPlanCellSelection, FloorPlanComponent } from '../../components/floor-plan/floor-plan';
+import { FloorPlanRoomModal } from '../../components/floor-plan-room-modal/floor-plan-room-modal';
+import { FloorPlanDefinition, FloorPlanService } from '../../services/floor-plan.service';
+import { LoggerService } from '../../services/logger.service';
 @Component({
   selector: 'app-room-management',
   standalone: true,
-  imports: [FormsModule, AddRoomModal, RoomCard, FloorPlanComponent],
+  imports: [FormsModule, AddRoomModal, RoomCard, FloorPlanComponent, FloorPlanRoomModal],
   templateUrl: './room-management.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -24,8 +27,12 @@ export class RoomManagement implements OnInit, OnDestroy {
   rooms: Room[] = [];
   filteredRooms: Room[] = [];
   isAdmin = false;
-viewMode: 'cards' | 'map' = 'cards';
+  viewMode: 'cards' | 'map' = 'cards';
+  floorPlans: FloorPlanDefinition[] = [];
+  selectedFloorPlanId = '';
+  floorPlanEditMode = false;
   selectedMapRoom: Room | undefined;
+  selectedFloorPlanCell: FloorPlanCellSelection | null = null;
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
   private stopRoomsStream?: () => void;
@@ -37,12 +44,21 @@ viewMode: 'cards' | 'map' = 'cards';
     private deviceService: DeviceService,
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef,
-    private authState: AuthStateService
+    private authState: AuthStateService,
+    private floorPlanService: FloorPlanService,
+    private logger: LoggerService
   ) {}
 
   ngOnInit(): void {
+    this.floorPlans = this.floorPlanService.getFloorPlans();
+    this.selectedFloorPlanId = this.floorPlanService.getDefaultFloorPlanId();
+
     this.authSub = this.authState.currentUser$.subscribe((user) => {
       this.isAdmin = user?.role === 'admin';
+      if (!this.isAdmin) {
+        this.floorPlanEditMode = false;
+        this.selectedFloorPlanCell = null;
+      }
       this.cdr.markForCheck();
     });
 
@@ -66,6 +82,30 @@ viewMode: 'cards' | 'map' = 'cards';
 
   onSearch(): void {
     this.mergeRoomTelemetryAndFilter();
+  }
+
+  setViewMode(mode: 'cards' | 'map'): void {
+    this.viewMode = mode;
+    if (mode !== 'map') {
+      this.floorPlanEditMode = false;
+      this.selectedFloorPlanCell = null;
+    }
+    this.cdr.markForCheck();
+  }
+
+  selectFloorPlan(floorPlanId: string): void {
+    this.selectedFloorPlanId = floorPlanId;
+    this.selectedFloorPlanCell = null;
+    this.cdr.markForCheck();
+  }
+
+  toggleFloorPlanEditMode(): void {
+    if (!this.isAdmin) return;
+    this.floorPlanEditMode = !this.floorPlanEditMode;
+    if (!this.floorPlanEditMode) {
+      this.selectedFloorPlanCell = null;
+    }
+    this.cdr.markForCheck();
   }
 
   trackByRoomId(index: number, room: Room): string {
@@ -101,7 +141,7 @@ viewMode: 'cards' | 'map' = 'cards';
           await this.roomService.deleteRoom(room.uid);
           this.dialogService.success('Room Deleted', `The room "${room.roomName}" has been successfully removed.`);
         } catch (error) {
-          console.error('[RoomManagement] Error deleting room:', error);
+          this.logger.error('[RoomManagement] Error deleting room:', error);
           this.dialogService.error('Error', 'An error occurred while deleting the room. Please try again.');
         }
       },
@@ -130,8 +170,18 @@ viewMode: 'cards' | 'map' = 'cards';
     this.cdr.markForCheck();
   }
 
-  onMapRoomSelected(room: Room): void {
+  onMapRoomSelected(room: Room | undefined): void {
     this.selectedMapRoom = room;
-    // In the future, this will trigger the CRUD side-panel
+  }
+
+  onFloorPlanCellEditRequested(selection: FloorPlanCellSelection): void {
+    if (!this.isAdmin || !this.floorPlanEditMode) return;
+    this.selectedFloorPlanCell = selection;
+    this.cdr.markForCheck();
+  }
+
+  closeFloorPlanModal(): void {
+    this.selectedFloorPlanCell = null;
+    this.cdr.markForCheck();
   }
 }
