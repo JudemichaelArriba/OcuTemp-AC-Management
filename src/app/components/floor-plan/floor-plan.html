@@ -1,7 +1,6 @@
 <div
   class="relative w-full h-full bg-slate-100 rounded-[2.5rem] border border-slate-300 overflow-hidden shadow-2xl select-none">
 
-
   <div class="absolute inset-0 pointer-events-none custom-grid-pattern z-0"></div>
 
   <div class="absolute top-6 right-6 z-20 flex flex-col items-center gap-2">
@@ -460,7 +459,7 @@
       </g>
     </g>
 
-    <!-- Interactive Glassmorphic Overlays explicitly mapped onto the bounding boxes -->
+
     <foreignObject x="0" y="0" width="100%" height="100%" class="pointer-events-none" style="overflow: visible;">
       <div class="relative w-full h-full pointer-events-none" xmlns="http://www.w3.org/1999/xhtml">
         @for (overlay of overlays; track overlay.cellId) {
@@ -468,14 +467,20 @@
           [style.width.px]="overlay.width" [style.height.px]="overlay.height" (mouseenter)="overlay.showTooltip = true"
           (mouseleave)="overlay.showTooltip = false" (click)="activateRoomFromOverlay($event, overlay.cellId)">
 
-          <!-- Condition Badge: Pinned explicitly to top-right corner -->
+
           <div
             class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full border border-white/60 transition-transform duration-300 hover:scale-125"
             [ngClass]="getBadgeColorClass(overlay.state.visualState)">
           </div>
 
-          <!-- Telemetry: Directly centered in the box with a beautiful glass backdrop to maintain legibility -->
-          @if (overlay.room.temperature !== undefined) {
+          @if (overlay.room.power !== true) {
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span
+              class="text-[10px] font-black text-slate-700/90 tracking-tighter drop-shadow-sm bg-white/50 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/40">
+              OFF
+            </span>
+          </div>
+          } @else if (overlay.room.temperature !== undefined) {
           <div class="absolute inset-0 flex flex-col items-center justify-center">
             <span
               class="text-[10px] font-black text-slate-700/90 tracking-tighter drop-shadow-sm bg-white/50 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/40">
@@ -484,7 +489,7 @@
           </div>
           }
 
-          <!-- Glassmorphic Hover Tooltip -->
+
           @if (overlay.showTooltip) {
           <div
             class="absolute bottom-full mb-3 left-1/2 transform -translate-x-1/2 w-max bg-white/95 backdrop-blur-xl border border-slate-200 p-3 rounded-[1rem] shadow-2xl z-50 text-center pointer-events-none animate-in zoom-in-95 fade-in duration-200">
@@ -498,7 +503,7 @@
                 }}</span>
             </div>
 
-            <!-- Professional Stat Row (Material Symbols replaced Emojis) -->
+
             <div
               class="flex gap-3 text-[11px] font-bold text-slate-700 bg-slate-100/80 border border-slate-200/50 rounded-xl px-3 py-2 shadow-inner">
               <span class="flex items-center gap-1">

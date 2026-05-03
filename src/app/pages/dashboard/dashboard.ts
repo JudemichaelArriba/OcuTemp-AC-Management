@@ -7,6 +7,7 @@ import { EnergyReportService, getTodayKey, sumKwhByDate } from '../../services/e
 import { RoomCard } from '../../components/room-card/room-card';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -16,16 +17,26 @@ import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Dashboard implements OnInit, OnDestroy {
-  isLoading: boolean = true;
+  // Data Readiness States
+  isEnergyReady = false;
+  isDevicesReady = false;
+  get isReady(): boolean {
+    return this.isEnergyReady && this.isDevicesReady;
+  }
+
+  // Animation Control (Only true on first load after login)
+  useFadeIn = false;
+
   rooms: Room[] = [];
   viewMode: 'cards' | 'map' = 'cards';
   selectedMapRoom: Room | undefined;
-  // Real data for dashboard cards
+  totalRooms: number = 0;
+
+  // Real internal data states
   totalEnergyToday: number = 0;
   avgTemperature: number = 0;
   occupiedZones: number = 0;
   activeOverrides: number = 0;
-  totalRooms: number = 0;
 
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
@@ -42,14 +53,21 @@ export class Dashboard implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
-    // 1. Stream today's energy consumption
+
+    if (!sessionStorage.getItem('dashboard_animated')) {
+      this.useFadeIn = true;
+      sessionStorage.setItem('dashboard_animated', 'true');
+    }
+
+  
     this.stopEnergyStream = this.energyService.AllEnergyDaily((energyData) => {
       const today = getTodayKey();
       this.totalEnergyToday = sumKwhByDate(energyData, today);
+      this.isEnergyReady = true;
       this.cdr.markForCheck();
     });
 
-    // 2. Stream Active Rooms & Telemetry
+  
     this.stopRoomStream = this.roomService.streamRoomsByStatus('active', (rooms) => {
       this.baseRooms = rooms;
       this.totalRooms = rooms.length;
@@ -58,19 +76,25 @@ export class Dashboard implements OnInit, OnDestroy {
         .map(room => room.device)
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
-      this.stopDevicesStream?.();
-
-      let isFirstDeviceLoad = true;
-      this.stopDevicesStream = this.deviceService.streamDevicesByIds(deviceIds, (devices) => {
-        this.deviceMap = devices;
-        
-        if (isFirstDeviceLoad && Object.keys(devices).length === deviceIds.length) {
-          this.isLoading = false;
-          isFirstDeviceLoad = false;
-        }
-
+ 
+      if (deviceIds.length === 0) {
+        this.isDevicesReady = true;
+        this.deviceMap = {};
         this.calculateMetrics();
         this.mergeRoomTelemetry();
+        this.cdr.markForCheck();
+        return;
+      }
+
+      this.stopDevicesStream?.();
+
+      this.stopDevicesStream = this.deviceService.streamDevicesByIds(deviceIds, (devices) => {
+        this.deviceMap = devices;
+        this.isDevicesReady = true;
+        
+        this.calculateMetrics();
+        this.mergeRoomTelemetry();
+        this.cdr.markForCheck();
       });
     });
   }
@@ -83,23 +107,20 @@ export class Dashboard implements OnInit, OnDestroy {
 
   private calculateMetrics(): void {
     const devices = Object.values(this.deviceMap);
-    
+  
     let totalTemp = 0;
     let tempCount = 0;
     let occupiedCount = 0;
     let overrideCount = 0;
 
     for (const device of devices) {
-      // Average Climate
       if (typeof device.temperature === 'number') {
         totalTemp += device.temperature;
         tempCount++;
       }
-      // Occupied Zones
       if (device.occupancy) {
         occupiedCount++;
       }
-      // Manual Admin/User Overrides
       if (device.control?.overrideActive) {
         overrideCount++;
       }
@@ -115,10 +136,9 @@ export class Dashboard implements OnInit, OnDestroy {
       fallbackToRoomPower: true,
       defaultPower: false,
     });
-    this.cdr.markForCheck();
   }
+  
   onMapRoomSelected(room: Room | undefined): void {
     this.selectedMapRoom = room;
-    // You can handle sidebar logic here if needed
   }
 }

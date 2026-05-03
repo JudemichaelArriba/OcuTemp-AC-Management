@@ -10,7 +10,6 @@ import {
   FLOOR_PLAN_STATE_CLASSES,
   FloorPlanRoomState,
   getFloorPlanRoomState,
-  roomMatchesFloorPlanCellByName,
 } from '../../helpers/floor-plan-state';
 
 interface VBox { x: number; y: number; w: number; h: number; }
@@ -194,7 +193,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
         this.animateTo({ x: bbox.x - pad, y: bbox.y - pad, w: bbox.width + pad * 2, h: bbox.height + pad * 2 });
       }
     } catch { 
-      // Handle missing bbox calculations gracefully
+
     }
 
     const selection = this.buildSelection(cellId, matched);
@@ -352,7 +351,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
           showTooltip: false
         });
       } catch (e) {
-        // Ignore parsing errors for hidden elements
+
       }
     });
 
@@ -369,16 +368,11 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     };
   }
 
+
   private findAssignedRoomForCell(cellId: string): Room | undefined {
-    const assigned = this.rooms.find((room) =>
+    return this.rooms.find((room) =>
       room.floorPlanId === this.floorPlanId &&
       room.floorPlanCellId === cellId
-    );
-    if (assigned) return assigned;
-
-    return this.rooms.find((room) =>
-      !room.floorPlanCellId &&
-      (roomMatchesFloorPlanCellByName(room, cellId) || room.uid === cellId)
     );
   }
 

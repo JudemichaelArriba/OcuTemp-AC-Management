@@ -1,6 +1,7 @@
 <main class="flex-1 flex flex-col font-sans min-h-0 bg-slate-50 p-4 md:p-6 lg:p-8 gap-6">
 
-  <header
+
+  <header [class.animate-fade-in]="useAnimations"
     class="relative overflow-hidden bg-white/70 backdrop-blur-xl rounded-[2.5rem] border border-white/50 shadow-2xl shadow-blue-200/40">
     <div class="absolute inset-0 opacity-[0.05] pointer-events-none"
       style="background-image: radial-gradient(#2563eb 0.8px, transparent 0.8px); background-size: 20px 20px;"></div>
@@ -33,8 +34,9 @@
     </div>
   </header>
 
-  <div
-    class="max-w-[1800px] w-full mx-auto bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/60 shadow-lg shadow-blue-100/50">
+
+  <div [class.animate-fade-in]="useAnimations" style="animation-delay: 0.05s;"
+    class="fill-mode-both max-w-[1800px] w-full mx-auto bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-white/60 shadow-lg shadow-blue-100/50">
     <div class="flex flex-col md:flex-row gap-4 items-center">
       <div class="relative w-full md:max-w-md group">
         <span
@@ -52,49 +54,70 @@
     </div>
   </div>
 
-  <div class="max-w-[1800px] w-full mx-auto">
+
+  <div [class.animate-fade-in]="useAnimations" style="animation-delay: 0.1s;"
+    class="fill-mode-both max-w-[1800px] w-full mx-auto">
     <div
       class="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2.5rem] border border-white/20 shadow-2xl shadow-blue-500/30 relative overflow-hidden">
       <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
 
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-8 relative z-10">
+
         <div class="flex flex-col">
           <p class="text-blue-100/70 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Total Rooms</p>
-          <div class="flex items-center gap-4">
-            <p class="text-4xl font-black text-white tracking-tighter">{{ totalRooms }}</p>
+          <div class="flex items-center gap-4 min-h-[40px]">
+            @if (isLoading) {
+            <p class="text-4xl font-black text-white/40 tracking-tighter tabular-nums animate-pulse">--</p>
+            } @else {
+            <p class="text-4xl font-black text-white tracking-tighter tabular-nums">{{ displayTotalRooms }}</p>
+            }
             <span class="material-symbols-outlined text-white/20 text-3xl">meeting_room</span>
           </div>
         </div>
 
         <div class="flex flex-col border-l border-white/10 pl-8">
           <p class="text-blue-100/70 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Active Rooms</p>
-          <div class="flex items-center gap-4">
-            <p class="text-4xl font-black text-white tracking-tighter">{{ activeRooms }}</p>
+          <div class="flex items-center gap-4 min-h-[40px]">
+            @if (isLoading) {
+            <p class="text-4xl font-black text-white/40 tracking-tighter tabular-nums animate-pulse">--</p>
+            } @else {
+            <p class="text-4xl font-black text-white tracking-tighter tabular-nums">{{ displayActiveRooms }}</p>
+            }
             <span class="material-symbols-outlined text-emerald-400 text-3xl opacity-80">check_circle</span>
           </div>
         </div>
 
         <div class="flex flex-col border-l border-white/10 pl-8">
           <p class="text-blue-100/70 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Live Telemetry</p>
-          <div class="flex items-center gap-4">
-            <p class="text-4xl font-black text-white tracking-tighter">{{ roomsWithTelemetry }}</p>
+          <div class="flex items-center gap-4 min-h-[40px]">
+            @if (isLoading) {
+            <p class="text-4xl font-black text-white/40 tracking-tighter tabular-nums animate-pulse">--</p>
+            } @else {
+            <p class="text-4xl font-black text-white tracking-tighter tabular-nums">{{ displayRoomsWithTelemetry }}</p>
+            }
             <span class="material-symbols-outlined text-amber-400 text-3xl opacity-80">sensors</span>
           </div>
         </div>
 
         <div class="flex flex-col border-l border-white/10 pl-8">
           <p class="text-blue-100/70 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Offline/No Device</p>
-          <div class="flex items-center gap-4">
-            <p class="text-4xl font-black text-white tracking-tighter">{{ roomsWithoutDevice }}</p>
+          <div class="flex items-center gap-4 min-h-[40px]">
+            @if (isLoading) {
+            <p class="text-4xl font-black text-white/40 tracking-tighter tabular-nums animate-pulse">--</p>
+            } @else {
+            <p class="text-4xl font-black text-white tracking-tighter tabular-nums">{{ displayRoomsWithoutDevice }}</p>
+            }
             <span class="material-symbols-outlined text-white/20 text-3xl">link_off</span>
           </div>
         </div>
+
       </div>
     </div>
   </div>
 
-  <div
-    class="max-w-[1800px] w-full mx-auto px-4 mt-2 mb-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+
+  <div [class.animate-fade-in]="useAnimations" style="animation-delay: 0.15s;"
+    class="fill-mode-both max-w-[1800px] w-full mx-auto px-4 mt-2 mb-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
     <div class="flex flex-wrap items-center gap-2">
       <div class="flex bg-white/80 backdrop-blur-md border border-white/70 p-1.5 rounded-2xl shadow-sm">
         @for (floorPlan of floorPlans; track floorPlan.id) {
@@ -138,6 +161,7 @@
     </div>
   </div>
 
+
   <div class="flex-1 overflow-y-auto min-h-0 px-4">
     <div class="max-w-[1200px] w-full mx-auto pb-10">
 
@@ -162,9 +186,11 @@
         </article>
         }
         }
+
         @if (!isLoading) {
         @for (room of filteredRooms; track room.uid) {
-        <app-room-card class="w-full hover:-translate-y-2 transition-transform duration-300" [room]="room"
+        <app-room-card [class.animate-fade-in]="useAnimations"
+          class="fill-mode-both w-full hover:-translate-y-2 transition-transform duration-300" [room]="room"
           [allowDelete]="isAdmin" (deleteRequest)="onDeleteRoom($event)">
         </app-room-card>
         }
@@ -172,7 +198,7 @@
       </div>
 
       @if (!isLoading && filteredRooms.length === 0) {
-      <div
+      <div [class.animate-fade-in]="useAnimations"
         class="mt-6 max-w-[1800px] mx-auto bg-white/50 backdrop-blur-sm border border-dashed border-slate-300 rounded-[2.5rem] py-20 text-center shadow-sm">
         <span class="material-symbols-outlined text-slate-300 text-7xl">search_off</span>
         <p class="text-lg font-black text-slate-500 mt-4 uppercase tracking-widest">No matching rooms found</p>
@@ -180,7 +206,8 @@
       </div>
       }
       } @else {
-      <div class="w-full h-[700px] bg-white rounded-3xl p-2 border border-slate-100 shadow-lg shadow-blue-100/40">
+      <div [class.animate-fade-in]="useAnimations"
+        class="fill-mode-both w-full h-[700px] bg-white rounded-3xl p-2 border border-slate-100 shadow-lg shadow-blue-100/40">
         <app-floor-plan [rooms]="filteredRooms" [floorPlanId]="selectedFloorPlanId" [editMode]="floorPlanEditMode"
           (roomSelected)="onMapRoomSelected($event)"
           (floorPlanCellEditRequested)="onFloorPlanCellEditRequested($event)">

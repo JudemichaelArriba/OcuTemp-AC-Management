@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { AddRoomModal } from '../../components/add-room-modal/add-room-modal'; 
 import { Room } from '../../models/room.model'; 
 import { FormsModule } from '@angular/forms';
@@ -13,6 +13,7 @@ import { FloorPlanCellSelection, FloorPlanComponent } from '../../components/flo
 import { FloorPlanRoomModal } from '../../components/floor-plan-room-modal/floor-plan-room-modal';
 import { FloorPlanDefinition, FloorPlanService } from '../../services/floor-plan.service';
 import { LoggerService } from '../../services/logger.service';
+
 @Component({
   selector: 'app-room-management',
   standalone: true,
@@ -22,17 +23,30 @@ import { LoggerService } from '../../services/logger.service';
 })
 export class RoomManagement implements OnInit, OnDestroy {
   showAddModal = false;
-  isLoading = true;
+  isLoading = true; 
+  useAnimations = false; 
   searchQuery = '';
+  
   rooms: Room[] = [];
   filteredRooms: Room[] = [];
   isAdmin = false;
   viewMode: 'cards' | 'map' = 'cards';
+  
   floorPlans: FloorPlanDefinition[] = [];
   selectedFloorPlanId = '';
   floorPlanEditMode = false;
   selectedMapRoom: Room | undefined;
   selectedFloorPlanCell: FloorPlanCellSelection | null = null;
+  
+
+  displayTotalRooms: number = 0;
+  displayActiveRooms: number = 0;
+  displayRoomsWithTelemetry: number = 0;
+  displayRoomsWithoutDevice: number = 0;
+
+  private isRoomsLoaded = false;
+  private isDevicesLoaded = false;
+
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
   private stopRoomsStream?: () => void;
@@ -46,10 +60,16 @@ export class RoomManagement implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private authState: AuthStateService,
     private floorPlanService: FloorPlanService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit(): void {
+    if (!sessionStorage.getItem('room_mgmt_animated')) {
+      this.useAnimations = true;
+      sessionStorage.setItem('room_mgmt_animated', 'true');
+    }
+
     this.floorPlans = this.floorPlanService.getFloorPlans();
     this.selectedFloorPlanId = this.floorPlanService.getDefaultFloorPlanId();
 
@@ -64,12 +84,13 @@ export class RoomManagement implements OnInit, OnDestroy {
 
     this.stopRoomsStream = this.roomService.streamRooms((rooms) => {
       this.baseRooms = rooms;
-      this.isLoading = false;
+      this.isRoomsLoaded = true;
       this.mergeRoomTelemetryAndFilter();
     });
 
     this.stopDevicesStream = this.deviceService.streamDevices((devices) => {
       this.deviceMap = devices;
+      this.isDevicesLoaded = true;
       this.mergeRoomTelemetryAndFilter();
     });
   }
@@ -78,6 +99,76 @@ export class RoomManagement implements OnInit, OnDestroy {
     this.stopRoomsStream?.();
     this.stopDevicesStream?.();
     this.authSub?.unsubscribe();
+  }
+
+  private mergeRoomTelemetryAndFilter(): void {
+    this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
+      defaultPower: false,
+    });
+
+    const query = this.searchQuery.trim().toLowerCase();
+    if (!query) {
+      this.filteredRooms = this.rooms;
+    } else {
+      this.filteredRooms = this.rooms.filter((room) =>
+        room.roomName.toLowerCase().includes(query) ||
+        room.uid.toLowerCase().includes(query) ||
+        (room.device ?? '').toLowerCase().includes(query)
+      );
+    }
+
+    this.updateDisplayMetrics();
+    this.cdr.markForCheck();
+  }
+
+  private updateDisplayMetrics(): void {
+    if (this.isRoomsLoaded && this.isDevicesLoaded) {
+      const wasLoading = this.isLoading;
+      this.isLoading = false; 
+
+      if (wasLoading && this.useAnimations) {
+        this.animateMetrics();
+      } else {
+        this.applyRealData(); 
+      }
+    }
+  }
+
+  private animateMetrics(): void {
+    this.ngZone.runOutsideAngular(() => {
+      const duration = 1000; 
+      const targets = [this.totalRooms, this.activeRooms, this.roomsWithTelemetry, this.roomsWithoutDevice];
+      let startTimestamp: number | null = null;
+
+      const step = (timestamp: number) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+
+        this.displayTotalRooms = Math.floor(easeOut * targets[0]);
+        this.displayActiveRooms = Math.floor(easeOut * targets[1]);
+        this.displayRoomsWithTelemetry = Math.floor(easeOut * targets[2]);
+        this.displayRoomsWithoutDevice = Math.floor(easeOut * targets[3]);
+
+        this.ngZone.run(() => this.cdr.markForCheck());
+
+        if (progress < 1) {
+          window.requestAnimationFrame(step);
+        } else {
+          this.ngZone.run(() => this.applyRealData());
+        }
+      };
+      window.requestAnimationFrame(step);
+    });
+  }
+
+  private applyRealData(): void {
+    this.displayTotalRooms = this.totalRooms;
+    this.displayActiveRooms = this.activeRooms;
+    this.displayRoomsWithTelemetry = this.roomsWithTelemetry;
+    this.displayRoomsWithoutDevice = this.roomsWithoutDevice;
+    this.cdr.markForCheck();
   }
 
   onSearch(): void {
@@ -149,25 +240,6 @@ export class RoomManagement implements OnInit, OnDestroy {
       'Delete',
       'Cancel'
     );
-  }
-
-  private mergeRoomTelemetryAndFilter(): void {
-    this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
-      defaultPower: false,
-    });
-
-    const query = this.searchQuery.trim().toLowerCase();
-    if (!query) {
-      this.filteredRooms = this.rooms;
-    } else {
-      this.filteredRooms = this.rooms.filter((room) =>
-        room.roomName.toLowerCase().includes(query) ||
-        room.uid.toLowerCase().includes(query) ||
-        (room.device ?? '').toLowerCase().includes(query)
-      );
-    }
-
-    this.cdr.markForCheck();
   }
 
   onMapRoomSelected(room: Room | undefined): void {
