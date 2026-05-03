@@ -220,6 +220,14 @@
   </div>
 
 
+  @if (isReady) {
+  <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <app-energy-trend-widget [energyData]="rawEnergyData">
+      </app-energy-trend-widget>
+    </div>
+  </div>
+  }
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-8">
     <div class="max-w-[1800px] mx-auto w-full">
       <div class="bg-white border border-slate-100 rounded-[2.5rem] shadow-xl shadow-slate-200/40 p-8">

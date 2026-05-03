@@ -7,11 +7,12 @@ import { EnergyReportService, getTodayKey, sumKwhByDate } from '../../services/e
 import { RoomCard } from '../../components/room-card/room-card';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
-
+import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
+import { EnergyDaily } from '../../models/energy.model';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [RoomCard, DecimalPipe, FloorPlanComponent],
+  imports: [RoomCard, DecimalPipe, FloorPlanComponent, EnergyTrendWidget],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -31,7 +32,7 @@ export class Dashboard implements OnInit, OnDestroy {
   viewMode: 'cards' | 'map' = 'cards';
   selectedMapRoom: Room | undefined;
   totalRooms: number = 0;
-
+  rawEnergyData: Record<string, Record<string, EnergyDaily>> = {};
   // Real internal data states
   totalEnergyToday: number = 0;
   avgTemperature: number = 0;
@@ -40,7 +41,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
   private baseRooms: Room[] = [];
   private deviceMap: Record<string, DeviceTelemetry> = {};
-  
+
   private stopRoomStream?: () => void;
   private stopDevicesStream?: () => void;
   private stopEnergyStream?: () => void;
@@ -59,7 +60,7 @@ export class Dashboard implements OnInit, OnDestroy {
       sessionStorage.setItem('dashboard_animated', 'true');
     }
 
-  
+
     this.stopEnergyStream = this.energyService.AllEnergyDaily((energyData) => {
       const today = getTodayKey();
       this.totalEnergyToday = sumKwhByDate(energyData, today);
@@ -67,7 +68,7 @@ export class Dashboard implements OnInit, OnDestroy {
       this.cdr.markForCheck();
     });
 
-  
+
     this.stopRoomStream = this.roomService.streamRoomsByStatus('active', (rooms) => {
       this.baseRooms = rooms;
       this.totalRooms = rooms.length;
@@ -76,7 +77,7 @@ export class Dashboard implements OnInit, OnDestroy {
         .map(room => room.device)
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
- 
+
       if (deviceIds.length === 0) {
         this.isDevicesReady = true;
         this.deviceMap = {};
@@ -91,11 +92,21 @@ export class Dashboard implements OnInit, OnDestroy {
       this.stopDevicesStream = this.deviceService.streamDevicesByIds(deviceIds, (devices) => {
         this.deviceMap = devices;
         this.isDevicesReady = true;
-        
+
         this.calculateMetrics();
         this.mergeRoomTelemetry();
         this.cdr.markForCheck();
       });
+    });
+
+    this.stopEnergyStream = this.energyService.AllEnergyDaily((energyData) => {
+
+      this.rawEnergyData = energyData;
+
+      const today = getTodayKey();
+      this.totalEnergyToday = sumKwhByDate(energyData, today);
+      this.isEnergyReady = true;
+      this.cdr.markForCheck();
     });
   }
 
@@ -107,7 +118,7 @@ export class Dashboard implements OnInit, OnDestroy {
 
   private calculateMetrics(): void {
     const devices = Object.values(this.deviceMap);
-  
+
     let totalTemp = 0;
     let tempCount = 0;
     let occupiedCount = 0;
@@ -137,7 +148,7 @@ export class Dashboard implements OnInit, OnDestroy {
       defaultPower: false,
     });
   }
-  
+
   onMapRoomSelected(room: Room | undefined): void {
     this.selectedMapRoom = room;
   }
