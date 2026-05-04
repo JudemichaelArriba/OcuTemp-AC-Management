@@ -12,6 +12,16 @@ export interface RoomFloorPlanAssignment {
 export class RoomService {
   constructor(private db: Database) { }
 
+  private sanitizePayload<T extends Record<string, any>>(obj: T): T {
+    const sanitized = { ...obj };
+    Object.keys(sanitized).forEach(key => {
+      if (sanitized[key] === undefined) {
+        delete sanitized[key];
+      }
+    });
+    return sanitized;
+  }
+
   async checkRoomNameExists(roomName: string, excludeUid?: string): Promise<boolean> {
     const roomsRef = ref(this.db, 'rooms');
     const snapshot = await get(roomsRef);
@@ -40,15 +50,21 @@ export class RoomService {
 
     const roomsRef = ref(this.db, 'rooms');
     const newRef = push(roomsRef);
+
+
     const newRoom: Room = {
       ...room,
-      floorPlanAssignedAt: room.floorPlanCellId
-        ? room.floorPlanAssignedAt ?? new Date().toISOString()
-        : room.floorPlanAssignedAt,
       uid: newRef.key!,
     };
-    await set(newRef, newRoom);
-    return newRoom;
+
+    if (newRoom.floorPlanCellId && !newRoom.floorPlanAssignedAt) {
+      newRoom.floorPlanAssignedAt = new Date().toISOString();
+    }
+
+    const safePayload = this.sanitizePayload(newRoom);
+    await set(newRef, safePayload);
+
+    return safePayload as Room;
   }
 
   async updateRoom(uid: string, roomUpdate: Partial<Omit<Room, 'uid'>>): Promise<void> {
@@ -57,7 +73,8 @@ export class RoomService {
     }
 
     const roomRef = ref(this.db, `rooms/${uid}`);
-    await update(roomRef, roomUpdate);
+    const safeUpdate = this.sanitizePayload(roomUpdate);
+    await update(roomRef, safeUpdate);
   }
 
   async assignRoomToFloorPlan(uid: string, assignment: RoomFloorPlanAssignment): Promise<void> {
@@ -126,7 +143,6 @@ export class RoomService {
     });
   }
 
-
   streamRoomsByStatus(status: Room['status'], callback: (rooms: Room[]) => void): () => void {
     const roomsRef = ref(this.db, 'rooms');
     const q = query(roomsRef, orderByChild('status'), equalTo(status));
@@ -143,7 +159,6 @@ export class RoomService {
       callback(rooms);
     });
   }
-
 
   async deleteRoom(uid: string): Promise<void> {
     const roomRef = ref(this.db, `rooms/${uid}`);
