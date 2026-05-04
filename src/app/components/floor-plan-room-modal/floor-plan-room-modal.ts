@@ -168,7 +168,6 @@ export class FloorPlanRoomModal implements OnChanges {
 
     try {
       await this.roomService.assignRoomToFloorPlan(this.existingRoomUid, {
-        floorPlanId: this.selection.floorPlanId,
         floorPlanCellId: this.selection.cellId,
       });
       const assignedRoom = this.rooms.find((room) => room.uid === this.existingRoomUid);
@@ -237,7 +236,6 @@ export class FloorPlanRoomModal implements OnChanges {
         status: 'active',
         schedules: this.cloneSchedules(this.schedules),
         createdAt: new Date().toISOString(),
-        floorPlanId: this.selection.floorPlanId,
         floorPlanCellId: this.selection.cellId,
         floorPlanAssignedAt: new Date().toISOString(),
       });
@@ -311,7 +309,6 @@ export class FloorPlanRoomModal implements OnChanges {
         status: this.status,
         device: this.selectedDevice,
         schedules: this.cloneSchedules(this.schedules),
-        floorPlanId: this.selection.floorPlanId,
         floorPlanCellId: this.selection.cellId,
         floorPlanAssignedAt: this.sourceRoom.floorPlanAssignedAt ?? new Date().toISOString(),
         updatedAt: new Date().toISOString(),

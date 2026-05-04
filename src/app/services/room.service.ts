@@ -1,10 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Database, ref, get, push, set, onValue, update, remove, query, orderByChild, equalTo } from '@angular/fire/database';
 import { Room, Schedule } from '../models/room.model';
-// import {query, orderByChild, equalTo} from '@angular/fire/database';
 
 export interface RoomFloorPlanAssignment {
-  floorPlanId: string;
   floorPlanCellId: string;
 }
 
@@ -36,15 +34,15 @@ export class RoomService {
       throw new Error('Room name already exists');
     }
 
-    if (room.floorPlanId && room.floorPlanCellId) {
-      await this.assertFloorPlanCellAvailable(room.floorPlanId, room.floorPlanCellId);
+    if (room.floorPlanCellId) {
+      await this.assertFloorPlanCellAvailable(room.floorPlanCellId);
     }
 
     const roomsRef = ref(this.db, 'rooms');
     const newRef = push(roomsRef);
     const newRoom: Room = {
       ...room,
-      floorPlanAssignedAt: room.floorPlanId && room.floorPlanCellId
+      floorPlanAssignedAt: room.floorPlanCellId
         ? room.floorPlanAssignedAt ?? new Date().toISOString()
         : room.floorPlanAssignedAt,
       uid: newRef.key!,
@@ -54,8 +52,8 @@ export class RoomService {
   }
 
   async updateRoom(uid: string, roomUpdate: Partial<Omit<Room, 'uid'>>): Promise<void> {
-    if (roomUpdate.floorPlanId && roomUpdate.floorPlanCellId) {
-      await this.assertFloorPlanCellAvailable(roomUpdate.floorPlanId, roomUpdate.floorPlanCellId, uid);
+    if (roomUpdate.floorPlanCellId) {
+      await this.assertFloorPlanCellAvailable(roomUpdate.floorPlanCellId, uid);
     }
 
     const roomRef = ref(this.db, `rooms/${uid}`);
@@ -70,13 +68,11 @@ export class RoomService {
     }
 
     await this.assertFloorPlanCellAvailable(
-      assignment.floorPlanId,
       assignment.floorPlanCellId,
       uid
     );
 
     await update(roomRef, {
-      floorPlanId: assignment.floorPlanId,
       floorPlanCellId: assignment.floorPlanCellId,
       floorPlanAssignedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -91,7 +87,6 @@ export class RoomService {
     }
 
     await update(roomRef, {
-      floorPlanId: null,
       floorPlanCellId: null,
       floorPlanAssignedAt: null,
       updatedAt: new Date().toISOString(),
@@ -156,7 +151,6 @@ export class RoomService {
   }
 
   private async assertFloorPlanCellAvailable(
-    floorPlanId: string,
     floorPlanCellId: string,
     excludeUid?: string
   ): Promise<void> {
@@ -167,10 +161,7 @@ export class RoomService {
     const rooms = snapshot.val() as Record<string, Partial<Room>>;
     const assignedRoom = Object.entries(rooms).find(([uid, room]) => {
       if (excludeUid && uid === excludeUid) return false;
-      return (
-        room.floorPlanId === floorPlanId &&
-        room.floorPlanCellId === floorPlanCellId
-      );
+      return room.floorPlanCellId === floorPlanCellId;
     });
 
     if (assignedRoom) {

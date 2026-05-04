@@ -14,7 +14,6 @@ export interface Room {
   device: string;
   occupancy?: boolean;
   power?: boolean;
-  floorPlanId?: string;
   floorPlanCellId?: string;
   floorPlanAssignedAt?: string;
   createdAt?: string;

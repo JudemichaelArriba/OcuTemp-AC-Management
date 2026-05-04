@@ -11,7 +11,6 @@ import { AuthStateService } from '../../services/auth-state.service';
 import { Subscription } from 'rxjs';
 import { FloorPlanCellSelection, FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 import { FloorPlanRoomModal } from '../../components/floor-plan-room-modal/floor-plan-room-modal';
-import { FloorPlanDefinition, FloorPlanService } from '../../services/floor-plan.service';
 import { LoggerService } from '../../services/logger.service';
 
 @Component({
@@ -32,13 +31,10 @@ export class RoomManagement implements OnInit, OnDestroy {
   isAdmin = false;
   viewMode: 'cards' | 'map' = 'cards';
   
-  floorPlans: FloorPlanDefinition[] = [];
-  selectedFloorPlanId = '';
   floorPlanEditMode = false;
   selectedMapRoom: Room | undefined;
   selectedFloorPlanCell: FloorPlanCellSelection | null = null;
   
-
   displayTotalRooms: number = 0;
   displayActiveRooms: number = 0;
   displayRoomsWithTelemetry: number = 0;
@@ -59,7 +55,6 @@ export class RoomManagement implements OnInit, OnDestroy {
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef,
     private authState: AuthStateService,
-    private floorPlanService: FloorPlanService,
     private logger: LoggerService,
     private ngZone: NgZone
   ) {}
@@ -69,9 +64,6 @@ export class RoomManagement implements OnInit, OnDestroy {
       this.useAnimations = true;
       sessionStorage.setItem('room_mgmt_animated', 'true');
     }
-
-    this.floorPlans = this.floorPlanService.getFloorPlans();
-    this.selectedFloorPlanId = this.floorPlanService.getDefaultFloorPlanId();
 
     this.authSub = this.authState.currentUser$.subscribe((user) => {
       this.isAdmin = user?.role === 'admin';
@@ -181,12 +173,6 @@ export class RoomManagement implements OnInit, OnDestroy {
       this.floorPlanEditMode = false;
       this.selectedFloorPlanCell = null;
     }
-    this.cdr.markForCheck();
-  }
-
-  selectFloorPlan(floorPlanId: string): void {
-    this.selectedFloorPlanId = floorPlanId;
-    this.selectedFloorPlanCell = null;
     this.cdr.markForCheck();
   }
 

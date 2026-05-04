@@ -119,20 +119,6 @@
   <div [class.animate-fade-in]="useAnimations" style="animation-delay: 0.15s;"
     class="fill-mode-both max-w-[1800px] w-full mx-auto px-4 mt-2 mb-2 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
     <div class="flex flex-wrap items-center gap-2">
-      <div class="flex bg-white/80 backdrop-blur-md border border-white/70 p-1.5 rounded-2xl shadow-sm">
-        @for (floorPlan of floorPlans; track floorPlan.id) {
-        <button (click)="selectFloorPlan(floorPlan.id)" [class.bg-blue-600]="selectedFloorPlanId === floorPlan.id"
-          [class.text-white]="selectedFloorPlanId === floorPlan.id"
-          [class.shadow-lg]="selectedFloorPlanId === floorPlan.id"
-          [class.shadow-blue-600/20]="selectedFloorPlanId === floorPlan.id"
-          [class.text-slate-500]="selectedFloorPlanId !== floorPlan.id"
-          class="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2">
-          <span class="material-symbols-outlined text-[16px]">map</span>
-          {{ floorPlan.name }}
-        </button>
-        }
-      </div>
-
       @if (isAdmin && viewMode === 'map') {
       <button (click)="toggleFloorPlanEditMode()" [class.bg-amber-500]="floorPlanEditMode"
         [class.text-white]="floorPlanEditMode" [class.shadow-lg]="floorPlanEditMode"
@@ -208,7 +194,7 @@
       } @else {
       <div [class.animate-fade-in]="useAnimations"
         class="fill-mode-both w-full h-[700px] bg-white rounded-3xl p-2 border border-slate-100 shadow-lg shadow-blue-100/40">
-        <app-floor-plan [rooms]="filteredRooms" [floorPlanId]="selectedFloorPlanId" [editMode]="floorPlanEditMode"
+        <app-floor-plan [rooms]="filteredRooms" [editMode]="floorPlanEditMode"
           (roomSelected)="onMapRoomSelected($event)"
           (floorPlanCellEditRequested)="onFloorPlanCellEditRequested($event)">
         </app-floor-plan>

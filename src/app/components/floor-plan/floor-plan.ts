@@ -5,7 +5,6 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Room } from '../../models/room.model';
-import { MAIN_FLOOR_PLAN_ID } from '../../services/floor-plan.service';
 import {
   FLOOR_PLAN_STATE_CLASSES,
   FloorPlanRoomState,
@@ -15,7 +14,6 @@ import {
 interface VBox { x: number; y: number; w: number; h: number; }
 
 export interface FloorPlanCellSelection {
-  floorPlanId: string;
   cellId: string;
   room?: Room;
   state: FloorPlanRoomState;
@@ -42,7 +40,6 @@ export interface RoomOverlay {
 })
 export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   @Input() rooms: Room[] = [];
-  @Input() floorPlanId = MAIN_FLOOR_PLAN_ID;
   @Input() editMode = false;
 
   @Output() roomSelected = new EventEmitter<Room | undefined>();
@@ -108,7 +105,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['rooms'] || changes['floorPlanId']) {
+    if (changes['rooms']) {
       this.syncFloorPlanState();
       if (this.activeCellId) {
         this.activeRoom = this.findAssignedRoomForCell(this.activeCellId);
@@ -361,7 +358,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
 
   private buildSelection(cellId: string, room?: Room): FloorPlanCellSelection {
     return {
-      floorPlanId: this.floorPlanId,
       cellId,
       room,
       state: getFloorPlanRoomState(room),
@@ -371,7 +367,6 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
 
   private findAssignedRoomForCell(cellId: string): Room | undefined {
     return this.rooms.find((room) =>
-      room.floorPlanId === this.floorPlanId &&
       room.floorPlanCellId === cellId
     );
   }
