@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Database, ref, get, push, set, onValue, update, remove, query, orderByChild, equalTo } from '@angular/fire/database';
 import { Room, Schedule } from '../models/room.model';
+import { LoggerService } from './logger.service';
 
 export interface RoomFloorPlanAssignment {
   floorPlanCellId: string;
@@ -10,7 +11,9 @@ export interface RoomFloorPlanAssignment {
   providedIn: 'root'
 })
 export class RoomService {
-  constructor(private db: Database) { }
+
+
+  constructor(private db: Database, private logger: LoggerService) { }
 
   private sanitizePayload<T extends Record<string, any>>(obj: T): T {
     const sanitized = { ...obj };
@@ -23,92 +26,126 @@ export class RoomService {
   }
 
   async checkRoomNameExists(roomName: string, excludeUid?: string): Promise<boolean> {
-    const roomsRef = ref(this.db, 'rooms');
-    const snapshot = await get(roomsRef);
-    if (!snapshot.exists()) return false;
+    try {
+      const roomsRef = ref(this.db, 'rooms');
+      const snapshot = await get(roomsRef);
+      if (!snapshot.exists()) return false;
 
-    const rooms = snapshot.val();
-    const normalizedName = roomName.toLowerCase().trim();
+      const rooms = snapshot.val();
+      const normalizedName = roomName.toLowerCase().trim();
 
-    return Object.entries(rooms).some(([uid, room]: [string, any]) => {
-      if (excludeUid && uid === excludeUid) return false;
-      if (!room?.roomName) return false;
-      return room.roomName.toLowerCase().trim() === normalizedName;
-    });
+      return Object.entries(rooms).some(([uid, room]: [string, any]) => {
+        if (excludeUid && uid === excludeUid) return false;
+        if (!room?.roomName) return false;
+        return room.roomName.toLowerCase().trim() === normalizedName;
+      });
+    } catch (error) {
+      this.logger.error('Database error checking room name:', error);
+      throw error;
+    }
   }
 
   async createRoom(room: Omit<Room, 'uid'>): Promise<Room> {
-    const exists = await this.checkRoomNameExists(room.roomName);
+    try {
+      const exists = await this.checkRoomNameExists(room.roomName);
 
-    if (exists) {
-      throw new Error('Room name already exists');
+      if (exists) {
+        throw new Error('Room name already exists');
+      }
+
+      if (room.floorPlanCellId) {
+        await this.assertFloorPlanCellAvailable(room.floorPlanCellId);
+      }
+
+      const roomsRef = ref(this.db, 'rooms');
+      const newRef = push(roomsRef);
+
+      const newRoom: Room = {
+        ...room,
+        uid: newRef.key!,
+      };
+
+      if (newRoom.floorPlanCellId && !newRoom.floorPlanAssignedAt) {
+        newRoom.floorPlanAssignedAt = new Date().toISOString();
+      }
+
+      const safePayload = this.sanitizePayload(newRoom);
+      await set(newRef, safePayload);
+
+      return safePayload as Room;
+    } catch (err: any) {
+
+      if (err.message !== 'Room name already exists' && err.message !== 'Floorplan cell is already assigned') {
+        this.logger.error('System error creating room:', err);
+      }
+      throw err;
     }
-
-    if (room.floorPlanCellId) {
-      await this.assertFloorPlanCellAvailable(room.floorPlanCellId);
-    }
-
-    const roomsRef = ref(this.db, 'rooms');
-    const newRef = push(roomsRef);
-
-
-    const newRoom: Room = {
-      ...room,
-      uid: newRef.key!,
-    };
-
-    if (newRoom.floorPlanCellId && !newRoom.floorPlanAssignedAt) {
-      newRoom.floorPlanAssignedAt = new Date().toISOString();
-    }
-
-    const safePayload = this.sanitizePayload(newRoom);
-    await set(newRef, safePayload);
-
-    return safePayload as Room;
   }
 
   async updateRoom(uid: string, roomUpdate: Partial<Omit<Room, 'uid'>>): Promise<void> {
-    if (roomUpdate.floorPlanCellId) {
-      await this.assertFloorPlanCellAvailable(roomUpdate.floorPlanCellId, uid);
-    }
+    try {
+      if (roomUpdate.floorPlanCellId) {
+        await this.assertFloorPlanCellAvailable(roomUpdate.floorPlanCellId, uid);
+      }
 
-    const roomRef = ref(this.db, `rooms/${uid}`);
-    const safeUpdate = this.sanitizePayload(roomUpdate);
-    await update(roomRef, safeUpdate);
+      const roomRef = ref(this.db, `rooms/${uid}`);
+      const safeUpdate = this.sanitizePayload(roomUpdate);
+      await update(roomRef, safeUpdate);
+    } catch (err: any) {
+      if (err.message !== 'Floorplan cell is already assigned') {
+        this.logger.error(`System error updating room ${uid}:`, err);
+      }
+      throw err;
+    }
   }
 
   async assignRoomToFloorPlan(uid: string, assignment: RoomFloorPlanAssignment): Promise<void> {
-    const roomRef = ref(this.db, `rooms/${uid}`);
-    const snapshot = await get(roomRef);
-    if (!snapshot.exists()) {
-      throw new Error('Room not found');
+    try {
+      const roomRef = ref(this.db, `rooms/${uid}`);
+      const snapshot = await get(roomRef);
+      if (!snapshot.exists()) {
+        throw new Error('Room not found');
+      }
+
+      await this.assertFloorPlanCellAvailable(
+        assignment.floorPlanCellId,
+        uid
+      );
+
+      await update(roomRef, {
+        floorPlanCellId: assignment.floorPlanCellId,
+        floorPlanAssignedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      if (err.message !== 'Room not found' && err.message !== 'Floorplan cell is already assigned') {
+        this.logger.error(`System error assigning room ${uid} to floor plan:`, err);
+      }
+      throw err;
     }
-
-    await this.assertFloorPlanCellAvailable(
-      assignment.floorPlanCellId,
-      uid
-    );
-
-    await update(roomRef, {
-      floorPlanCellId: assignment.floorPlanCellId,
-      floorPlanAssignedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
   }
 
   async unassignRoomFromFloorPlan(uid: string): Promise<void> {
-    const roomRef = ref(this.db, `rooms/${uid}`);
-    const snapshot = await get(roomRef);
-    if (!snapshot.exists()) {
-      throw new Error('Room not found');
-    }
+    try {
+      const roomRef = ref(this.db, `rooms/${uid}`);
+      const snapshot = await get(roomRef);
+      if (!snapshot.exists()) {
+        throw new Error('Room not found');
+      }
 
-    await update(roomRef, {
-      floorPlanCellId: null,
-      floorPlanAssignedAt: null,
-      updatedAt: new Date().toISOString(),
-    });
+      await update(roomRef, {
+        floorPlanCellId: null,
+        floorPlanAssignedAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      if (err.message !== 'Room not found') {
+        this.logger.error(`System error unassigning room ${uid}:`, err);
+      }
+      throw err;
+    }
   }
+
 
   streamRooms(callback: (rooms: Room[]) => void): () => void {
     const roomsRef = ref(this.db, 'rooms');
@@ -161,8 +198,13 @@ export class RoomService {
   }
 
   async deleteRoom(uid: string): Promise<void> {
-    const roomRef = ref(this.db, `rooms/${uid}`);
-    await remove(roomRef);
+    try {
+      const roomRef = ref(this.db, `rooms/${uid}`);
+      await remove(roomRef);
+    } catch (err) {
+      this.logger.error(`System error deleting room ${uid}:`, err);
+      throw err;
+    }
   }
 
   private async assertFloorPlanCellAvailable(

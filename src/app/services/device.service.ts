@@ -1,7 +1,22 @@
 import { Injectable } from '@angular/core';
 import { Database, get, onValue, ref, update } from '@angular/fire/database';
 
-// NEW: Manual override control shape
+export interface DeviceStatus {
+  ip?: string;
+  lastSeen?: string;
+}
+
+export type DeviceOnlineState = 'online' | 'stale' | 'offline' | 'unknown';
+
+
+export function getDeviceOnlineState(lastSeen?: string): DeviceOnlineState {
+  if (!lastSeen) return 'offline';
+  const ageMs = Date.now() - new Date(lastSeen).getTime();
+  if (ageMs < 2 * 60_000) return 'online';
+  if (ageMs < 5 * 60_000) return 'stale';
+  return 'offline';
+}
+
 export interface DeviceControl {
   overrideActive?: boolean;
   targetTemp?: number;
@@ -22,8 +37,8 @@ export interface DeviceTelemetry {
     source?: string;
     updatedAt?: string;
   };
-  // NEW: Manual override control
   control?: DeviceControl;
+  status?: DeviceStatus;
 }
 
 @Injectable({
@@ -149,7 +164,6 @@ export class DeviceService {
     };
   }
 
-  // NEW: Apply manual override safely
   async applyManualOverride(
     deviceId: string,
     payload: { targetTemp: number; overrideUntil: string; requestedBy?: string; roomUid?: string }
@@ -165,7 +179,6 @@ export class DeviceService {
     });
   }
 
-  // NEW: Clear manual override safely
   async clearManualOverride(deviceId: string, requestedBy?: string): Promise<void> {
     const controlRef = ref(this.db, `devices/${deviceId}/control`);
     await update(controlRef, {
@@ -176,12 +189,12 @@ export class DeviceService {
   }
 
   async sendForcedOff(deviceId: string, requestedBy?: string): Promise<void> {
-  const controlRef = ref(this.db, `devices/${deviceId}/control`);
-  await update(controlRef, {
-    forcedOff: true,
-    overrideActive: false,
-    requestedAt: new Date().toISOString(),
-    requestedBy: requestedBy ?? 'unknown',
-  });
-}
+    const controlRef = ref(this.db, `devices/${deviceId}/control`);
+    await update(controlRef, {
+      forcedOff: true,
+      overrideActive: false,
+      requestedAt: new Date().toISOString(),
+      requestedBy: requestedBy ?? 'unknown',
+    });
+  }
 }
