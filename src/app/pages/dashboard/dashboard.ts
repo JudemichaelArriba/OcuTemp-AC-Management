@@ -9,6 +9,7 @@ import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
 import { EnergyDaily } from '../../models/energy.model';
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -18,14 +19,14 @@ import { EnergyDaily } from '../../models/energy.model';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class Dashboard implements OnInit, OnDestroy {
-  // Data Readiness States
+
   isEnergyReady = false;
   isDevicesReady = false;
   get isReady(): boolean {
     return this.isEnergyReady && this.isDevicesReady;
   }
 
-  // Animation Control (Only true on first load after login)
+
   useFadeIn = false;
 
   rooms: Room[] = [];
@@ -33,7 +34,7 @@ export class Dashboard implements OnInit, OnDestroy {
   selectedMapRoom: Room | undefined;
   totalRooms: number = 0;
   rawEnergyData: Record<string, Record<string, EnergyDaily>> = {};
-  // Real internal data states
+
   totalEnergyToday: number = 0;
   avgTemperature: number = 0;
   occupiedZones: number = 0;
@@ -60,14 +61,12 @@ export class Dashboard implements OnInit, OnDestroy {
       sessionStorage.setItem('dashboard_animated', 'true');
     }
 
-
     this.stopEnergyStream = this.energyService.AllEnergyDaily((energyData) => {
       const today = getTodayKey();
       this.totalEnergyToday = sumKwhByDate(energyData, today);
       this.isEnergyReady = true;
       this.cdr.markForCheck();
     });
-
 
     this.stopRoomStream = this.roomService.streamRoomsByStatus('active', (rooms) => {
       this.baseRooms = rooms;
@@ -76,7 +75,6 @@ export class Dashboard implements OnInit, OnDestroy {
       const deviceIds = rooms
         .map(room => room.device)
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
-
 
       if (deviceIds.length === 0) {
         this.isDevicesReady = true;
