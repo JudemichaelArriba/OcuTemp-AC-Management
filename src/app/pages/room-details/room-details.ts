@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RoomService } from '../../services/room.service';
-import { DeviceService, DeviceTelemetry } from '../../services/device.service';
+import { DeviceService, DeviceTelemetry, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
 import { DialogService } from '../../services/dialog.service';
@@ -35,6 +35,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   private unsubscribeRooms?: () => void;
   private unsubscribeDevices?: () => void;
   private loadingTimeoutId?: ReturnType<typeof setTimeout>;
+  private statusInterval?: ReturnType<typeof setInterval>;
   private destroyed = false;
   private currentDeviceId: string | null = null;
 
@@ -60,18 +61,16 @@ export class RoomDetails implements OnInit, OnDestroy {
   private readonly ARC_CX = 110;
   private readonly ARC_CY = 112;
   private readonly ARC_R = 88;
-  private readonly ARC_VW = 220;   
-  private readonly ARC_VH = 128;   
-  readonly arcLength = Math.PI * 88; 
+  private readonly ARC_VW = 220;
+  private readonly ARC_VH = 128;
+  readonly arcLength = Math.PI * 88;
 
   isDraggingTemp = false;
-
-  overrideUntilPreview: string | null = null; 
+  overrideUntilPreview: string | null = null;
   arcDashOffset: number = 0;
   thumbPos: { x: number; y: number } = { x: 0, y: 0 };
   tempTicks: TempTick[] = [];
 
-  // FIXED: Anchor time state is set exactly once upon component creation.
   private previewBaseTime: number = Date.now();
 
   constructor(
@@ -86,7 +85,6 @@ export class RoomDetails implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit() {
-    // Generate the initial string once.
     this.updateTimePreview();
     this.updateSvgCalculations();
 
@@ -99,6 +97,10 @@ export class RoomDetails implements OnInit, OnDestroy {
     }
 
     this.loadCurrentUser();
+
+    this.statusInterval = setInterval(() => {
+      if (!this.destroyed) this.refreshView();
+    }, 60_000);
 
     this.loadingTimeoutId = setTimeout(() => {
       if (this.loading) {
@@ -121,12 +123,8 @@ export class RoomDetails implements OnInit, OnDestroy {
           this.currentDeviceId = nextDeviceId;
           this.deviceData = null;
           this.overrideInitialized = false;
-          
           this.overrideTemp = 24;
           this.overrideDurationMinutes = 60;
-          
-          // FIXED: Removed previewBaseTime updates from this asynchronous callback.
-          // The preview string will no longer violently update mid-cycle when the stream resolves.
           this.updateSvgCalculations();
 
           this.unsubscribeDevices?.();
@@ -149,6 +147,7 @@ export class RoomDetails implements OnInit, OnDestroy {
     this.unsubscribeRooms?.();
     this.unsubscribeDevices?.();
     this.clearLoadingTimeout();
+    clearInterval(this.statusInterval);
   }
 
   private async loadCurrentUser(): Promise<void> {
@@ -186,6 +185,35 @@ export class RoomDetails implements OnInit, OnDestroy {
     });
   }
 
+
+
+  get deviceOnlineState(): DeviceOnlineState {
+    if (!this.room?.device) return 'unknown';
+    return getDeviceOnlineState(this.deviceData?.status?.lastSeen);
+  }
+
+  get deviceOnlineStateDotClass(): string {
+    switch (this.deviceOnlineState) {
+      case 'online':  return 'bg-emerald-400';
+      case 'stale':   return 'bg-amber-400 animate-pulse';
+      case 'offline': return 'bg-red-400';
+      default:        return 'bg-slate-300';
+    }
+  }
+
+  get deviceOnlineStateLabelClass(): string {
+    switch (this.deviceOnlineState) {
+      case 'online':  return 'text-emerald-600';
+      case 'stale':   return 'text-amber-600';
+      case 'offline': return 'text-red-500';
+      default:        return 'text-slate-400';
+    }
+  }
+  get lastHeartbeatTimestamp(): string | undefined {
+    return this.deviceData?.status?.lastSeen ?? this.deviceData?.acState?.updatedAt;
+  }
+
+
   private updateTimePreview(): void {
     const duration = Number(this.overrideDurationMinutes);
     if (!Number.isFinite(duration) || duration <= 0) {
@@ -209,7 +237,7 @@ export class RoomDetails implements OnInit, OnDestroy {
 
     const cx = this.ARC_CX;
     const cy = this.ARC_CY;
-    const innerR = this.ARC_R + 6;   
+    const innerR = this.ARC_R + 6;
     const minorEnd = this.ARC_R + 11;
     const majorEnd = this.ARC_R + 16;
 
@@ -239,8 +267,6 @@ export class RoomDetails implements OnInit, OnDestroy {
   }
 
   private refreshView(): void {
-    // FIXED: Swapped detectChanges() for markForCheck(). 
-    // This prevents Angular from forcing a synchronous re-render mid-cycle when observables emit.
     if (!this.destroyed) this.cdr.markForCheck();
   }
 
@@ -278,7 +304,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   get overrideIsExpired(): boolean {
     const until = this.parseOverrideUntil();
     if (!until) return false;
-    return until.getTime() < Date.now(); 
+    return until.getTime() < Date.now();
   }
 
   get overrideStatusText(): string {
@@ -308,9 +334,7 @@ export class RoomDetails implements OnInit, OnDestroy {
     event.preventDefault();
   }
 
-  onTempPointerUp(): void {
-    this.isDraggingTemp = false;
-  }
+  onTempPointerUp(): void { this.isDraggingTemp = false; }
 
   private applyTempFromPointer(event: PointerEvent, svg: SVGSVGElement): void {
     const rect = svg.getBoundingClientRect();
@@ -321,11 +345,9 @@ export class RoomDetails implements OnInit, OnDestroy {
     let angle = Math.atan2(dy, dx);
     angle = Math.max(0, Math.min(Math.PI, angle));
     const t = 1 - angle / Math.PI;
-
     const newTemp = Math.round(
       this.overrideMinTemp + t * (this.overrideMaxTemp - this.overrideMinTemp)
     );
-
     if (this.overrideTemp !== newTemp) {
       this.overrideTemp = newTemp;
       this.updateSvgCalculations();
@@ -334,14 +356,14 @@ export class RoomDetails implements OnInit, OnDestroy {
   }
 
   setOverrideDuration(minutes: number): void {
-    this.previewBaseTime = Date.now(); 
+    this.previewBaseTime = Date.now();
     this.overrideDurationMinutes = minutes;
     this.updateTimePreview();
     this.refreshView();
   }
 
   adjustDuration(delta: number): void {
-    this.previewBaseTime = Date.now(); 
+    this.previewBaseTime = Date.now();
     const next = this.overrideDurationMinutes + delta;
     this.overrideDurationMinutes = Math.max(
       this.overrideMinMinutes,

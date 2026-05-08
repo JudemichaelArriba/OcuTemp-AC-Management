@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
 import { DialogService } from '../../services/dialog.service';
+import { RateLimiter } from '../../helpers/rate-limiter';
 
 @Component({
   selector: 'app-login',
@@ -13,6 +14,8 @@ import { DialogService } from '../../services/dialog.service';
 export class LoginComponent implements OnInit {
 
   isLoggingIn = false;
+
+  private readonly rateLimiter = new RateLimiter('login_attempts', 8, 60_000);
 
   constructor(
     private authService: AuthService,
@@ -26,6 +29,15 @@ export class LoginComponent implements OnInit {
   async login(event: Event): Promise<void> {
     event.preventDefault();
 
+    if (this.rateLimiter.isBlocked()) {
+      const seconds = Math.ceil(this.rateLimiter.remainingMs() / 1000);
+      this.dialog.alert(
+        'Too Many Attempts',
+        `Too many login attempts from this device. Please wait ${seconds} seconds before trying again.`,
+      );
+      return;
+    }
+
     const form = event.target as HTMLFormElement;
     if (!form.checkValidity()) {
       form.reportValidity();
@@ -38,16 +50,20 @@ export class LoginComponent implements OnInit {
     this.isLoggingIn = true;
     this.cdr.detectChanges();
 
+    this.rateLimiter.record();
+
     try {
       const redirectTo = await this.authService.login(email, password);
+
+      this.rateLimiter.reset();
 
       this.isLoggingIn = false;
       this.cdr.detectChanges();
 
-        this.dialog.success(
+      this.dialog.success(
         'Welcome back!',
         'You have signed in successfully.',
-        () => this.router.navigate([redirectTo]) 
+        () => this.router.navigate([redirectTo]),
       );
 
     } catch (err: any) {
@@ -73,16 +89,15 @@ export class LoginComponent implements OnInit {
     }
   }
 
-
   private resolveLoginError(err: any): string {
     if (err?.message === 'not-approved') {
       return 'Your account is pending approval. Please contact Admin support.';
     }
     switch (err?.code) {
-      case 'auth/user-not-found':    return 'No account found with that email address.';
-      case 'auth/wrong-password':    return 'Incorrect password. Please try again.';
-      case 'auth/invalid-credential': return 'Invalid credentials. Please check your details.';
-      default:                        return 'Sign in failed. Please check your email and password.';
+      case 'auth/user-not-found':      return 'No account found with that email address.';
+      case 'auth/wrong-password':      return 'Incorrect password. Please try again.';
+      case 'auth/invalid-credential':  return 'Invalid credentials. Please check your details.';
+      default:                         return 'Sign in failed. Please check your email and password.';
     }
   }
 }

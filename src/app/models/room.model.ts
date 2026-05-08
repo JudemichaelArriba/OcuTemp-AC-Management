@@ -14,6 +14,8 @@ export interface Room {
   device: string;
   occupancy?: boolean;
   power?: boolean;
+  floorPlanCellId?: string;
+  floorPlanAssignedAt?: string;
   createdAt?: string;
   updatedAt?: string;
   schedules?: Schedule[];

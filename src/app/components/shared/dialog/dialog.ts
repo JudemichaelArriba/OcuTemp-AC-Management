@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { DialogService, DialogConfig, DialogType } from '../../services/dialog.service';
+import { DialogService, DialogConfig, DialogType } from '../../../services/dialog.service';
 
 export interface IconConfig {
   svg: string;
@@ -64,7 +64,7 @@ export class DialogComponent implements OnInit, OnDestroy {
   visible   = false;
   animating = false;
 
-  private sub!: Subscription;
+  private sub?: Subscription;
 
   constructor(
     private dialogService: DialogService,
@@ -92,7 +92,7 @@ export class DialogComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.sub.unsubscribe();
+    this.sub?.unsubscribe();
   }
 
   onConfirm(): void {

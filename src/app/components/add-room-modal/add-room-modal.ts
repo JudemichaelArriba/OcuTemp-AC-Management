@@ -5,8 +5,8 @@ import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { Room, Schedule } from '../../models/room.model';
 import { getRoomNameError } from '../../helpers/room-validation';
-import { DropDown, DropDownOption } from '../drop-down/drop-down';
-import { ScheduleBuilder } from '../schedule-builder/schedule-builder';
+import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
+import { ScheduleBuilder } from '../shared/schedule-builder/schedule-builder';
 import { LoggerService } from '../../services/logger.service';
 
 @Component({

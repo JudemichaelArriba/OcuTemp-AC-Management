@@ -1,0 +1,534 @@
+<div
+  class="relative w-full h-full bg-slate-100 rounded-[2.5rem] border border-slate-300 overflow-hidden shadow-2xl select-none">
+
+  <div class="absolute inset-0 pointer-events-none custom-grid-pattern z-0"></div>
+
+  <div class="absolute top-6 right-6 z-20 flex flex-col items-center gap-2">
+    <div
+      class="bg-white/70 backdrop-blur-md border border-slate-200/50 rounded-3xl p-1.5 shadow-xl flex flex-col gap-1">
+      <button (click)="zoomIn($event)"
+        class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-700 hover:bg-blue-600 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-[20px]">add</span>
+      </button>
+      <button (click)="zoomOut($event)"
+        class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-700 hover:bg-blue-600 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-[20px]">remove</span>
+      </button>
+      <div class="h-[1px] bg-slate-200/50 mx-2"></div>
+      <button (click)="resetView($event)"
+        class="w-11 h-11 rounded-2xl flex items-center justify-center text-slate-700 hover:bg-blue-600 hover:text-white transition-all">
+        <span class="material-symbols-outlined text-[20px]">filter_center_focus</span>
+      </button>
+    </div>
+    <div class="bg-slate-900/90 text-white px-4 py-1.5 rounded-full text-[11px] font-bold shadow-lg">
+      {{ zoomPercent }}%
+    </div>
+  </div>
+
+  @if (activeCellId) {
+  <div
+    class="absolute top-6 left-6 z-20 w-[min(360px,calc(100%-7rem))] bg-white/80 backdrop-blur-xl border border-white/70 p-4 rounded-[24px] shadow-2xl shadow-slate-900/10 animate-in fade-in slide-in-from-left-5">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div
+          class="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 shrink-0">
+          <span class="material-symbols-outlined">analytics</span>
+        </div>
+        <div class="min-w-0">
+          <div class="text-[10px] uppercase font-black text-slate-400 tracking-widest leading-none mb-1">
+            {{ editMode ? 'Edit Target' : 'Active Monitoring' }}
+          </div>
+          <div class="text-sm font-black text-slate-900 leading-tight truncate">{{ activeDisplayName }}</div>
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{{ activeCellId }}</div>
+        </div>
+      </div>
+      <span class="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/70"
+        [ngClass]="activeRoom?.power === true ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'">
+        {{ activeStatusText }}
+      </span>
+    </div>
+
+    @if (activeRoom) {
+    <div class="mt-4 grid grid-cols-3 gap-2">
+      <div class="rounded-2xl bg-white/70 border border-slate-200/50 p-3 shadow-sm">
+        <p class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">device_thermostat</span> Temp
+        </p>
+        <p class="text-sm font-black text-slate-900 mt-1">{{ activeTemperatureText }}</p>
+      </div>
+      <div class="rounded-2xl bg-white/70 border border-slate-200/50 p-3 shadow-sm">
+        <p class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">water_drop</span> Humid
+        </p>
+        <p class="text-sm font-black text-slate-900 mt-1">{{ activeHumidityText }}</p>
+      </div>
+      <div class="rounded-2xl bg-white/70 border border-slate-200/50 p-3 shadow-sm">
+        <p class="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">person</span> Occup
+        </p>
+        <p class="text-sm font-black text-slate-900 mt-1 truncate">{{ activeOccupancyText }}</p>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-slate-900/90 text-white px-4 py-3">
+      <div class="min-w-0">
+        <p class="text-[9px] font-black uppercase tracking-widest text-white/40">Condition</p>
+        <p class="text-[11px] font-black uppercase tracking-widest truncate">{{ activeState?.condition }}</p>
+      </div>
+      <span class="size-3 rounded-full shrink-0 border" [ngClass]="getBadgeColorClass(activeState?.visualState)"></span>
+    </div>
+    } @else {
+    <div class="mt-4 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
+      <p class="text-[11px] font-bold text-slate-500">No room is assigned to this floorplan cell.</p>
+    </div>
+    }
+  </div>
+  }
+
+  <svg #svgEl [attr.viewBox]="viewBoxString" [style.cursor]="isPanning ? 'grabbing' : 'crosshair'"
+    class="w-full h-full relative z-10" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+    version="1.1" (click)="onMapClick($event)" (mousedown)="onMouseDown($event)" (mousemove)="onMouseMove($event)"
+    (mouseup)="onMouseUp()" (mouseleave)="onMouseUp()">
+
+    <g>
+      <g data-cell-id="0">
+        <g data-cell-id="1">
+          <g data-cell-id="3-Story-Building">
+            <g>
+              <rect x="1" y="728" width="482" height="89" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-5">
+            <g>
+              <rect x="1" y="757" width="67" height="60" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-6">
+            <g>
+              <rect x="68" y="757" width="73" height="60" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-7">
+            <g>
+              <rect x="141" y="757" width="61" height="60" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-10">
+            <g>
+              <rect x="275" y="755" width="208" height="62" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-22">
+            <g>
+              <rect x="423" y="755" width="60" height="62" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Comfort-Room">
+            <g>
+              <rect x="381" y="203" width="57" height="33" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Library">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-24">
+              <g>
+                <rect x="381" y="546" width="57" height="71" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-26">
+              <g>
+                <rect x="381" y="485" width="57" height="61" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-27">
+              <g>
+                <rect x="381" y="418" width="57" height="67" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Laboratory-1">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-28">
+              <g>
+                <rect x="381" y="356" width="57" height="62" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-29">
+              <g>
+                <rect x="381" y="296" width="57" height="60" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-30">
+              <g>
+                <rect x="381" y="236" width="57" height="60" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Canteen">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-21">
+              <g>
+                <rect x="278" y="617" width="116" height="84" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-23">
+              <g>
+                <rect x="369" y="617" width="25" height="84" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Office-1">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-11">
+              <g>
+                <rect x="70" y="633" width="145" height="74" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-12">
+              <g>
+                <rect x="70" y="633" width="26" height="74" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-13">
+              <g>
+                <rect x="96" y="670" width="26" height="37" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-14">
+              <g>
+                <rect x="122" y="680" width="31" height="27" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-15">
+              <g>
+                <rect x="153" y="680" width="31" height="27" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-17">
+              <g>
+                <rect x="184" y="680" width="31" height="27" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-18">
+              <g>
+                <rect x="122" y="633" width="31" height="27" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-19">
+              <g>
+                <rect x="153" y="633" width="32" height="27" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-20">
+              <g>
+                <rect x="185" y="633" width="30" height="27" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-48">
+            <g>
+              <rect x="93" y="328" width="85" height="277" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-1">
+            <g>
+              <rect x="93" y="488" width="33" height="56" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-3">
+            <g>
+              <rect x="93" y="434" width="33" height="54" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-2">
+            <g>
+              <rect x="145" y="488" width="33" height="56" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-4">
+            <g>
+              <rect x="145" y="432" width="33" height="56" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-6">
+            <g>
+              <rect x="145" y="380" width="33" height="52" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-5">
+            <g>
+              <rect x="93" y="382" width="33" height="52" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-7">
+            <g>
+              <rect x="93" y="328" width="33" height="54" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-8">
+            <g>
+              <rect x="145" y="328" width="33" height="52" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Office-2">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-49">
+              <g>
+                <rect x="93" y="544" width="33" height="61" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-55">
+              <g>
+                <rect x="145" y="544" width="33" height="61" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Room-9">
+            <g>
+              <rect x="5" y="601" width="59" height="61" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-10">
+            <g>
+              <rect x="5" y="533" width="59" height="68" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Office-3">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-63">
+              <g>
+                <rect x="5" y="662" width="59" height="48" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-64">
+              <g>
+                <rect x="49" y="662" width="15" height="48" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Laboratory-2">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-72">
+              <g>
+                <rect x="11" y="481" width="44" height="52" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-73">
+              <g>
+                <rect x="11" y="434" width="44" height="47" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-74">
+              <g>
+                <rect x="11" y="387" width="44" height="47" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-75">
+              <g>
+                <rect x="11" y="336" width="44" height="51" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-76">
+              <g>
+                <rect x="11" y="289" width="44" height="47" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="fSvWbD-bN31pjjYDjGuF-79">
+            <g>
+              <rect x="129" y="194" width="48" height="87" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Office-4">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-78">
+              <g>
+                <rect x="34" y="194" width="143" height="87" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-80">
+              <g>
+                <rect x="55" y="194" width="59" height="30" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Office-5">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-82">
+              <g>
+                <rect x="50" y="135" width="129" height="44" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-83">
+              <g>
+                <rect x="97" y="158" width="33" height="21" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-85">
+              <g>
+                <rect x="97" y="135" width="33" height="23" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-86">
+              <g>
+                <rect x="129" y="135" width="25" height="23" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-87">
+              <g>
+                <rect x="131" y="158" width="24" height="21" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-88">
+              <g>
+                <rect x="155" y="158" width="24" height="21" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-89">
+              <g>
+                <rect x="155" y="135" width="24" height="23" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Office-6">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-100">
+              <g>
+                <rect x="81" y="83" width="98" height="45" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-101">
+              <g>
+                <rect x="107" y="106" width="26" height="22" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-102">
+              <g>
+                <rect x="107" y="83" width="26" height="23" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-103">
+              <g>
+                <rect x="133" y="106" width="16" height="22" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+          <g data-cell-id="Laboratory-3">
+            <g>
+              <rect x="13" y="1" width="93" height="50" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-12">
+            <g>
+              <rect x="434" y="23" width="54" height="60" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-11">
+            <g>
+              <rect x="434" y="83" width="54" height="56" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-14">
+            <g>
+              <rect x="501" y="23" width="54" height="59" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-13">
+            <g>
+              <rect x="501" y="82" width="54" height="57" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-17">
+            <g>
+              <rect x="565" y="23" width="54" height="59" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-16">
+            <g>
+              <rect x="565" y="82" width="54" height="57" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Room-15">
+            <g>
+              <rect x="565" y="139" width="54" height="57" fill="none" pointer-events="all" />
+            </g>
+          </g>
+          <g data-cell-id="Laboratory-4">
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-113">
+              <g>
+                <rect x="357" y="60" width="62" height="80" fill="none" pointer-events="all" />
+              </g>
+            </g>
+            <g data-cell-id="fSvWbD-bN31pjjYDjGuF-114">
+              <g>
+                <rect x="386" y="107" width="33" height="33" fill="none" pointer-events="all" />
+              </g>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+
+
+    <foreignObject x="0" y="0" width="100%" height="100%" class="pointer-events-none" style="overflow: visible;">
+      <div class="relative w-full h-full pointer-events-none" xmlns="http://www.w3.org/1999/xhtml">
+        @for (overlay of overlays; track overlay.cellId) {
+        <div class="absolute pointer-events-auto" [style.left.px]="overlay.x" [style.top.px]="overlay.y"
+          [style.width.px]="overlay.width" [style.height.px]="overlay.height" (mouseenter)="overlay.showTooltip = true"
+          (mouseleave)="overlay.showTooltip = false" (click)="activateRoomFromOverlay($event, overlay.cellId)">
+
+
+          <div
+            class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full border border-white/60 transition-transform duration-300 hover:scale-125"
+            [ngClass]="getBadgeColorClass(overlay.state.visualState)">
+          </div>
+
+          @if (overlay.room.power !== true) {
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span
+              class="text-[10px] font-black text-slate-700/90 tracking-tighter drop-shadow-sm bg-white/50 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/40">
+              OFF
+            </span>
+          </div>
+          } @else if (overlay.room.temperature !== undefined) {
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span
+              class="text-[10px] font-black text-slate-700/90 tracking-tighter drop-shadow-sm bg-white/50 px-1.5 py-0.5 rounded backdrop-blur-sm border border-white/40">
+              {{ overlay.room.temperature | number:'1.0-1' }}°
+            </span>
+          </div>
+          }
+
+
+          @if (overlay.showTooltip) {
+          <div
+            class="absolute bottom-full mb-3 left-1/2 transform -translate-x-1/2 w-max bg-white/95 backdrop-blur-xl border border-slate-200 p-3 rounded-[1rem] shadow-2xl z-50 text-center pointer-events-none animate-in zoom-in-95 fade-in duration-200">
+            <div class="text-[10px] font-black uppercase tracking-widest text-slate-800 mb-1">
+              {{ overlay.room.roomName || overlay.cellId }}
+            </div>
+            <div class="flex items-center justify-center gap-1.5 mb-2.5">
+              <span class="w-2 h-2 rounded-full border border-white/50"
+                [ngClass]="getBadgeColorClass(overlay.state.visualState)"></span>
+              <span class="text-[9px] font-bold uppercase tracking-widest text-slate-500">{{ overlay.state.condition
+                }}</span>
+            </div>
+
+
+            <div
+              class="flex gap-3 text-[11px] font-bold text-slate-700 bg-slate-100/80 border border-slate-200/50 rounded-xl px-3 py-2 shadow-inner">
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px] text-slate-500">device_thermostat</span>
+                {{ overlay.room.temperature !== undefined ? (overlay.room.temperature | number:'1.0-1') + '°' : '--' }}
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px] text-blue-400">water_drop</span>
+                {{ overlay.room.humidity !== undefined ? (overlay.room.humidity | number:'1.0-1') + '%' : '--' }}
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px] text-emerald-500">person</span>
+                {{ overlay.room.occupancy ? 'Occupied' : 'Empty' }}
+              </span>
+            </div>
+
+            <div
+              class="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-white border-b border-r border-slate-200 rotate-45 pointer-events-none">
+            </div>
+          </div>
+          }
+        </div>
+        }
+      </div>
+    </foreignObject>
+
+  </svg>
+</div>

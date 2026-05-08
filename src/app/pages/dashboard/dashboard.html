@@ -1,14 +1,18 @@
 <main class="flex-1 flex flex-col font-sans min-h-0 bg-slate-50/60">
-  <header class="px-4 pt-6 pb-2">
+  <header [class.animate-fade-in]="useFadeIn" class="px-4 pt-6 pb-2">
     <div class="max-w-[1800px] mx-auto">
-      <div class="relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white/70 backdrop-blur-xl border border-white rounded-[2rem] px-8 py-6 shadow-xl shadow-slate-200/60">
-        
-        <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div class="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-400/5 rounded-full blur-3xl pointer-events-none"></div>
-        
+      <div
+        class="relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-white/70 backdrop-blur-xl border border-white rounded-[2rem] px-8 py-6 shadow-xl shadow-slate-200/60">
+        <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-400/10 rounded-full blur-3xl pointer-events-none">
+        </div>
+        <div class="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-400/5 rounded-full blur-3xl pointer-events-none">
+        </div>
+
         <div class="relative z-10">
           <div class="flex items-center gap-2 mb-2">
-            <span class="px-3 py-1 rounded-full text-[9px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">Building Intelligence</span>
+            <span
+              class="px-3 py-1 rounded-full text-[9px] font-black bg-blue-600 text-white uppercase tracking-[0.2em] shadow-lg shadow-blue-200">Building
+              Intelligence</span>
           </div>
           <h2 class="text-3xl font-black tracking-tight text-slate-900 leading-none">
             Room <span class="text-blue-600">Status Dashboard</span>
@@ -17,9 +21,11 @@
         </div>
 
         <div class="flex items-center gap-4 relative z-10">
-          <div class="flex items-center gap-4 text-[10px] font-black text-slate-600 bg-white/50 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-slate-200/50 shadow-sm">
+          <div
+            class="flex items-center gap-4 text-[10px] font-black text-slate-600 bg-white/50 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-slate-200/50 shadow-sm">
             <span class="flex items-center gap-2 uppercase tracking-widest">
-              <span class="size-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)] animate-pulse"></span>
+              <span
+                class="size-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)] animate-pulse"></span>
               Active
             </span>
             <div class="w-px h-3 bg-slate-300"></div>
@@ -35,31 +41,50 @@
 
   <div class="px-4 pt-4 pb-4">
     <div class="max-w-[1800px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
-      
-      <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-blue-300 shadow-sm transition-all group active:scale-[0.98]">
+
+      @if (!isReady) {
+
+      @for (_ of [1,2,3,4]; track $index) {
+      <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm animate-pulse">
+        <div class="flex justify-between items-start mb-6">
+          <div class="w-12 h-12 bg-slate-100 rounded-2xl"></div>
+          <div class="w-16 h-5 bg-slate-100 rounded-lg"></div>
+        </div>
+        <div>
+          <div class="w-24 h-3 bg-slate-100 rounded mb-3"></div>
+          <div class="w-16 h-8 bg-slate-200 rounded"></div>
+        </div>
+      </div>
+      }
+      } @else {
+
+      <div [class.animate-fade-in]="useFadeIn"
+        class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-blue-300 shadow-sm transition-all group active:scale-[0.98]">
         <div class="flex justify-between items-start mb-4">
           <div class="bg-blue-50 p-3 rounded-2xl text-blue-600 transition-colors duration-300">
             <span class="material-symbols-outlined text-xl">bolt</span>
           </div>
-          <span class="inline-flex items-center gap-1 text-slate-500 text-[10px] font-black bg-slate-50 px-2 py-1 rounded-lg uppercase tracking-widest">
-            Today
-          </span>
+          <span
+            class="inline-flex items-center gap-1 text-slate-500 text-[10px] font-black bg-slate-50 px-2 py-1 rounded-lg uppercase tracking-widest">Today</span>
         </div>
         <div>
           <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Energy Consumption</p>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-slate-900 tracking-tight">{{ totalEnergyToday | number:'1.0-1' }}</span>
+            <span class="text-2xl font-black text-slate-900 tracking-tight">{{ totalEnergyToday | number:'1.0-1'
+              }}</span>
             <span class="text-xs font-bold text-slate-400">kWh</span>
           </div>
         </div>
       </div>
 
-      <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-orange-300 shadow-sm transition-all group active:scale-[0.98]">
+      <div [class.animate-fade-in]="useFadeIn" style="animation-delay: 0.05s;"
+        class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-orange-300 shadow-sm transition-all group active:scale-[0.98] fill-mode-both">
         <div class="flex justify-between items-start mb-4">
           <div class="bg-orange-50 p-3 rounded-2xl text-orange-600 transition-colors duration-300">
             <span class="material-symbols-outlined text-xl">device_thermostat</span>
           </div>
-          <span class="inline-flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg uppercase tracking-tighter">
+          <span
+            class="inline-flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg uppercase tracking-tighter">
             <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
           </span>
         </div>
@@ -67,95 +92,154 @@
           <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Climate Average</p>
           <span class="text-2xl font-black text-slate-900 tracking-tight">
             @if (avgTemperature > 0) {
-              {{ avgTemperature | number:'1.1-1' }}<span class="text-orange-500">°C</span>
+            {{ avgTemperature | number:'1.1-1' }}<span class="text-orange-500">°C</span>
             } @else {
-              -- <span class="text-orange-500">°C</span>
+            -- <span class="text-orange-500">°C</span>
             }
           </span>
         </div>
       </div>
 
-      <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-emerald-300 shadow-sm transition-all group active:scale-[0.98]">
+      <div [class.animate-fade-in]="useFadeIn" style="animation-delay: 0.1s;"
+        class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-emerald-300 shadow-sm transition-all group active:scale-[0.98] fill-mode-both">
         <div class="flex justify-between items-start mb-4">
           <div class="bg-emerald-50 p-3 rounded-2xl text-emerald-600 transition-colors duration-300">
             <span class="material-symbols-outlined text-xl">directions_walk</span>
           </div>
-          <span class="text-[10px] font-black text-slate-900 bg-slate-50 px-2 py-1 rounded-lg">{{ occupiedZones }} / {{ totalRooms }}</span>
+          <span class="text-[10px] font-black text-slate-900 bg-slate-50 px-2 py-1 rounded-lg">{{ occupiedZones }} / {{
+            totalRooms }}</span>
         </div>
         <div class="space-y-3">
           <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest">Occupied Zones</p>
           <div class="flex items-center gap-3">
             <div class="flex-grow bg-slate-100 rounded-full h-2.5 overflow-hidden">
-              <div class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000" [style.width.%]="totalRooms ? (occupiedZones / totalRooms * 100) : 0"></div>
+              <div
+                class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000"
+                [style.width.%]="totalRooms ? (occupiedZones / totalRooms * 100) : 0"></div>
             </div>
-            <span class="text-sm font-black text-slate-900">{{ totalRooms ? (occupiedZones / totalRooms * 100 | number:'1.0-0') : 0 }}%</span>
+            <span class="text-sm font-black text-slate-900">{{ totalRooms ? (occupiedZones / totalRooms * 100 |
+              number:'1.0-0') : 0 }}%</span>
           </div>
         </div>
       </div>
 
-      <div class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-rose-300 shadow-sm transition-all group active:scale-[0.98]">
+      <div [class.animate-fade-in]="useFadeIn" style="animation-delay: 0.15s;"
+        class="bg-white p-5 rounded-3xl border border-slate-100 hover:border-rose-300 shadow-sm transition-all group active:scale-[0.98] fill-mode-both">
         <div class="flex justify-between items-start mb-4">
           <div class="bg-rose-50 p-3 rounded-2xl text-rose-600 transition-colors duration-300">
             <span class="material-symbols-outlined text-xl">admin_panel_settings</span>
           </div>
           @if (activeOverrides > 0) {
-            <div class="size-6 flex items-center justify-center">
-              <span class="size-2 rounded-full bg-rose-500 animate-ping"></span>
-            </div>
+          <div class="size-6 flex items-center justify-center">
+            <span class="size-2 rounded-full bg-rose-500 animate-ping"></span>
+          </div>
           }
         </div>
         <div>
           <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Active Overrides</p>
-          <span class="text-2xl font-black text-slate-900 tracking-tight">{{ activeOverrides }}<span class="text-slate-400 text-sm ml-1">rooms</span></span>
+          <span class="text-2xl font-black text-slate-900 tracking-tight">{{ activeOverrides }}<span
+              class="text-slate-400 text-sm ml-1">rooms</span></span>
         </div>
       </div>
-
+      }
     </div>
   </div>
 
   <div class="px-4 pb-4">
     <div class="max-w-[1800px] mx-auto w-full">
       <div class="bg-white/80 backdrop-blur-md border border-white rounded-[2rem] shadow-xl shadow-slate-200/50 p-6">
-        <div class="flex items-center justify-between mb-8 px-2">
+
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 px-2 gap-4">
           <div class="flex items-center gap-3">
             <div class="w-2 h-6 bg-blue-600 rounded-full"></div>
             <h3 class="font-black text-slate-900 text-lg tracking-tight">Facility Zones</h3>
           </div>
+
+
+          <div
+            class="relative grid grid-cols-2 items-center bg-slate-100/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/50 shadow-inner">
+
+
+            <div
+              class="absolute inset-y-1.5 left-1.5 w-[calc(50%-0.375rem)] bg-blue-600 rounded-xl shadow-lg shadow-blue-200 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              [class.translate-x-0]="viewMode === 'cards'" [class.translate-x-full]="viewMode === 'map'">
+            </div>
+
+
+            <button (click)="viewMode = 'cards'"
+              [class]="viewMode === 'cards' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
+              class="relative z-10 px-6 py-2.5 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
+              Card Directory
+            </button>
+            <button (click)="viewMode = 'map'"
+              [class]="viewMode === 'map' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
+              class="relative z-10 px-6 py-2.5 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
+              Floor Plan
+            </button>
+          </div>
+
+
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-[1200px] mx-auto">
-          @if (isLoading) {
+        <div class="w-full max-w-[1200px] mx-auto min-h-[500px]">
+          @if (viewMode === 'cards') {
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            @if (!isReady) {
+
             @for (_ of [1,2,3]; track $index) {
-              <div class="w-full h-64 rounded-3xl bg-white border border-slate-100 p-6 animate-pulse shadow-sm">
-                <div class="flex justify-between items-start mb-6">
-                  <div class="w-12 h-12 bg-slate-100 rounded-2xl"></div>
-                  <div class="w-3 h-3 bg-slate-100 rounded-full"></div>
-                </div>
-                <div class="h-4 bg-slate-100 rounded w-1/2 mb-2"></div>
-                <div class="h-3 bg-slate-50 rounded w-1/3 mb-8"></div>
-                <div class="space-y-3">
-                  <div class="h-2 bg-slate-50 rounded"></div>
-                  <div class="h-2 bg-slate-50 rounded"></div>
-                </div>
+            <div class="w-full h-64 rounded-3xl bg-white border border-slate-100 p-6 animate-pulse shadow-sm">
+              <div class="flex justify-between items-start mb-6">
+                <div class="w-12 h-12 bg-slate-100 rounded-2xl"></div>
+                <div class="w-3 h-3 bg-slate-100 rounded-full"></div>
               </div>
+              <div class="h-4 bg-slate-100 rounded w-1/2 mb-2"></div>
+              <div class="h-3 bg-slate-50 rounded w-1/3 mb-8"></div>
+              <div class="space-y-3">
+                <div class="h-2 bg-slate-50 rounded"></div>
+                <div class="h-2 bg-slate-50 rounded"></div>
+              </div>
+            </div>
             }
-          } @else {
+            } @else {
+
             @for (room of rooms; track room.uid){
-              <app-room-card class="w-full hover:-translate-y-1 transition-transform duration-300" [room]="room"></app-room-card>
+            <app-room-card [class.animate-fade-in]="useFadeIn"
+              class="w-full hover:-translate-y-1 transition-transform duration-300" [room]="room"></app-room-card>
             }
+
             @if (rooms.length === 0) {
-              <div class="col-span-1 md:col-span-2 lg:col-span-3 w-full text-center py-20 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
-                <span class="material-symbols-outlined text-slate-300 text-5xl mb-2">search_off</span>
-                <p class="text-slate-400 text-sm font-black uppercase tracking-widest">No matching rooms found</p>
-              </div>
+            <div [class.animate-fade-in]="useFadeIn"
+              class="col-span-1 md:col-span-2 lg:col-span-3 w-full text-center py-20 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
+              <span class="material-symbols-outlined text-slate-300 text-5xl mb-2">search_off</span>
+              <p class="text-slate-400 text-sm font-black uppercase tracking-widest">No matching rooms found</p>
+            </div>
             }
+            }
+          </div>
+          } @else {
+          <div [class.animate-fade-in]="useFadeIn"
+            class="w-full h-[600px] rounded-2xl overflow-hidden border border-slate-100 shadow-inner bg-slate-50">
+            <app-floor-plan [rooms]="rooms" (roomSelected)="onMapRoomSelected($event)">
+            </app-floor-plan>
+          </div>
           }
         </div>
+
       </div>
     </div>
   </div>
 
-  <div class="px-4 pb-8">
+
+  @if (isReady) {
+  <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <app-energy-trend-widget [energyData]="rawEnergyData">
+      </app-energy-trend-widget>
+    </div>
+  </div>
+  }
+  <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-8">
     <div class="max-w-[1800px] mx-auto w-full">
       <div class="bg-white border border-slate-100 rounded-[2.5rem] shadow-xl shadow-slate-200/40 p-8">
         <div class="flex items-center justify-between mb-6">
@@ -163,38 +247,47 @@
             <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
               <span class="material-symbols-outlined text-base">psychology</span>
             </div>
-            <h3 class="font-black text-slate-900 text-sm uppercase tracking-widest">Recent AI Adjustments</h3>
+            <h3 class="font-black text-slate-900 text-sm uppercase tracking-widest">Recent Activities</h3>
           </div>
-          <button class="text-[10px] font-black text-blue-600 hover:text-indigo-600 transition-colors uppercase tracking-[0.2em] flex items-center gap-1">
+          <button
+            class="text-[10px] font-black text-blue-600 hover:text-indigo-600 transition-colors uppercase tracking-[0.2em] flex items-center gap-1">
             Activity Log <span class="material-symbols-outlined text-xs">arrow_forward</span>
           </button>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="group flex items-start gap-4 p-5 bg-gradient-to-br from-amber-50/50 to-orange-50 border border-amber-100 rounded-3xl transition-all hover:shadow-lg hover:shadow-orange-200/20">
-            <div class="bg-amber-500 text-white p-2.5 rounded-2xl shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform">
+          <div
+            class="group flex items-start gap-4 p-5 bg-gradient-to-br from-amber-50/50 to-orange-50 border border-amber-100 rounded-3xl transition-all hover:shadow-lg hover:shadow-orange-200/20">
+            <div
+              class="bg-amber-500 text-white p-2.5 rounded-2xl shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-base">trending_up</span>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-black text-slate-800 mb-1 leading-snug">Room 101: Cooling increased due to high occupancy detected</p>
+              <p class="text-sm font-black text-slate-800 mb-1 leading-snug">Room 101: Cooling increased due to high
+                occupancy detected</p>
               <div class="flex items-center gap-3">
                 <span class="text-[10px] text-slate-500 font-black">2 MIN AGO</span>
                 <span class="w-1 h-1 rounded-full bg-slate-300"></span>
-                <span class="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest">Automated</span>
+                <span
+                  class="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest">Automated</span>
               </div>
             </div>
           </div>
 
-          <div class="group flex items-start gap-4 p-5 bg-gradient-to-br from-emerald-50/50 to-teal-50 border border-emerald-100 rounded-3xl transition-all hover:shadow-lg hover:shadow-emerald-200/20">
-            <div class="bg-emerald-500 text-white p-2.5 rounded-2xl shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
+          <div
+            class="group flex items-start gap-4 p-5 bg-gradient-to-br from-emerald-50/50 to-teal-50 border border-emerald-100 rounded-3xl transition-all hover:shadow-lg hover:shadow-emerald-200/20">
+            <div
+              class="bg-emerald-500 text-white p-2.5 rounded-2xl shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-base">eco</span>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-sm font-black text-slate-800 mb-1 leading-snug">Conf. Room B: Switched to Eco-Mode (Vacant &gt; 30m)</p>
+              <p class="text-sm font-black text-slate-800 mb-1 leading-snug">Conf. Room B: Switched to Eco-Mode (Vacant
+                &gt; 30m)</p>
               <div class="flex items-center gap-3">
                 <span class="text-[10px] text-slate-500 font-black">15 MIN AGO</span>
                 <span class="w-1 h-1 rounded-full bg-slate-300"></span>
-                <span class="px-2 py-0.5 rounded-md bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest">Policy</span>
+                <span
+                  class="px-2 py-0.5 rounded-md bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest">Policy</span>
               </div>
             </div>
           </div>

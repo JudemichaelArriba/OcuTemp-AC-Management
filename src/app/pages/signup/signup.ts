@@ -3,7 +3,8 @@ import { Router } from '@angular/router';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
 import { DialogService } from '../../services/dialog.service';
-import { PASSWORD_PATTERN, PASSWORD_HELP_TEXT } from '../../helpers/auth-validation';
+import { PASSWORD_PATTERN } from '../../helpers/auth-validation';
+import { RateLimiter } from '../../helpers/rate-limiter';
 
 @Component({
   selector: 'app-signup',
@@ -15,15 +16,26 @@ export class SignupComponent {
 
   isSigningUp = false;
 
+  private readonly rateLimiter = new RateLimiter('signup_attempts', 5, 300_000);
+
   constructor(
     private authService: AuthService,
     private router: Router,
     private cdr: ChangeDetectorRef,
     private dialog: DialogService,
-  ) { }
+  ) {}
 
   async signup(event: Event): Promise<void> {
     event.preventDefault();
+
+    if (this.rateLimiter.isBlocked()) {
+      const minutes = Math.ceil(this.rateLimiter.remainingMs() / 60_000);
+      this.dialog.alert(
+        'Too Many Attempts',
+        `Too many sign-up attempts from this device. Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} before trying again.`,
+      );
+      return;
+    }
 
     const form = event.target as HTMLFormElement;
     if (!form.checkValidity()) {
@@ -31,10 +43,10 @@ export class SignupComponent {
       return;
     }
 
-    const firstName = (form.querySelector('#firstName') as HTMLInputElement).value.trim();
-    const lastName = (form.querySelector('#lastName') as HTMLInputElement).value.trim();
-    const email = (form.querySelector('#email') as HTMLInputElement).value.trim();
-    const password = (form.querySelector('#password') as HTMLInputElement).value;
+    const firstName       = (form.querySelector('#firstName')       as HTMLInputElement).value.trim();
+    const lastName        = (form.querySelector('#lastName')        as HTMLInputElement).value.trim();
+    const email           = (form.querySelector('#email')           as HTMLInputElement).value.trim();
+    const password        = (form.querySelector('#password')        as HTMLInputElement).value;
     const confirmPassword = (form.querySelector('#confirmPassword') as HTMLInputElement).value;
 
     if (password !== confirmPassword) {
@@ -53,8 +65,12 @@ export class SignupComponent {
     this.isSigningUp = true;
     this.cdr.detectChanges();
 
+    this.rateLimiter.record();
+
     try {
       await this.authService.signup(firstName, lastName, email, password);
+
+      this.rateLimiter.reset();
 
       this.isSigningUp = false;
       this.cdr.detectChanges();
@@ -74,14 +90,12 @@ export class SignupComponent {
     }
   }
 
-
-
   private resolveSignupError(err: any): string {
     switch (err?.code) {
       case 'auth/email-already-in-use': return 'This email address is already registered.';
-      case 'auth/invalid-email': return 'The email address entered is not valid.';
-      case 'auth/weak-password': return 'The password provided is too weak.';
-      default: return 'Sign up failed. Please try again.';
+      case 'auth/invalid-email':        return 'The email address entered is not valid.';
+      case 'auth/weak-password':        return 'The password provided is too weak.';
+      default:                          return 'Sign up failed. Please try again.';
     }
   }
 }
