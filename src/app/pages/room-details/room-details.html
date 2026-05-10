@@ -209,6 +209,94 @@
             @if (room.device) {
             <div
                 class="bg-white/90 backdrop-blur-xl rounded-[2.5rem] border border-white p-8 shadow-xl shadow-slate-200/40">
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-200 shrink-0">
+                            <span class="material-symbols-outlined text-white text-xl">psychology</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-[10px] text-blue-500 uppercase font-black tracking-widest">AI Auto-Apply</p>
+                            <h2 class="text-lg font-black text-slate-900 uppercase tracking-tight truncate">Smart
+                                Temperature Control</h2>
+                        </div>
+                    </div>
+                    <span [class]="aiAutoApplyBadgeClass"
+                        class="px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-md border border-white w-fit">
+                        {{ aiAutoApplyStatusText }}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-[1fr_1.7fr] gap-5">
+                    <div
+                        class="bg-slate-50/60 rounded-[2rem] p-6 border border-slate-100 flex items-center justify-between gap-5">
+                        <div class="min-w-0">
+                            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Auto Apply</p>
+                            <p class="text-2xl font-black mt-2"
+                                [ngClass]="aiAutoApplyEnabled ? 'text-blue-700' : 'text-slate-800'">
+                                {{ aiAutoApplyEnabled ? 'On' : 'Off' }}
+                            </p>
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2 truncate">
+                                {{ room.device }}
+                            </p>
+                        </div>
+
+                        <button type="button" role="switch" [attr.aria-checked]="aiAutoApplyEnabled"
+                            [attr.aria-label]="aiAutoApplyAriaLabel" [disabled]="aiAutoApplySwitchDisabled"
+                            (click)="toggleAiAutoApply()"
+                            class="relative inline-flex h-8 w-14 shrink-0 items-center rounded-full border border-white shadow-sm transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:ring-offset-2 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50"
+                            [ngClass]="aiAutoApplyEnabled ? 'bg-blue-600 shadow-blue-500/30' : 'bg-slate-200'">
+                            <span class="sr-only">{{ aiAutoApplyAriaLabel }}</span>
+                            <span
+                                class="pointer-events-none inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-lg ring-1 ring-black/5 transition-transform duration-200"
+                                [ngClass]="aiAutoApplyEnabled ? 'translate-x-7' : 'translate-x-1'">
+                                @if (isSavingAiAutoApply) {
+                                <span
+                                    class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                                }
+                            </span>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                            <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest">Suggested</p>
+                            <p class="text-xl font-black text-slate-800 mt-2">
+                                {{ aiSuggestedTempText }}
+                                @if (aiSuggestedTempText !== '--') {
+                                <span class="text-xs text-blue-500">&deg;C</span>
+                                }
+                            </p>
+                        </div>
+                        <div class="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                            <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest">Result</p>
+                            <p class="text-xs font-black text-slate-800 mt-3 uppercase tracking-widest">
+                                {{ aiSuggestionAppliedText }}
+                            </p>
+                        </div>
+                        <div class="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                            <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest">Reason</p>
+                            <p class="text-xs font-black text-slate-800 mt-3 uppercase tracking-tight truncate">
+                                {{ aiSuggestionReasonText }}
+                            </p>
+                        </div>
+                        <div class="bg-slate-50/50 rounded-2xl p-5 border border-slate-100">
+                            <p class="text-[9px] text-slate-400 font-black uppercase tracking-widest">AI Update</p>
+                            <p class="text-[10px] font-black text-slate-800 mt-3 leading-tight">
+                                {{ aiSuggestionUpdatedAt ? (aiSuggestionUpdatedAt | date:'h:mm a, MMM d') : '--' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                @if (!canManualOverride) {
+                <div class="mt-5 bg-slate-50/70 border border-slate-100 rounded-[2rem] px-5 py-4">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Restricted Access</p>
+                </div>
+                }
+            </div>
+
+            <div
+                class="bg-white/90 backdrop-blur-xl rounded-[2.5rem] border border-white p-8 shadow-xl shadow-slate-200/40">
                 <div class="flex items-center justify-between mb-8">
                     <div class="flex items-center gap-3">
                         <div class="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-200">

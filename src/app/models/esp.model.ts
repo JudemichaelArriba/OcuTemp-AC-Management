@@ -1,3 +1,15 @@
+export interface DeviceMlSuggestion {
+  applied?: boolean;
+  autoApplyEnabled?: boolean;
+  currentRoomTemp?: number;
+  humidity?: number;
+  reason?: string;
+  roomUid?: string;
+  source?: string;
+  suggestedTemp?: number;
+  updatedAt?: string;
+}
+
 export interface Device {
   uid: string;         
   temperature?: number;
@@ -18,5 +30,14 @@ export interface Device {
     requestedAt?: string;
     requestedBy?: string;
     roomUid?: string;
+    aiAutoApply?: boolean;
   };
+  mlSuggestion?: DeviceMlSuggestion;
+  status?: DeviceStatus;
+}
+
+
+export interface DeviceStatus {
+  ip?: string;
+  lastSeen?: string;
 }

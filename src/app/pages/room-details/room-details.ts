@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RoomService } from '../../services/room.service';
-import { DeviceService, DeviceTelemetry, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
+import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service'; // ← remove DeviceTelemetry
+import { Device } from '../../models/esp.model'; // ← add Device
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
 import { DialogService } from '../../services/dialog.service';
@@ -27,7 +28,7 @@ interface TempTick {
 })
 export class RoomDetails implements OnInit, OnDestroy {
   room: Room | null = null;
-  deviceData: DeviceTelemetry | null = null;
+  deviceData: Device | null = null; // ← DeviceTelemetry → Device
   loading = true;
   error: string | null = null;
   isEditModalOpen = false;
@@ -43,6 +44,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   overrideTemp = 24;
   overrideDurationMinutes = 60;
   isSavingOverride = false;
+  isSavingAiAutoApply = false;
   private overrideInitialized = false;
   private currentUserId: string | null = null;
 
@@ -164,7 +166,7 @@ export class RoomDetails implements OnInit, OnDestroy {
 
   private streamDeviceData(deviceId: string) {
     this.unsubscribeDevices = this.deviceService.streamDevice(deviceId, (device) => {
-      this.deviceData = device;
+      this.deviceData = device; // ← Device | null, matches perfectly
 
       if (!this.overrideInitialized) {
         const suggestedTemp = device?.control?.targetTemp ?? device?.acState?.currentTemp;
@@ -184,8 +186,6 @@ export class RoomDetails implements OnInit, OnDestroy {
       this.refreshView();
     });
   }
-
-
 
   get deviceOnlineState(): DeviceOnlineState {
     if (!this.room?.device) return 'unknown';
@@ -209,10 +209,10 @@ export class RoomDetails implements OnInit, OnDestroy {
       default:        return 'text-slate-400';
     }
   }
+
   get lastHeartbeatTimestamp(): string | undefined {
     return this.deviceData?.status?.lastSeen ?? this.deviceData?.acState?.updatedAt;
   }
-
 
   private updateTimePreview(): void {
     const duration = Number(this.overrideDurationMinutes);
@@ -317,6 +317,56 @@ export class RoomDetails implements OnInit, OnDestroy {
     if (this.overrideIsActive && !this.overrideIsExpired) return 'bg-emerald-100 text-emerald-700';
     if (this.overrideIsActive && this.overrideIsExpired) return 'bg-amber-100 text-amber-700';
     return 'bg-slate-100 text-slate-600';
+  }
+
+  get aiAutoApplyEnabled(): boolean {
+    return this.deviceData?.mlSuggestion?.autoApplyEnabled === true;
+  }
+
+  get aiAutoApplySwitchDisabled(): boolean {
+    return (
+      !this.room?.device ||
+      this.deviceData === null ||
+      !this.canManualOverride ||
+      this.isSavingAiAutoApply
+    );
+  }
+
+  get aiAutoApplyStatusText(): string {
+    if (!this.room?.device) return 'NO DEVICE';
+    if (this.deviceData === null) return 'SYNCING';
+    return this.aiAutoApplyEnabled ? 'ENABLED' : 'DISABLED';
+  }
+
+  get aiAutoApplyBadgeClass(): string {
+    if (this.deviceData === null) return 'bg-slate-100 text-slate-500';
+    return this.aiAutoApplyEnabled ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600';
+  }
+
+  get aiAutoApplyAriaLabel(): string {
+    const roomName = this.room?.roomName ?? 'this room';
+    return `${this.aiAutoApplyEnabled ? 'Disable' : 'Enable'} AI auto apply for ${roomName}`;
+  }
+
+  get aiSuggestedTempText(): string {
+    const suggestedTemp = this.deviceData?.mlSuggestion?.suggestedTemp;
+    return typeof suggestedTemp === 'number' ? `${suggestedTemp}` : '--';
+  }
+
+  get aiSuggestionAppliedText(): string {
+    const applied = this.deviceData?.mlSuggestion?.applied;
+    if (applied === true) return 'APPLIED';
+    if (applied === false) return 'PENDING';
+    return '--';
+  }
+
+  get aiSuggestionReasonText(): string {
+    const reason = this.deviceData?.mlSuggestion?.reason;
+    return reason ? reason.replace(/_/g, ' ') : '--';
+  }
+
+  get aiSuggestionUpdatedAt(): string | undefined {
+    return this.deviceData?.mlSuggestion?.updatedAt;
   }
 
   onTempPointerDown(event: PointerEvent): void {
@@ -452,6 +502,22 @@ export class RoomDetails implements OnInit, OnDestroy {
       'Disable Override',
       'Cancel'
     );
+  }
+
+  async toggleAiAutoApply(): Promise<void> {
+    if (this.aiAutoApplySwitchDisabled || !this.room?.device) return;
+
+    this.isSavingAiAutoApply = true;
+    this.refreshView();
+    try {
+      await this.deviceService.setAiAutoApplyEnabled(this.room.device, !this.aiAutoApplyEnabled);
+    } catch (err) {
+      this.logger.error('Failed to update AI auto-apply:', err);
+      this.dialogService.error('AI Toggle Failed', 'Unable to update AI auto-apply. Please try again.');
+    } finally {
+      this.isSavingAiAutoApply = false;
+      this.refreshView();
+    }
   }
 
   get environmentalTemperature(): number | null {

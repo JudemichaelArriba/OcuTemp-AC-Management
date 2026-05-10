@@ -1,5 +1,5 @@
 import { Room } from '../models/room.model';
-import { DeviceTelemetry } from '../services/device.service';
+import { Device } from '../models/esp.model';
 
 export interface MergeTelemetryOptions {
   fallbackToRoomPower?: boolean;
@@ -8,7 +8,7 @@ export interface MergeTelemetryOptions {
 
 export function mergeRoomsWithTelemetry(
   rooms: Room[],
-  deviceMap: Record<string, DeviceTelemetry>,
+  deviceMap: Record<string, Device>,
   options: MergeTelemetryOptions = {}
 ): Room[] {
   const fallbackToRoomPower = options.fallbackToRoomPower ?? false;

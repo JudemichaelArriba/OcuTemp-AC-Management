@@ -2,7 +2,8 @@ import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRe
 import { DecimalPipe } from '@angular/common';
 import { Room } from '../../models/room.model';
 import { RoomService } from '../../services/room.service';
-import { DeviceService, DeviceTelemetry } from '../../services/device.service';
+import { DeviceService } from '../../services/device.service';
+import { Device } from '../../models/esp.model';
 import { EnergyReportService, getTodayKey, sumKwhByDate } from '../../services/energy-report.service';
 import { RoomCard } from '../../components/room-card/room-card';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
@@ -41,7 +42,7 @@ export class Dashboard implements OnInit, OnDestroy {
   activeOverrides: number = 0;
 
   private baseRooms: Room[] = [];
-  private deviceMap: Record<string, DeviceTelemetry> = {};
+  private deviceMap: Record<string, Device> = {};
 
   private stopRoomStream?: () => void;
   private stopDevicesStream?: () => void;

@@ -4,7 +4,8 @@ import { Room } from '../../models/room.model';
 import { FormsModule } from '@angular/forms';
 import { RoomCard } from '../../components/room-card/room-card';
 import { RoomService } from '../../services/room.service';
-import { DeviceService, DeviceTelemetry } from '../../services/device.service';
+import { DeviceService } from '../../services/device.service';
+import { Device } from '../../models/esp.model';
 import { DialogService } from '../../services/dialog.service';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { AuthStateService } from '../../services/auth-state.service';
@@ -44,7 +45,7 @@ export class RoomManagement implements OnInit, OnDestroy {
   private isDevicesLoaded = false;
 
   private baseRooms: Room[] = [];
-  private deviceMap: Record<string, DeviceTelemetry> = {};
+  private deviceMap: Record<string, Device> = {};
   private stopRoomsStream?: () => void;
   private stopDevicesStream?: () => void;
   private authSub?: Subscription;

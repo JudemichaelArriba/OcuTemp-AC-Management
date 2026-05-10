@@ -1,13 +1,10 @@
 import { Injectable } from '@angular/core';
-import { Database, get, onValue, ref, update } from '@angular/fire/database';
+import { Database, get, onValue, ref, set, update } from '@angular/fire/database';
+import { Device } from '../models/esp.model';
 
-export interface DeviceStatus {
-  ip?: string;
-  lastSeen?: string;
-}
+
 
 export type DeviceOnlineState = 'online' | 'stale' | 'offline' | 'unknown';
-
 
 export function getDeviceOnlineState(lastSeen?: string): DeviceOnlineState {
   if (!lastSeen) return 'offline';
@@ -15,30 +12,6 @@ export function getDeviceOnlineState(lastSeen?: string): DeviceOnlineState {
   if (ageMs < 2 * 60_000) return 'online';
   if (ageMs < 5 * 60_000) return 'stale';
   return 'offline';
-}
-
-export interface DeviceControl {
-  overrideActive?: boolean;
-  targetTemp?: number;
-  overrideUntil?: string;
-  requestedAt?: string;
-  requestedBy?: string;
-  roomUid?: string;
-}
-
-export interface DeviceTelemetry {
-  temperature?: number;
-  humidity?: number;
-  occupancy?: boolean;
-  acState?: {
-    power?: boolean;
-    currentTemp?: number;
-    roomUid?: string;
-    source?: string;
-    updatedAt?: string;
-  };
-  control?: DeviceControl;
-  status?: DeviceStatus;
 }
 
 @Injectable({
@@ -106,40 +79,34 @@ export class DeviceService {
     return this.ensureCurrentDevice(available, currentDeviceId);
   }
 
-  streamDevices(callback: (devices: Record<string, DeviceTelemetry>) => void): () => void {
+  streamDevices(callback: (devices: Record<string, Device>) => void): () => void {
     const devicesRef = ref(this.db, 'devices');
     return onValue(devicesRef, (snapshot) => {
       if (!snapshot.exists()) {
         callback({});
         return;
       }
-      callback(snapshot.val() as Record<string, DeviceTelemetry>);
+      callback(snapshot.val() as Record<string, Device>);
     });
   }
 
-  streamDevice(deviceId: string, callback: (device: DeviceTelemetry | null) => void): () => void {
+  streamDevice(deviceId: string, callback: (device: Device | null) => void): () => void {
     const deviceRef = ref(this.db, `devices/${deviceId}`);
     return onValue(deviceRef, (snapshot) => {
       if (!snapshot.exists()) {
         callback(null);
         return;
       }
-      callback(snapshot.val() as DeviceTelemetry);
+      callback(snapshot.val() as Device);
     });
-  }
-
-  private ensureCurrentDevice(list: string[], currentDeviceId?: string): string[] {
-    if (!currentDeviceId) return list;
-    if (list.includes(currentDeviceId)) return list;
-    return [currentDeviceId, ...list];
   }
 
   streamDevicesByIds(
     deviceIds: string[],
-    callback: (devices: Record<string, DeviceTelemetry>) => void
+    callback: (devices: Record<string, Device>) => void
   ): () => void {
     const uniqueIds = Array.from(new Set(deviceIds)).filter(id => id.length > 0);
-    const deviceMap: Record<string, DeviceTelemetry> = {};
+    const deviceMap: Record<string, Device> = {};
     const unsubs: Array<() => void> = [];
 
     if (uniqueIds.length === 0) {
@@ -162,6 +129,12 @@ export class DeviceService {
     return () => {
       unsubs.forEach(fn => fn());
     };
+  }
+
+  async setAiAutoApplyEnabled(deviceId: string, enabled: boolean): Promise<void> {
+    const safeDeviceId = this.normalizeDeviceId(deviceId);
+    const toggleRef = ref(this.db, `devices/${safeDeviceId}/control/aiAutoApply`);
+    await set(toggleRef, enabled === true);
   }
 
   async applyManualOverride(
@@ -196,5 +169,22 @@ export class DeviceService {
       requestedAt: new Date().toISOString(),
       requestedBy: requestedBy ?? 'unknown',
     });
+  }
+
+  private normalizeDeviceId(deviceId: string): string {
+    const normalized = deviceId.trim();
+    if (!normalized) {
+      throw new Error('Device ID is required');
+    }
+    if (/[.#$\/\[\]\x00-\x1F\x7F]/.test(normalized)) {
+      throw new Error('Device ID contains invalid characters');
+    }
+    return normalized;
+  }
+
+  private ensureCurrentDevice(list: string[], currentDeviceId?: string): string[] {
+    if (!currentDeviceId) return list;
+    if (list.includes(currentDeviceId)) return list;
+    return [currentDeviceId, ...list];
   }
 }

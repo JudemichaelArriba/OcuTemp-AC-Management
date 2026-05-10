@@ -161,6 +161,32 @@
 
       <div class="h-px bg-gradient-to-r from-transparent via-white to-transparent shadow-sm"></div>
 
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <p class="text-[8px] font-bold uppercase tracking-wide text-slate-600">AI Auto</p>
+          <p class="text-[9px] font-black uppercase tracking-wide"
+            [ngClass]="aiAutoApplyEnabled ? 'text-blue-700' : 'text-slate-500'">
+            {{ aiAutoApplyStatusText }}
+          </p>
+        </div>
+        <button type="button" role="switch" [attr.aria-checked]="aiAutoApplyEnabled"
+          [attr.aria-label]="aiAutoApplyAriaLabel" [disabled]="aiAutoApplyToggleDisabled"
+          (click)="toggleAiAutoApply($event)"
+          class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-white/80 shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-1 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50"
+          [ngClass]="aiAutoApplyEnabled ? 'bg-blue-600 shadow-blue-500/20' : 'bg-slate-200'">
+          <span class="sr-only">{{ aiAutoApplyAriaLabel }}</span>
+          <span
+            class="pointer-events-none inline-flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-black/5 transition-transform duration-200"
+            [ngClass]="aiAutoApplyEnabled ? 'translate-x-4' : 'translate-x-0.5'">
+            @if (isSavingAiAutoApply()) {
+            <span class="h-2.5 w-2.5 animate-spin rounded-full border border-blue-500 border-t-transparent"></span>
+            }
+          </span>
+        </button>
+      </div>
+
+      <div class="h-px bg-gradient-to-r from-transparent via-white to-transparent shadow-sm"></div>
+
       <div class="flex items-center justify-between">
         <p class="text-[8px] font-bold uppercase tracking-wide text-slate-600">Schedules</p>
         <p class="text-[10px] font-bold text-slate-800">{{ scheduleCount }}</p>
