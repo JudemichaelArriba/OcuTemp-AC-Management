@@ -49,8 +49,8 @@ export class Dashboard implements OnInit, OnDestroy {
   private deviceMap: Record<string, Device> = {};
 
   recentLogs: DecisionLog[] = [];
-  unreadCount = 0;
   isLogsModalOpen = false;
+  selectedLogForLogsModal: DecisionLog | null = null;
 
   private stopRoomStream?: () => void;
   private stopDevicesStream?: () => void;
@@ -110,10 +110,6 @@ export class Dashboard implements OnInit, OnDestroy {
       this.recentLogs = logs;
       this.cdr.markForCheck();
     });
-    this.logService.fetchUnreadCount(this.logService.getLastViewedAt()).then(count => {
-      this.unreadCount = count;
-      this.cdr.markForCheck();
-    });
   }
 
   ngOnDestroy(): void {
@@ -123,14 +119,15 @@ export class Dashboard implements OnInit, OnDestroy {
     this.stopLogsStream?.();
   }
 
-  openLogsModal(): void {
+  openLogsModal(log: DecisionLog | null = null): void {
+    this.selectedLogForLogsModal = log;
     this.isLogsModalOpen = true;
-    this.unreadCount = 0;
     this.cdr.markForCheck();
   }
 
   closeLogsModal(): void {
     this.isLogsModalOpen = false;
+    this.selectedLogForLogsModal = null;
     this.cdr.markForCheck();
   }
 

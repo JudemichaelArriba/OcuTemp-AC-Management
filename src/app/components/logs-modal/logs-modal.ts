@@ -1,19 +1,18 @@
 import {
   Component, Input, Output, EventEmitter,
   OnChanges, SimpleChanges,
-  ChangeDetectionStrategy, ChangeDetectorRef
+  ChangeDetectionStrategy, ChangeDetectorRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DecisionLog } from '../../models/logs.model';
 import { LogService, LogCursor } from '../../services/logs.service';
-import { formatEventType, formatSource, formatReason, formatMode } from '../../helpers/log-display.helper';
 import { LogsCard } from '../logs-card/logs-card';
-import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
+import { LogsDetailsModal } from '../logs-details-modal/logs-details-modal';
 
 @Component({
   selector: 'app-logs-modal',
   standalone: true,
-  imports: [CommonModule, LogsCard, DropDown],
+  imports: [CommonModule, LogsCard, LogsDetailsModal],
   templateUrl: './logs-modal.html',
   styleUrl: './logs-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -21,25 +20,20 @@ import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
 export class LogsModal implements OnChanges {
 
   @Input() isOpen = false;
+  @Input() initialLog: DecisionLog | null = null;
   @Output() closed = new EventEmitter<void>();
 
   visible = false;
   animating = false;
 
   logs: DecisionLog[] = [];
-  availableDates: string[] = [];
-  selectedDate = '';
-  lastViewed: Date | null = null;
+  selectedLog: DecisionLog | null = null;
+  isDetailsOpen = false;
 
   isLoading = false;
   isLoadingMore = false;
   hasMore = false;
   private cursor: LogCursor | null = null;
-
-  readonly formatEventType = formatEventType;
-  readonly formatSource = formatSource;
-  readonly formatReason = formatReason;
-  readonly formatMode = formatMode;
 
   constructor(
     private logService: LogService,
@@ -50,63 +44,30 @@ export class LogsModal implements OnChanges {
     if (changes['isOpen']) {
       if (this.isOpen) {
         this.openModal();
-        this.lastViewed = this.logService.getLastViewedAt();
-        this.logService.markAllViewed();
-        await Promise.all([this.loadAvailableDates(), this.loadFirstPage()]);
+        await this.loadFirstPage();
+
+        if (this.initialLog) {
+          await this.openDetails(this.resolveLog(this.initialLog));
+        }
       } else {
+        this.closeDetails();
         this.animateOut();
       }
+      return;
     }
-  }
 
-  private openModal(): void {
-    this.visible = true;
-    this.animating = false;
-    this.cdr.markForCheck();
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        this.animating = true;
-        this.cdr.markForCheck();
-      }, 10);
-    });
-  }
-
-  private animateOut(afterDone?: () => void): void {
-    this.animating = false;
-    this.cdr.markForCheck();
-    setTimeout(() => {
-      this.visible = false;
-      this.cdr.markForCheck();
-      afterDone?.();
-    }, 200);
-  }
-
-  get dateOptions(): DropDownOption[] {
-    return [
-      { value: '', label: 'All Dates', hint: '' },
-      ...this.availableDates.map(date => ({
-        value: date,
-        label: this.formatDateLabel(date),
-        hint: date,
-      })),
-    ];
-  }
-
-  onDateSelected(value: string): void {
-    this.selectedDate = value;
-    this.onDateChange();
-  }
-
-  async onDateChange(): Promise<void> {
-    await this.loadFirstPage();
+    if (changes['initialLog'] && this.isOpen && this.initialLog) {
+      await this.openDetails(this.resolveLog(this.initialLog));
+    }
   }
 
   async loadMore(): Promise<void> {
     if (!this.hasMore || this.isLoadingMore || !this.cursor) return;
     this.isLoadingMore = true;
     this.cdr.markForCheck();
+
     try {
-      const page = await this.logService.fetchPage(this.cursor, this.selectedDate || undefined);
+      const page = await this.logService.fetchPage(this.cursor);
       this.logs = [...this.logs, ...page.logs];
       this.hasMore = page.hasMore;
       this.cursor = page.nextCursor;
@@ -116,7 +77,32 @@ export class LogsModal implements OnChanges {
     }
   }
 
+  async openDetails(log: DecisionLog): Promise<void> {
+    const selected = this.resolveLog(log);
+    this.selectedLog = selected;
+    this.isDetailsOpen = true;
+    this.cdr.markForCheck();
+
+    if (selected.read === true) return;
+
+    try {
+      await this.logService.markAsRead(selected.id);
+      this.applyReadState(selected.id);
+    } catch (error) {
+      console.error('Failed to mark log as read.', error);
+    } finally {
+      this.cdr.markForCheck();
+    }
+  }
+
+  closeDetails(): void {
+    this.isDetailsOpen = false;
+    this.selectedLog = null;
+    this.cdr.markForCheck();
+  }
+
   close(): void {
+    this.closeDetails();
     this.animateOut(() => this.closed.emit());
   }
 
@@ -124,32 +110,6 @@ export class LogsModal implements OnChanges {
     if ((event.target as HTMLElement).classList.contains('logs-backdrop')) {
       this.close();
     }
-  }
-
-  private async loadFirstPage(): Promise<void> {
-    this.isLoading = true;
-    this.logs = [];
-    this.cursor = null;
-    this.hasMore = false;
-    this.cdr.markForCheck();
-    try {
-      const page = await this.logService.fetchPage(null, this.selectedDate || undefined);
-      this.logs = page.logs;
-      this.hasMore = page.hasMore;
-      this.cursor = page.nextCursor;
-    } finally {
-      this.isLoading = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  private async loadAvailableDates(): Promise<void> {
-    this.availableDates = await this.logService.fetchAvailableDates();
-    this.cdr.markForCheck();
-  }
-
-  isUnread(log: DecisionLog): boolean {
-    return this.logService.isUnread(log, this.lastViewed);
   }
 
   get groupedLogs(): { dateKey: string; logs: DecisionLog[] }[] {
@@ -170,5 +130,59 @@ export class LogsModal implements OnChanges {
     return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
       weekday: 'long', month: 'long', day: 'numeric',
     });
+  }
+
+  private openModal(): void {
+    this.visible = true;
+    this.animating = false;
+    this.selectedLog = null;
+    this.isDetailsOpen = false;
+    this.cdr.markForCheck();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.animating = true;
+        this.cdr.markForCheck();
+      }, 10);
+    });
+  }
+
+  private animateOut(afterDone?: () => void): void {
+    this.animating = false;
+    this.cdr.markForCheck();
+    setTimeout(() => {
+      this.visible = false;
+      this.cdr.markForCheck();
+      afterDone?.();
+    }, 200);
+  }
+
+  private async loadFirstPage(): Promise<void> {
+    this.isLoading = true;
+    this.logs = [];
+    this.cursor = null;
+    this.hasMore = false;
+    this.cdr.markForCheck();
+
+    try {
+      const page = await this.logService.fetchPage(null);
+      this.logs = page.logs;
+      this.hasMore = page.hasMore;
+      this.cursor = page.nextCursor;
+    } finally {
+      this.isLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private resolveLog(log: DecisionLog): DecisionLog {
+    return this.logs.find(item => item.id === log.id) ?? log;
+  }
+
+  private applyReadState(logId: string): void {
+    this.logs = this.logs.map(log => log.id === logId ? { ...log, read: true } : log);
+
+    if (this.selectedLog?.id === logId) {
+      this.selectedLog = { ...this.selectedLog, read: true };
+    }
   }
 }

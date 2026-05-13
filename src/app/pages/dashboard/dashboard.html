@@ -230,7 +230,8 @@
   </div>
   }
 
-  <app-logs-modal [isOpen]="isLogsModalOpen" (closed)="closeLogsModal()"></app-logs-modal>
+  <app-logs-modal [isOpen]="isLogsModalOpen" [initialLog]="selectedLogForLogsModal" (closed)="closeLogsModal()">
+  </app-logs-modal>
 
   @if (isReady) {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-8">
@@ -249,12 +250,6 @@
             class="relative text-[10px] font-black text-blue-600 hover:text-indigo-600 transition-colors uppercase tracking-[0.2em] flex items-center gap-1.5">
             Activity Log
             <span class="material-symbols-outlined text-xs">arrow_forward</span>
-            @if (unreadCount > 0) {
-            <span class="absolute -top-2 -right-3 min-w-[18px] h-[18px] flex items-center justify-center
-                         bg-rose-500 text-white text-[9px] font-black rounded-full px-1 shadow-sm">
-              {{ unreadCount > 99 ? '99+' : unreadCount }}
-            </span>
-            }
           </button>
         </div>
 
@@ -266,7 +261,7 @@
         } @else {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           @for (log of recentLogs; track log.id) {
-          <app-logs-card [log]="log" variant="full" (clicked)="openLogsModal()" />
+          <app-logs-card [log]="log" variant="full" (clicked)="openLogsModal(log)" />
           }
         </div>
         }

@@ -1,37 +1,31 @@
 @if (variant === 'full' || variant === 'compact') {
-<div class="group relative flex items-center gap-4 p-4 rounded-2xl
-         bg-gradient-to-br from-blue-100/60 via-blue-50/50 to-white/70
-         backdrop-blur-lg border border-blue-200/60 border-t-white/80
-         shadow-sm shadow-blue-200/40
-         hover:from-blue-200/70 hover:via-blue-100/60 hover:to-blue-50/60
-         hover:border-blue-400/50 hover:shadow-lg hover:shadow-blue-300/40
-         hover:-translate-y-0.5
-         transition-all duration-300 cursor-pointer overflow-hidden" (click)="clicked.emit()">
+<div class="group relative flex items-center gap-4 p-4 rounded-2xl backdrop-blur-lg border
+         hover:-translate-y-0.5 transition-all duration-300 cursor-pointer overflow-hidden"
+  [ngClass]="isUnread
+    ? 'bg-gradient-to-br from-blue-100/60 via-blue-50/50 to-white/70 border-blue-200/60 border-t-white/80 shadow-sm shadow-blue-200/40 hover:from-blue-200/70 hover:via-blue-100/60 hover:to-blue-50/60 hover:border-blue-400/50 hover:shadow-lg hover:shadow-blue-300/40'
+    : 'bg-white/75 border-slate-200/80 border-t-white/80 shadow-sm shadow-slate-200/40 opacity-80 hover:opacity-100 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md hover:shadow-slate-200/60'"
+  (click)="clicked.emit()">
+
+  <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/40 via-transparent pointer-events-none"
+    [ngClass]="isUnread ? 'to-blue-100/20' : 'to-slate-100/40'">
+  </div>
 
   <div
-    class="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/40 via-transparent to-blue-100/20 pointer-events-none">
+    class="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br to-transparent pointer-events-none"
+    [ngClass]="isUnread ? 'from-blue-300/15' : 'from-slate-300/20'">
   </div>
 
 
-  <div
-    class="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-blue-300/15 to-transparent pointer-events-none">
-  </div>
-
-  @if (isUnread) {
-  <div class="absolute left-0 inset-y-0 w-[3px] bg-blue-500 rounded-r-full z-10"></div>
-  <div class="absolute inset-0 bg-gradient-to-r from-blue-200/40 to-transparent pointer-events-none rounded-2xl"></div>
-  }
 
   <div class="relative shrink-0 flex items-center justify-center size-11 rounded-2xl
             bg-gradient-to-br from-white/80 to-transparent
-            shadow-lg shadow-black/10
+            shadow-lg
             ring-1 ring-inset ring-white/90
             group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-black/15
-            transition-all duration-300 {{ getEventColor(log.eventType) }}">
-
+            transition-all duration-300"
+    [ngClass]="isUnread ? getEventColor(log.eventType) + ' shadow-black/10' : 'text-slate-400 bg-slate-100/90 shadow-slate-200/70'">
 
     <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/60 to-transparent pointer-events-none"></div>
-
 
     <span class="relative material-symbols-outlined text-[20px] leading-none">
       {{ getEventIcon(log.eventType) }}
@@ -42,7 +36,8 @@
   <div class="relative flex-1 min-w-0">
 
     <div class="flex items-center gap-2 mb-1">
-      <span class="text-[12px] font-black text-slate-800 truncate leading-snug">
+      <span class="text-[12px] font-black truncate leading-snug"
+        [ngClass]="isUnread ? 'text-slate-800' : 'text-slate-500'">
         {{ formatEventType(log.eventType) }}
       </span>
       @if (isUnread) {
@@ -50,28 +45,30 @@
       }
     </div>
 
-
     <div class="flex items-center gap-1.5 flex-wrap">
-      <span class="inline-flex items-center gap-0.5 text-[10px] text-slate-500 font-bold">
+      <span class="inline-flex items-center gap-0.5 text-[10px] font-bold"
+        [ngClass]="isUnread ? 'text-slate-500' : 'text-slate-400'">
         <span class="material-symbols-outlined text-[11px]">router</span>
         {{ log.deviceId }}
       </span>
-      <span class="text-blue-200 select-none">·</span>
-      <span class="text-[10px] text-slate-500 font-bold truncate">{{ formatSource(log.source) }}</span>
+      <span class="select-none" [ngClass]="isUnread ? 'text-blue-200' : 'text-slate-300'">&middot;</span>
+      <span class="text-[10px] font-bold truncate" [ngClass]="isUnread ? 'text-slate-500' : 'text-slate-400'">
+        {{ formatSource(log.source) }}
+      </span>
 
       @if (log.aiAutoApply) {
-      <span class="text-blue-200 select-none">·</span>
+      <span class="select-none" [ngClass]="isUnread ? 'text-blue-200' : 'text-slate-300'">&middot;</span>
       <span class="relative inline-flex items-center gap-0.5 px-2 py-px rounded-full text-[8px] font-black uppercase tracking-widest
-             bg-blue-600
-             text-white overflow-hidden
-             shadow-md shadow-blue-600/50
-             ring-1 ring-inset ring-blue-400/40">
+             overflow-hidden ring-1 ring-inset" [ngClass]="isUnread
+          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/50 ring-blue-400/40'
+          : 'bg-slate-200 text-slate-500 shadow-none ring-slate-300/60'">
 
         <span
           class="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent rounded-t-full pointer-events-none"></span>
 
-        <span class="relative material-symbols-outlined text-[8px] leading-none text-blue-200">auto_awesome</span>
-        <span class="relative text-white">AI Auto</span>
+        <span class="relative material-symbols-outlined text-[8px] leading-none"
+          [ngClass]="isUnread ? 'text-blue-200' : 'text-slate-400'">auto_awesome</span>
+        <span class="relative">AI Auto</span>
       </span>
       }
     </div>
@@ -79,11 +76,11 @@
   </div>
 
   <div class="relative shrink-0 flex flex-col items-end gap-1.5">
-    <span class="text-[10px] text-slate-500 font-bold tabular-nums">
+    <span class="text-[10px] font-bold tabular-nums" [ngClass]="isUnread ? 'text-slate-500' : 'text-slate-400'">
       {{ formatRelativeTime(log.updatedAt) }}
     </span>
-    <span
-      class="material-symbols-outlined text-blue-300 group-hover:text-blue-500 text-sm transition-colors duration-300">
+    <span class="material-symbols-outlined text-sm transition-colors duration-300"
+      [ngClass]="isUnread ? 'text-blue-300 group-hover:text-blue-500' : 'text-slate-300 group-hover:text-slate-500'">
       chevron_right
     </span>
   </div>

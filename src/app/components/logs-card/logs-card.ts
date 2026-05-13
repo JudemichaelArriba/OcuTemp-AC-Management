@@ -4,7 +4,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DecisionLog } from '../../models/logs.model';
-import { formatEventType, formatSource, formatReason } from '../../helpers/log-display.helper';
+import { formatEventType, formatSource } from '../../helpers/log-display.helper';
 
 @Component({
   selector: 'app-logs-card',
@@ -16,13 +16,15 @@ import { formatEventType, formatSource, formatReason } from '../../helpers/log-d
 })
 export class LogsCard {
   @Input() log!: DecisionLog;
-  @Input() isUnread = false;
   @Input() variant: 'full' | 'compact' = 'full';
   @Output() clicked = new EventEmitter<void>();
 
   readonly formatEventType = formatEventType;
   readonly formatSource = formatSource;
-  readonly formatReason = formatReason;
+
+  get isUnread(): boolean {
+    return this.log?.read !== true;
+  }
 
   getEventIcon(eventType: string): string {
     const map: Record<string, string> = {
@@ -39,40 +41,19 @@ export class LogsCard {
     return map[eventType] ?? 'info';
   }
 
-getEventColor(eventType: string): string {
-  const map: Record<string, string> = {
-    mode_change:      'text-indigo-600 bg-indigo-100/80',
-    ac_state_changed: 'text-sky-500   bg-sky-100/80',
-    firebase_ready:   'text-teal-600  bg-teal-100/80',
-    boot:             'text-slate-500 bg-slate-200/80',
-    manual_override:  'text-blue-700  bg-blue-200/80',
-    ml_failure:       'text-rose-500  bg-rose-100/80',
-    ml_suggestion:    'text-violet-500 bg-violet-100/80',
-    ml_auto_applied:  'text-blue-600  bg-blue-100/80',
-    ai_toggle_changed:'text-cyan-600  bg-cyan-100/80',
-  };
-  return map[eventType] ?? 'text-slate-500 bg-slate-200/80';
-}
-
-  getEventColorSolid(eventType: string): string {
+  getEventColor(eventType: string): string {
     const map: Record<string, string> = {
-      mode_change: 'bg-blue-600',
-      ac_state_changed: 'bg-sky-500',
-      firebase_ready: 'bg-emerald-500',
-      boot: 'bg-slate-500',
-      manual_override: 'bg-amber-500',
-      ml_failure: 'bg-rose-500',
-      ml_suggestion: 'bg-violet-600',
-      ml_auto_applied: 'bg-blue-600',
-      ai_toggle_changed: 'bg-blue-500',
+      mode_change: 'text-indigo-600 bg-indigo-100/80',
+      ac_state_changed: 'text-sky-500 bg-sky-100/80',
+      firebase_ready: 'text-teal-600 bg-teal-100/80',
+      boot: 'text-slate-500 bg-slate-200/80',
+      manual_override: 'text-blue-700 bg-blue-200/80',
+      ml_failure: 'text-rose-500 bg-rose-100/80',
+      ml_suggestion: 'text-violet-500 bg-violet-100/80',
+      ml_auto_applied: 'text-blue-600 bg-blue-100/80',
+      ai_toggle_changed: 'text-cyan-600 bg-cyan-100/80',
     };
-    return map[eventType] ?? 'bg-slate-500';
-  }
-
-  formatTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString('en-US', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
-    });
+    return map[eventType] ?? 'text-slate-500 bg-slate-200/80';
   }
 
   formatRelativeTime(iso: string): string {

@@ -12,6 +12,7 @@ export interface DecisionLog {
   readonly targetTemp: number;
   readonly updatedAt: string;       
   readonly uptimeMs: number;
+  readonly read?: boolean;
   readonly irSent?: boolean;
   readonly previousPower?: boolean;
   readonly previousSource?: string;
