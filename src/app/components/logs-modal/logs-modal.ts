@@ -4,16 +4,16 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { DecisionLog } from '../../models/logs.model';
 import { LogService, LogCursor } from '../../services/logs.service';
 import { formatEventType, formatSource, formatReason, formatMode } from '../../helpers/log-display.helper';
 import { LogsCard } from '../logs-card/logs-card';
+import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
 
 @Component({
   selector: 'app-logs-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, LogsCard],
+  imports: [CommonModule, LogsCard, DropDown],
   templateUrl: './logs-modal.html',
   styleUrl: './logs-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -22,6 +22,9 @@ export class LogsModal implements OnChanges {
 
   @Input() isOpen = false;
   @Output() closed = new EventEmitter<void>();
+
+  visible = false;
+  animating = false;
 
   logs: DecisionLog[] = [];
   availableDates: string[] = [];
@@ -44,11 +47,54 @@ export class LogsModal implements OnChanges {
   ) { }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
-    if (changes['isOpen'] && this.isOpen) {
-      this.lastViewed = this.logService.getLastViewedAt();
-      this.logService.markAllViewed();
-      await Promise.all([this.loadAvailableDates(), this.loadFirstPage()]);
+    if (changes['isOpen']) {
+      if (this.isOpen) {
+        this.openModal();
+        this.lastViewed = this.logService.getLastViewedAt();
+        this.logService.markAllViewed();
+        await Promise.all([this.loadAvailableDates(), this.loadFirstPage()]);
+      } else {
+        this.animateOut();
+      }
     }
+  }
+
+  private openModal(): void {
+    this.visible = true;
+    this.animating = false;
+    this.cdr.markForCheck();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        this.animating = true;
+        this.cdr.markForCheck();
+      }, 10);
+    });
+  }
+
+  private animateOut(afterDone?: () => void): void {
+    this.animating = false;
+    this.cdr.markForCheck();
+    setTimeout(() => {
+      this.visible = false;
+      this.cdr.markForCheck();
+      afterDone?.();
+    }, 200);
+  }
+
+  get dateOptions(): DropDownOption[] {
+    return [
+      { value: '', label: 'All Dates', hint: '' },
+      ...this.availableDates.map(date => ({
+        value: date,
+        label: this.formatDateLabel(date),
+        hint: date,
+      })),
+    ];
+  }
+
+  onDateSelected(value: string): void {
+    this.selectedDate = value;
+    this.onDateChange();
   }
 
   async onDateChange(): Promise<void> {
@@ -60,10 +106,7 @@ export class LogsModal implements OnChanges {
     this.isLoadingMore = true;
     this.cdr.markForCheck();
     try {
-      const page = await this.logService.fetchPage(
-        this.cursor,
-        this.selectedDate || undefined
-      );
+      const page = await this.logService.fetchPage(this.cursor, this.selectedDate || undefined);
       this.logs = [...this.logs, ...page.logs];
       this.hasMore = page.hasMore;
       this.cursor = page.nextCursor;
@@ -74,7 +117,13 @@ export class LogsModal implements OnChanges {
   }
 
   close(): void {
-    this.closed.emit();
+    this.animateOut(() => this.closed.emit());
+  }
+
+  onBackdropClick(event: MouseEvent): void {
+    if ((event.target as HTMLElement).classList.contains('logs-backdrop')) {
+      this.close();
+    }
   }
 
   private async loadFirstPage(): Promise<void> {
