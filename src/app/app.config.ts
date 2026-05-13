@@ -8,27 +8,43 @@ import { provideAuth, getAuth } from '@angular/fire/auth';
 import { FormsModule } from '@angular/forms';
 import { importProvidersFrom } from '@angular/core';
 
-
 import * as Sentry from "@sentry/angular";
+
+if (environment.sentryDsn) {
+  Sentry.init({
+    dsn: environment.sentryDsn,
+
+    integrations: [
+      Sentry.browserTracingIntegration(),
+    ],
+
+    tracesSampleRate: 1.0,
+  });
+}
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
+
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideDatabase(() => getDatabase()),
     provideAuth(() => getAuth()),
+
     importProvidersFrom(FormsModule),
+
     {
       provide: ErrorHandler,
       useValue: Sentry.createErrorHandler({
-        showDialog: false, 
+        showDialog: false,
       }),
     },
+
     {
       provide: Sentry.TraceService,
       deps: [Router],
     },
+
     {
       provide: APP_INITIALIZER,
       useFactory: () => () => {},

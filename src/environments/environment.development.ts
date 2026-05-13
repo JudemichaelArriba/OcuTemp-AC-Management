@@ -8,5 +8,7 @@ export const environment = {
     storageBucket: 'ocutemp.firebasestorage.app',
     messagingSenderId: '700435856134',
     appId: '1:700435856134:web:f4e893c1d80cab9bc4bc87'
-  }
+  },
+    sentryDsn: ''
+
 };
