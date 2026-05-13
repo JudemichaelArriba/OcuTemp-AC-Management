@@ -2,7 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, Input, Output, EventEmitter, signal, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { Room } from '../../models/room.model';
 import { Router } from '@angular/router';
-import { DeviceService, DeviceTelemetry, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
+import { Device } from '../../models/esp.model';
+import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
+import { AuthStateService } from '../../services/auth-state.service';
+import { DialogService } from '../../services/dialog.service';
+import { LoggerService } from '../../services/logger.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-room-card',
@@ -20,27 +25,39 @@ export class RoomCard implements OnInit, OnDestroy {
 
   isDropdownOpen = signal(false);
   isForcingOff = signal(false);
+  isSavingAiAutoApply = signal(false);
+  canToggleAiAutoApply = signal(false);
 
-  private _deviceTelemetry: DeviceTelemetry | null = null;
+  private _device: Device | null = null;
   private unsubscribeDevice?: () => void;
+  private authSubscription?: Subscription;
   private statusInterval?: ReturnType<typeof setInterval>;
   private destroyed = false;
 
   constructor(
     private router: Router,
     private deviceService: DeviceService,
+    private authState: AuthStateService,
+    private dialogService: DialogService,
+    private logger: LoggerService,
     private cdr: ChangeDetectorRef,
   ) { }
 
   ngOnInit(): void {
+    this.authSubscription = this.authState.currentUser$.subscribe((user) => {
+      this.canToggleAiAutoApply.set(
+        user?.approved === true && (user?.role === 'admin' || user?.role === 'staff')
+      );
+      this.cdr.markForCheck();
+    });
+
     if (!this.room.device) return;
 
     this.unsubscribeDevice = this.deviceService.streamDevice(this.room.device, (device) => {
       if (this.destroyed) return;
-      this._deviceTelemetry = device;
+      this._device = device;
       this.cdr.markForCheck();
     });
-
 
     this.statusInterval = setInterval(() => {
       if (!this.destroyed) this.cdr.markForCheck();
@@ -50,14 +67,13 @@ export class RoomCard implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.unsubscribeDevice?.();
+    this.authSubscription?.unsubscribe();
     clearInterval(this.statusInterval);
   }
 
-
-
   get deviceOnlineState(): DeviceOnlineState {
     if (!this.room.device) return 'unknown';
-    return getDeviceOnlineState(this._deviceTelemetry?.status?.lastSeen);
+    return getDeviceOnlineState(this._device?.status?.lastSeen);
   }
 
   get deviceOnlineStateDotClass(): string {
@@ -82,6 +98,28 @@ export class RoomCard implements OnInit, OnDestroy {
     return this.room.device != null && this.deviceOnlineState === 'offline';
   }
 
+  get aiAutoApplyEnabled(): boolean {
+    return this._device?.control?.aiAutoApply === true;
+  }
+
+  get aiAutoApplyToggleDisabled(): boolean {
+    return (
+      !this.room.device ||
+      this._device === null ||
+      !this.canToggleAiAutoApply() ||
+      this.isSavingAiAutoApply()
+    );
+  }
+
+  get aiAutoApplyStatusText(): string {
+    if (!this.room.device) return 'No device';
+    if (this._device === null) return 'Syncing';
+    return this.aiAutoApplyEnabled ? 'AI On' : 'AI Off';
+  }
+
+  get aiAutoApplyAriaLabel(): string {
+    return `${this.aiAutoApplyEnabled ? 'Disable' : 'Enable'} AI auto apply for ${this.room.roomName}`;
+  }
 
   toggleDropdown() { this.isDropdownOpen.update((v) => !v); }
   closeDropdown() { this.isDropdownOpen.set(false); }
@@ -98,9 +136,25 @@ export class RoomCard implements OnInit, OnDestroy {
     try {
       await this.deviceService.sendForcedOff(this.room.device);
     } catch (err) {
-      console.error('[RoomCard] sendForcedOff failed:', err);
+      this.logger.error('[RoomCard] sendForcedOff failed:', err);
     } finally {
       this.isForcingOff.set(false);
+    }
+  }
+
+  async toggleAiAutoApply(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (this.aiAutoApplyToggleDisabled || !this.room.device) return;
+
+    this.isSavingAiAutoApply.set(true);
+    try {
+      await this.deviceService.setAiAutoApplyEnabled(this.room.device, !this.aiAutoApplyEnabled);
+    } catch (err) {
+      this.logger.error('[RoomCard] setAiAutoApplyEnabled failed:', err);
+      this.dialogService.error('AI Toggle Failed', 'Unable to update AI auto-apply. Please try again.');
+    } finally {
+      this.isSavingAiAutoApply.set(false);
+      this.cdr.markForCheck();
     }
   }
 

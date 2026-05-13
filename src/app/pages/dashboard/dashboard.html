@@ -43,7 +43,6 @@
     <div class="max-w-[1800px] mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
 
       @if (!isReady) {
-
       @for (_ of [1,2,3,4]; track $index) {
       <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm animate-pulse">
         <div class="flex justify-between items-start mb-6">
@@ -155,17 +154,12 @@
             <h3 class="font-black text-slate-900 text-lg tracking-tight">Facility Zones</h3>
           </div>
 
-
           <div
             class="relative grid grid-cols-2 items-center bg-slate-100/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/50 shadow-inner">
-
-
             <div
               class="absolute inset-y-1.5 left-1.5 w-[calc(50%-0.375rem)] bg-blue-600 rounded-xl shadow-lg shadow-blue-200 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               [class.translate-x-0]="viewMode === 'cards'" [class.translate-x-full]="viewMode === 'map'">
             </div>
-
-
             <button (click)="viewMode = 'cards'"
               [class]="viewMode === 'cards' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
               class="relative z-10 px-6 py-2.5 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
@@ -177,8 +171,6 @@
               Floor Plan
             </button>
           </div>
-
-
         </div>
 
         <div class="w-full max-w-[1200px] mx-auto min-h-[500px]">
@@ -186,7 +178,6 @@
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
             @if (!isReady) {
-
             @for (_ of [1,2,3]; track $index) {
             <div class="w-full h-64 rounded-3xl bg-white border border-slate-100 p-6 animate-pulse shadow-sm">
               <div class="flex justify-between items-start mb-6">
@@ -230,7 +221,6 @@
     </div>
   </div>
 
-
   @if (isReady) {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
     <div class="max-w-[1800px] mx-auto w-full">
@@ -239,9 +229,19 @@
     </div>
   </div>
   }
+
+  <app-logs-modal [isOpen]="isLogsModalOpen" (closed)="closeLogsModal()">
+  </app-logs-modal>
+
+  <app-logs-details-modal [isOpen]="isDashboardLogDetailsOpen" [log]="selectedDashboardLog"
+    (closed)="closeDashboardLogDetails()">
+  </app-logs-details-modal>
+
+  @if (isReady) {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-8">
     <div class="max-w-[1800px] mx-auto w-full">
       <div class="bg-white border border-slate-100 rounded-[2.5rem] shadow-xl shadow-slate-200/40 p-8">
+
         <div class="flex items-center justify-between mb-6">
           <div class="flex items-center gap-3">
             <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -249,50 +249,29 @@
             </div>
             <h3 class="font-black text-slate-900 text-sm uppercase tracking-widest">Recent Activities</h3>
           </div>
-          <button
-            class="text-[10px] font-black text-blue-600 hover:text-indigo-600 transition-colors uppercase tracking-[0.2em] flex items-center gap-1">
-            Activity Log <span class="material-symbols-outlined text-xs">arrow_forward</span>
+
+          <button (click)="openLogsModal()"
+            class="relative text-[10px] font-black text-blue-600 hover:text-indigo-600 transition-colors uppercase tracking-[0.2em] flex items-center gap-1.5">
+            Activity Log
+            <span class="material-symbols-outlined text-xs">arrow_forward</span>
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div
-            class="group flex items-start gap-4 p-5 bg-gradient-to-br from-amber-50/50 to-orange-50 border border-amber-100 rounded-3xl transition-all hover:shadow-lg hover:shadow-orange-200/20">
-            <div
-              class="bg-amber-500 text-white p-2.5 rounded-2xl shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-base">trending_up</span>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-black text-slate-800 mb-1 leading-snug">Room 101: Cooling increased due to high
-                occupancy detected</p>
-              <div class="flex items-center gap-3">
-                <span class="text-[10px] text-slate-500 font-black">2 MIN AGO</span>
-                <span class="w-1 h-1 rounded-full bg-slate-300"></span>
-                <span
-                  class="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest">Automated</span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            class="group flex items-start gap-4 p-5 bg-gradient-to-br from-emerald-50/50 to-teal-50 border border-emerald-100 rounded-3xl transition-all hover:shadow-lg hover:shadow-emerald-200/20">
-            <div
-              class="bg-emerald-500 text-white p-2.5 rounded-2xl shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-base">eco</span>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-black text-slate-800 mb-1 leading-snug">Conf. Room B: Switched to Eco-Mode (Vacant
-                &gt; 30m)</p>
-              <div class="flex items-center gap-3">
-                <span class="text-[10px] text-slate-500 font-black">15 MIN AGO</span>
-                <span class="w-1 h-1 rounded-full bg-slate-300"></span>
-                <span
-                  class="px-2 py-0.5 rounded-md bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest">Policy</span>
-              </div>
-            </div>
-          </div>
+        @if (recentLogs.length === 0) {
+        <div class="py-10 text-center">
+          <span class="material-symbols-outlined text-slate-200 text-4xl mb-2">history</span>
+          <p class="text-slate-400 text-xs font-black uppercase tracking-widest">No activity yet</p>
         </div>
+        } @else {
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          @for (log of recentLogs; track log.id) {
+          <app-logs-card [log]="log" variant="full" (clicked)="openDashboardLogDetails(log)" />
+          }
+        </div>
+        }
+
       </div>
     </div>
   </div>
+  }
 </main>
