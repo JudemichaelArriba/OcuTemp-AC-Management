@@ -230,8 +230,12 @@
   </div>
   }
 
-  <app-logs-modal [isOpen]="isLogsModalOpen" [initialLog]="selectedLogForLogsModal" (closed)="closeLogsModal()">
+  <app-logs-modal [isOpen]="isLogsModalOpen" (closed)="closeLogsModal()">
   </app-logs-modal>
+
+  <app-logs-details-modal [isOpen]="isDashboardLogDetailsOpen" [log]="selectedDashboardLog"
+    (closed)="closeDashboardLogDetails()">
+  </app-logs-details-modal>
 
   @if (isReady) {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-8">
@@ -261,7 +265,7 @@
         } @else {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           @for (log of recentLogs; track log.id) {
-          <app-logs-card [log]="log" variant="full" (clicked)="openLogsModal(log)" />
+          <app-logs-card [log]="log" variant="full" (clicked)="openDashboardLogDetails(log)" />
           }
         </div>
         }

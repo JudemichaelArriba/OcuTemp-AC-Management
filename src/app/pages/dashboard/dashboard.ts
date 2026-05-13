@@ -15,13 +15,14 @@ import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-t
 import { EnergyDaily } from '../../models/energy.model';
 import { LogsModal } from '../../components/logs-modal/logs-modal';
 import { LogsCard } from '../../components/logs-card/logs-card';
+import { LogsDetailsModal } from '../../components/logs-details-modal/logs-details-modal';
 import { LogService } from '../../services/logs.service';
 import { DecisionLog } from '../../models/logs.model';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [RoomCard, DecimalPipe, FloorPlanComponent, EnergyTrendWidget, LogsModal, LogsCard],
+  imports: [RoomCard, DecimalPipe, FloorPlanComponent, EnergyTrendWidget, LogsModal, LogsCard, LogsDetailsModal],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,7 +51,8 @@ export class Dashboard implements OnInit, OnDestroy {
 
   recentLogs: DecisionLog[] = [];
   isLogsModalOpen = false;
-  selectedLogForLogsModal: DecisionLog | null = null;
+  selectedDashboardLog: DecisionLog | null = null;
+  isDashboardLogDetailsOpen = false;
 
   private stopRoomStream?: () => void;
   private stopDevicesStream?: () => void;
@@ -119,15 +121,39 @@ export class Dashboard implements OnInit, OnDestroy {
     this.stopLogsStream?.();
   }
 
-  openLogsModal(log: DecisionLog | null = null): void {
-    this.selectedLogForLogsModal = log;
+  openLogsModal(): void {
     this.isLogsModalOpen = true;
     this.cdr.markForCheck();
   }
 
   closeLogsModal(): void {
     this.isLogsModalOpen = false;
-    this.selectedLogForLogsModal = null;
+    this.cdr.markForCheck();
+  }
+
+  async openDashboardLogDetails(log: DecisionLog): Promise<void> {
+    this.selectedDashboardLog = log;
+    this.isDashboardLogDetailsOpen = true;
+    this.cdr.markForCheck();
+
+    if (log.read === true) return;
+
+    try {
+      await this.logService.markAsRead(log.id);
+      this.recentLogs = this.recentLogs.map(item =>
+        item.id === log.id ? { ...item, read: true } : item
+      );
+      this.selectedDashboardLog = { ...log, read: true };
+    } catch (error) {
+      console.error('Failed to mark dashboard log as read.', error);
+    } finally {
+      this.cdr.markForCheck();
+    }
+  }
+
+  closeDashboardLogDetails(): void {
+    this.isDashboardLogDetailsOpen = false;
+    this.selectedDashboardLog = null;
     this.cdr.markForCheck();
   }
 
