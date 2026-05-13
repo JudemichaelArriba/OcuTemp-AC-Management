@@ -1,179 +1,91 @@
-@if (variant === 'full') {
-<div
-  class="group relative flex items-start gap-4 p-4 rounded-2xl border backdrop-blur-sm transition-all duration-300 overflow-hidden"
-  [class.border-blue-200/70]="isUnread" [class.bg-blue-50/40]="isUnread" [class.shadow-sm]="isUnread"
-  [class.shadow-blue-100]="isUnread" [class.border-slate-200/60]="!isUnread" [class.bg-white/70]="!isUnread">
+@if (variant === 'full' || variant === 'compact') {
+<div class="group relative flex items-center gap-4 p-4 rounded-2xl
+         bg-gradient-to-br from-blue-100/60 via-blue-50/50 to-white/70
+         backdrop-blur-lg border border-blue-200/60 border-t-white/80
+         shadow-sm shadow-blue-200/40
+         hover:from-blue-200/70 hover:via-blue-100/60 hover:to-blue-50/60
+         hover:border-blue-400/50 hover:shadow-lg hover:shadow-blue-300/40
+         hover:-translate-y-0.5
+         transition-all duration-300 cursor-pointer overflow-hidden" (click)="clicked.emit()">
 
-  <!-- Unread left accent bar -->
+  <div
+    class="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/40 via-transparent to-blue-100/20 pointer-events-none">
+  </div>
+
+
+  <div
+    class="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-blue-300/15 to-transparent pointer-events-none">
+  </div>
+
   @if (isUnread) {
-  <div class="absolute left-0 inset-y-0 w-[3px] bg-blue-500 rounded-r-full"></div>
-  <div class="absolute inset-0 bg-gradient-to-r from-blue-50/50 to-transparent pointer-events-none"></div>
+  <div class="absolute left-0 inset-y-0 w-[3px] bg-blue-500 rounded-r-full z-10"></div>
+  <div class="absolute inset-0 bg-gradient-to-r from-blue-200/40 to-transparent pointer-events-none rounded-2xl"></div>
   }
 
-  <!-- Icon -->
-  <div class="relative shrink-0 p-2.5 rounded-xl ring-1 ring-inset ring-black/5 {{ getEventColor(log.eventType) }}">
-    <span class="material-symbols-outlined text-base">{{ getEventIcon(log.eventType) }}</span>
-  </div>
-
-  <!-- Content -->
-  <div class="relative flex-1 min-w-0">
-
-    <!-- Title row -->
-    <div class="flex items-center justify-between gap-2 mb-1.5">
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="text-[11px] font-black text-slate-800 truncate">
-          {{ formatEventType(log.eventType) }}
-        </span>
-        @if (isUnread) {
-        <span class="size-1.5 rounded-full bg-blue-500 shrink-0 shadow-sm shadow-blue-300"></span>
-        }
-      </div>
-      <span class="text-[10px] text-slate-400 font-bold shrink-0 tabular-nums">
-        {{ formatTime(log.updatedAt) }}
-      </span>
-    </div>
-
-    <!-- Meta row -->
-    <div class="flex items-center gap-1.5 flex-wrap mb-2.5">
-      <span class="inline-flex items-center gap-0.5 text-[10px] text-slate-400 font-bold">
-        <span class="material-symbols-outlined text-[11px]">router</span>
-        {{ log.deviceId }}
-      </span>
-      <span class="text-slate-300 select-none">·</span>
-      <span class="text-[10px] text-slate-400 font-bold">{{ formatSource(log.source) }}</span>
-      <span class="text-slate-300 select-none">·</span>
-      <span class="text-[10px] text-slate-400 font-bold truncate">{{ formatReason(log.reason) }}</span>
-    </div>
-
-    <!-- Badge row -->
-    <div class="flex flex-wrap gap-1.5">
-
-      <!-- Power -->
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border transition-colors"
-        [class.bg-emerald-50]="log.power" [class.text-emerald-700]="log.power" [class.border-emerald-200/70]="log.power"
-        [class.bg-slate-50]="!log.power" [class.text-slate-400]="!log.power" [class.border-slate-200/60]="!log.power">
-        <span class="material-symbols-outlined text-[10px]">{{ log.power ? 'power' : 'power_off' }}</span>
-        {{ log.power ? 'ON' : 'OFF' }}
-      </span>
-
-      <!-- Applied -->
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border transition-colors"
-        [class.bg-blue-50]="log.applied" [class.text-blue-700]="log.applied" [class.border-blue-200/70]="log.applied"
-        [class.bg-slate-50]="!log.applied" [class.text-slate-400]="!log.applied"
-        [class.border-slate-200/60]="!log.applied">
-        <span class="material-symbols-outlined text-[10px]">{{ log.applied ? 'check_circle' : 'schedule' }}</span>
-        {{ log.applied ? 'Applied' : 'Pending' }}
-      </span>
-
-      <!-- Temp -->
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-orange-50 text-orange-600 border border-orange-200/60">
-        <span class="material-symbols-outlined text-[10px]">thermometer</span>
-        {{ log.targetTemp }}°C
-      </span>
-
-      <!-- AI Auto -->
-      @if (log.aiAutoApply) {
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-sm shadow-blue-300/50">
-        <span class="material-symbols-outlined text-[10px]">auto_awesome</span>
-        AI Auto
-      </span>
-      }
-
-      <!-- IR -->
-      @if (log.irSent !== undefined) {
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border transition-colors"
-        [class.bg-blue-50]="log.irSent" [class.text-blue-600]="log.irSent" [class.border-blue-200/70]="log.irSent"
-        [class.bg-slate-50]="!log.irSent" [class.text-slate-400]="!log.irSent"
-        [class.border-slate-200/60]="!log.irSent">
-        <span class="material-symbols-outlined text-[10px]">wifi_tethering</span>
-        IR {{ log.irSent ? 'Sent' : 'Skipped' }}
-      </span>
-      }
-
-    </div>
-  </div>
-</div>
-}
-
-@if (variant === 'compact') {
-<div
-  class="group relative flex items-start gap-4 p-5 rounded-2xl bg-white/80 backdrop-blur-md border border-white/90 shadow-sm shadow-slate-200/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-0.5 hover:border-blue-200/50 cursor-pointer overflow-hidden"
-  (click)="clicked.emit()">
+  <div class="relative shrink-0 flex items-center justify-center size-11 rounded-2xl
+            bg-gradient-to-br from-white/80 to-transparent
+            shadow-lg shadow-black/10
+            ring-1 ring-inset ring-white/90
+            group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-black/15
+            transition-all duration-300 {{ getEventColor(log.eventType) }}">
 
 
-  <div
-    class="absolute inset-0 bg-gradient-to-br from-blue-50/0 to-blue-50/0 group-hover:from-blue-50/40 group-hover:to-transparent transition-all duration-300 pointer-events-none">
-  </div>
+    <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/60 to-transparent pointer-events-none"></div>
 
 
-  <div
-    class="relative shrink-0 p-3 rounded-2xl text-white shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-300 {{ getEventColorSolid(log.eventType) }}">
-    <span class="material-symbols-outlined text-base">{{ getEventIcon(log.eventType) }}</span>
+    <span class="relative material-symbols-outlined text-[20px] leading-none">
+      {{ getEventIcon(log.eventType) }}
+    </span>
+
   </div>
 
   <div class="relative flex-1 min-w-0">
 
-
-    <div class="flex items-start justify-between gap-2 mb-1">
-      <p class="text-[11px] font-black text-slate-800 leading-snug truncate">
-        {{ log.deviceId }}
-        <span class="text-slate-300 font-bold mx-0.5">·</span>
+    <div class="flex items-center gap-2 mb-1">
+      <span class="text-[12px] font-black text-slate-800 truncate leading-snug">
         {{ formatEventType(log.eventType) }}
-      </p>
-      <span class="text-[10px] text-slate-400 font-bold shrink-0 tabular-nums">
-        {{ formatRelativeTime(log.updatedAt) }}
       </span>
+      @if (isUnread) {
+      <span class="size-1.5 rounded-full bg-blue-500 shrink-0 shadow-sm shadow-blue-300 animate-pulse"></span>
+      }
     </div>
-
-
-    <p class="text-[10px] text-slate-400 font-bold mb-3 truncate">
-      {{ formatSource(log.source) }}
-      <span class="mx-1 text-slate-300">·</span>
-      {{ log.power ? 'ON' : 'OFF' }}
-      <span class="mx-1 text-slate-300">·</span>
-      {{ log.targetTemp }}°C
-    </p>
 
 
     <div class="flex items-center gap-1.5 flex-wrap">
-
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border transition-colors"
-        [class.bg-blue-50]="log.applied" [class.text-blue-700]="log.applied" [class.border-blue-200/70]="log.applied"
-        [class.bg-slate-50]="!log.applied" [class.text-slate-400]="!log.applied"
-        [class.border-slate-200/60]="!log.applied">
-        <span class="material-symbols-outlined text-[10px]">{{ log.applied ? 'check_circle' : 'schedule' }}</span>
-        {{ log.applied ? 'Applied' : 'Pending' }}
+      <span class="inline-flex items-center gap-0.5 text-[10px] text-slate-500 font-bold">
+        <span class="material-symbols-outlined text-[11px]">router</span>
+        {{ log.deviceId }}
       </span>
+      <span class="text-blue-200 select-none">·</span>
+      <span class="text-[10px] text-slate-500 font-bold truncate">{{ formatSource(log.source) }}</span>
 
       @if (log.aiAutoApply) {
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-600 text-white shadow-sm shadow-blue-300/50">
-        <span class="material-symbols-outlined text-[10px]">auto_awesome</span>
-        AI Auto
+      <span class="text-blue-200 select-none">·</span>
+      <span class="relative inline-flex items-center gap-0.5 px-2 py-px rounded-full text-[8px] font-black uppercase tracking-widest
+             bg-blue-600
+             text-white overflow-hidden
+             shadow-md shadow-blue-600/50
+             ring-1 ring-inset ring-blue-400/40">
+
+        <span
+          class="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent rounded-t-full pointer-events-none"></span>
+
+        <span class="relative material-symbols-outlined text-[8px] leading-none text-blue-200">auto_awesome</span>
+        <span class="relative text-white">AI Auto</span>
       </span>
       }
-
-      @if (log.irSent) {
-      <span
-        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-600 border border-blue-200/70">
-        <span class="material-symbols-outlined text-[10px]">wifi_tethering</span>
-        IR Sent
-      </span>
-      }
-
     </div>
+
   </div>
 
-
-  <div
-    class="relative self-center opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-1 group-hover:translate-x-0">
-    <span class="material-symbols-outlined text-blue-400 text-sm">chevron_right</span>
+  <div class="relative shrink-0 flex flex-col items-end gap-1.5">
+    <span class="text-[10px] text-slate-500 font-bold tabular-nums">
+      {{ formatRelativeTime(log.updatedAt) }}
+    </span>
+    <span
+      class="material-symbols-outlined text-blue-300 group-hover:text-blue-500 text-sm transition-colors duration-300">
+      chevron_right
+    </span>
   </div>
 
 </div>

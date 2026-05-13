@@ -39,20 +39,20 @@ export class LogsCard {
     return map[eventType] ?? 'info';
   }
 
-  getEventColor(eventType: string): string {
-    const map: Record<string, string> = {
-      mode_change: 'text-blue-600 bg-blue-50',
-      ac_state_changed: 'text-sky-600 bg-sky-50',
-      firebase_ready: 'text-emerald-600 bg-emerald-50',
-      boot: 'text-slate-500 bg-slate-100',
-      manual_override: 'text-amber-600 bg-amber-50',
-      ml_failure: 'text-rose-600 bg-rose-50',
-      ml_suggestion: 'text-violet-600 bg-violet-50',
-      ml_auto_applied: 'text-blue-600 bg-blue-50',
-      ai_toggle_changed: 'text-blue-500 bg-blue-50',
-    };
-    return map[eventType] ?? 'text-slate-500 bg-slate-100';
-  }
+getEventColor(eventType: string): string {
+  const map: Record<string, string> = {
+    mode_change:      'text-indigo-600 bg-indigo-100/80',
+    ac_state_changed: 'text-sky-500   bg-sky-100/80',
+    firebase_ready:   'text-teal-600  bg-teal-100/80',
+    boot:             'text-slate-500 bg-slate-200/80',
+    manual_override:  'text-blue-700  bg-blue-200/80',
+    ml_failure:       'text-rose-500  bg-rose-100/80',
+    ml_suggestion:    'text-violet-500 bg-violet-100/80',
+    ml_auto_applied:  'text-blue-600  bg-blue-100/80',
+    ai_toggle_changed:'text-cyan-600  bg-cyan-100/80',
+  };
+  return map[eventType] ?? 'text-slate-500 bg-slate-200/80';
+}
 
   getEventColorSolid(eventType: string): string {
     const map: Record<string, string> = {
