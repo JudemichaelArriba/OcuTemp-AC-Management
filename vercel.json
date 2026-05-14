@@ -1,5 +1,17 @@
 {
   "buildCommand": "node set-env.js && ng build",
   "outputDirectory": "dist/Ocutemp/browser",
-  "framework": null
+  "framework": null,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "font-src 'self' https://*.vercel-storage.com https://vercel-storage.com https://*.vercel.com https://vercel.live https://fonts.gstatic.com https://*.gstatic.com data:;"
+        }
+      ]
+    }
+  ],
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
