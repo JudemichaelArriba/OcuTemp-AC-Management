@@ -25,6 +25,45 @@
     </div>
   </div>
 
+  <div
+    class="floor-plan-legend absolute right-6 bottom-6 z-20 pointer-events-none backdrop-blur-xl border border-white/80 rounded-[1.35rem] p-3.5 w-48">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="material-symbols-outlined text-[16px] text-blue-600">layers</span>
+      <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Legend</span>
+    </div>
+    <div class="space-y-1.5">
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span class="floor-plan-legend__swatch floor-plan-legend__swatch--on w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">AC On</span>
+      </div>
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span class="floor-plan-legend__swatch floor-plan-legend__swatch--lab w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">Lab</span>
+      </div>
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span class="floor-plan-legend__swatch floor-plan-legend__swatch--classroom w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">Classroom</span>
+      </div>
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span class="floor-plan-legend__swatch floor-plan-legend__swatch--office w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">Office</span>
+      </div>
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span class="floor-plan-legend__swatch floor-plan-legend__swatch--canteen w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">Canteen</span>
+      </div>
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span
+          class="floor-plan-legend__swatch floor-plan-legend__swatch--comfort-room w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">Comfort Room</span>
+      </div>
+      <div class="floor-plan-legend__row flex items-center gap-2.5 rounded-xl border border-white/70 px-2.5 py-2">
+        <span class="floor-plan-legend__swatch floor-plan-legend__swatch--library w-4 h-4 rounded-md shrink-0"></span>
+        <span class="text-[11px] font-black text-slate-700">Library</span>
+      </div>
+    </div>
+  </div>
+
   @if (activeCellId) {
   <div
     class="absolute top-6 left-6 z-20 w-[min(360px,calc(100%-7rem))] bg-white/80 backdrop-blur-xl border border-white/70 p-4 rounded-[24px] shadow-2xl shadow-slate-900/10 animate-in fade-in slide-in-from-left-5">
@@ -135,10 +174,14 @@
               </g>
             </g>
             <!-- Shelf markers (decorative) -->
-            <rect x="381" y="547" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2" pointer-events="none" />
-            <rect x="425" y="547" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2" pointer-events="none" />
-            <rect x="381" y="480" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2" pointer-events="none" />
-            <rect x="425" y="480" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2" pointer-events="none" />
+            <rect x="381" y="547" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2"
+              pointer-events="none" />
+            <rect x="425" y="547" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2"
+              pointer-events="none" />
+            <rect x="381" y="480" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2"
+              pointer-events="none" />
+            <rect x="425" y="480" width="13" height="1" fill="none" stroke="currentColor" stroke-width="2"
+              pointer-events="none" />
           </g>
           <g data-cell-id="Laboratory-1">
             <g data-cell-id="fSvWbD-bN31pjjYDjGuF-28">

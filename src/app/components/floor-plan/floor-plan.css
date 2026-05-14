@@ -2,6 +2,19 @@
   display: block;
   width: 100%;
   height: 100%;
+  --zone-lab: rgba(146, 64, 14, 0.42);
+  --zone-lab-solid: #92400e;
+  --zone-classroom: rgba(14, 165, 233, 0.34);
+  --zone-classroom-solid: #0284c7;
+  --zone-office: rgba(219, 39, 119, 0.34);
+  --zone-office-solid: #db2777;
+  --zone-canteen: rgba(30, 58, 138, 0.42);
+  --zone-canteen-solid: #1e3a8a;
+  --zone-comfort-room: rgba(74, 222, 128, 0.4);
+  --zone-comfort-room-solid: #22c55e;
+  --zone-library: rgba(202, 138, 4, 0.42);
+  --zone-library-solid: #ca8a04;
+  --zone-on-solid: #0c9100;
 }
 
 
@@ -37,8 +50,77 @@
 }
 
 
+::ng-deep g[data-cell-id^="Laboratory-"] rect {
+  fill: var(--zone-lab) !important;
+}
+
+::ng-deep g[data-cell-id^="Room-"] rect {
+  fill: var(--zone-classroom) !important;
+}
+
+::ng-deep g[data-cell-id^="Office-"] rect {
+  fill: var(--zone-office) !important;
+}
+
+::ng-deep g[data-cell-id="Canteen"] rect {
+  fill: var(--zone-canteen) !important;
+}
+
+::ng-deep g[data-cell-id="Comfort-Room"] rect {
+  fill: var(--zone-comfort-room) !important;
+}
+
+::ng-deep g[data-cell-id="Library"] rect {
+  fill: var(--zone-library) !important;
+}
+
+
+.floor-plan-legend {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82));
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.14);
+}
+
+.floor-plan-legend__row {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.floor-plan-legend__swatch {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 6px 12px rgba(15, 23, 42, 0.12);
+}
+
+.floor-plan-legend__swatch--lab {
+  background-color: var(--zone-lab-solid);
+}
+
+.floor-plan-legend__swatch--classroom {
+  background-color: var(--zone-classroom-solid);
+}
+
+.floor-plan-legend__swatch--office {
+  background-color: var(--zone-office-solid);
+}
+
+.floor-plan-legend__swatch--canteen {
+  background-color: var(--zone-canteen-solid);
+}
+
+.floor-plan-legend__swatch--comfort-room {
+  background-color: var(--zone-comfort-room-solid);
+}
+
+.floor-plan-legend__swatch--library {
+  background-color: var(--zone-library-solid);
+}
+
+.floor-plan-legend__swatch--on {
+  background-color: var(--zone-on-solid);
+}
+
+
 ::ng-deep g[data-cell-id].room-on rect {
-  fill: rgba(34, 197, 94, 0.25) !important;
+  fill: rgba(12, 145, 0, 0.589) !important;
 }
 
 ::ng-deep g.floorplan-cell:hover rect {
