@@ -8,6 +8,7 @@ import { DecisionLog } from '../../models/logs.model';
 import { LogService, LogCursor } from '../../services/logs.service';
 import { LogsCard } from '../logs-card/logs-card';
 import { LogsDetailsModal } from '../logs-details-modal/logs-details-modal';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-logs-modal',
@@ -37,6 +38,7 @@ export class LogsModal implements OnChanges {
 
   constructor(
     private logService: LogService,
+    private logger: LoggerService,
     private cdr: ChangeDetectorRef,
   ) { }
 
@@ -89,7 +91,11 @@ export class LogsModal implements OnChanges {
       await this.logService.markAsRead(selected.id);
       this.applyReadState(selected.id);
     } catch (error) {
-      console.error('Failed to mark log as read.', error);
+      this.logger.error('Failed to mark log as read', error, {
+        component: 'LogsModal',
+        action: 'markLogAsRead',
+        logId: selected.id,
+      });
     } finally {
       this.cdr.markForCheck();
     }

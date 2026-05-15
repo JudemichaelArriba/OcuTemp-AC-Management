@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Database, ref, onValue } from '@angular/fire/database';
 import { EnergyDaily } from '../models/energy.model';
+import { LoggerService } from './logger.service';
 
 
 const TZ = 'Asia/Manila';
@@ -92,10 +93,11 @@ export function sumKwhByMonth(
 
 @Injectable({ providedIn: 'root' })
 export class EnergyReportService {
-  constructor(private db: Database) { }
+  constructor(private db: Database, private logger: LoggerService) { }
 
   AllEnergyDaily(
-    callback: (data: Record<string, Record<string, EnergyDaily>>) => void
+    callback: (data: Record<string, Record<string, EnergyDaily>>) => void,
+    onError?: (error: Error) => void
   ): () => void {
     const devicesRef = ref(this.db, 'devices');
     const unsub = onValue(devicesRef, (snapshot) => {
@@ -114,6 +116,12 @@ export class EnergyReportService {
       }
 
       callback(result);
+    }, (error: Error) => {
+      this.logger.error('Energy report stream failed', error, {
+        service: 'EnergyReportService',
+        action: 'AllEnergyDaily',
+      });
+      onError?.(error);
     });
 
     return unsub;

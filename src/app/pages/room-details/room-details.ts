@@ -463,7 +463,6 @@ export class RoomDetails implements OnInit, OnDestroy {
           });
           this.dialogService.success('Override Enabled', 'Manual override has been activated.');
         } catch (err) {
-          this.logger.error('Failed to apply manual override:', err);
           this.dialogService.error('Override Failed', 'Unable to set manual override. Please try again.');
         } finally {
           this.isSavingOverride = false;
@@ -491,7 +490,6 @@ export class RoomDetails implements OnInit, OnDestroy {
           await this.deviceService.clearManualOverride(this.room!.device!, this.currentUserId ?? undefined);
           this.dialogService.success('Override Disabled', 'Manual override has been turned off.');
         } catch (err) {
-          this.logger.error('Failed to clear manual override:', err);
           this.dialogService.error('Disable Failed', 'Unable to clear manual override. Please try again.');
         } finally {
           this.isSavingOverride = false;
@@ -512,7 +510,6 @@ export class RoomDetails implements OnInit, OnDestroy {
     try {
       await this.deviceService.setAiAutoApplyEnabled(this.room.device, !this.aiAutoApplyEnabled);
     } catch (err) {
-      this.logger.error('Failed to update AI auto-apply:', err);
       this.dialogService.error('AI Toggle Failed', 'Unable to update AI auto-apply. Please try again.');
     } finally {
       this.isSavingAiAutoApply = false;

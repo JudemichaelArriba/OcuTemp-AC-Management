@@ -5,7 +5,6 @@ import { UserService } from '../../services/user';
 import { DialogService } from '../../services/dialog.service';
 import { ChangeDetectorRef } from '@angular/core';
 import { EditUserModal } from '../edit-user-modal/edit-user-modal';
-import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-user-card',
@@ -23,8 +22,7 @@ export class UserCardComponent {
   constructor(
     private userService: UserService,
     private cdr: ChangeDetectorRef,
-    private dialogService: DialogService,
-    private logger: LoggerService
+    private dialogService: DialogService
   ) {}
 
   openEditModal(): void {
@@ -57,7 +55,6 @@ export class UserCardComponent {
           this.user = { ...this.user, approved: true };
           this.cdr.markForCheck();
         } catch (err) {
-          this.logger.error('Failed to approve user:', err);
           this.dialogService.error('Approve Failed', 'Failed to approve user. Please try again.');
         } finally {
           this.isUpdating = false;
@@ -84,7 +81,6 @@ export class UserCardComponent {
           this.user = { ...this.user, approved: false };
           this.cdr.markForCheck();
         } catch (err) {
-          this.logger.error('Failed to restrict user:', err);
           this.dialogService.error('Restrict Failed', 'Failed to restrict user. Please try again.');
         } finally {
           this.isUpdating = false;

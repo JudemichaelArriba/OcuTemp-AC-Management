@@ -4,7 +4,6 @@ import { User } from '../models/user.model';
 import { Auth } from '@angular/fire/auth';
 import { UserService } from './user';
 import { onAuthStateChanged } from 'firebase/auth';
-import { LoggerService } from './logger.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthStateService {
@@ -16,8 +15,7 @@ export class AuthStateService {
   constructor(
     private auth: Auth,
     private userService: UserService,
-    private zone: NgZone,
-    private logger: LoggerService
+    private zone: NgZone
   ) {
 
     onAuthStateChanged(this.auth, async (firebaseUser) => {
@@ -62,7 +60,6 @@ export class AuthStateService {
       });
       return user ?? null;
     } catch (err) {
-      this.logger.error('Failed to fetch user', err);
       this.zone.run(() => {
         this._currentUser.next(null);
       });

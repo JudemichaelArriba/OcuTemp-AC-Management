@@ -1,5 +1,5 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners, ErrorHandler, APP_INITIALIZER } from '@angular/core';
-import { provideRouter, Router } from '@angular/router';
+import { ApplicationConfig, provideBrowserGlobalErrorListeners, ErrorHandler } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideDatabase, getDatabase } from '@angular/fire/database';
@@ -7,18 +7,15 @@ import { environment } from '../environments/environment';
 import { provideAuth, getAuth } from '@angular/fire/auth';
 import { FormsModule } from '@angular/forms';
 import { importProvidersFrom } from '@angular/core';
+import { AppErrorHandler } from './services/app-error-handler.service';
 
-import * as Sentry from "@sentry/angular";
+import * as Sentry from '@sentry/angular';
 
-if (environment.sentryDsn) {
+if (environment.production && environment.sentryDsn) {
   Sentry.init({
     dsn: environment.sentryDsn,
-
-    integrations: [
-      Sentry.browserTracingIntegration(),
-    ],
-
-    tracesSampleRate: 1.0,
+    defaultIntegrations: false,
+    tracesSampleRate: 0,
   });
 }
 
@@ -35,21 +32,7 @@ export const appConfig: ApplicationConfig = {
 
     {
       provide: ErrorHandler,
-      useValue: Sentry.createErrorHandler({
-        showDialog: false,
-      }),
-    },
-
-    {
-      provide: Sentry.TraceService,
-      deps: [Router],
-    },
-
-    {
-      provide: APP_INITIALIZER,
-      useFactory: () => () => {},
-      deps: [Sentry.TraceService],
-      multi: true,
+      useClass: AppErrorHandler,
     },
   ]
 };

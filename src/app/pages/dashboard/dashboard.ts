@@ -18,6 +18,7 @@ import { LogsCard } from '../../components/logs-card/logs-card';
 import { LogsDetailsModal } from '../../components/logs-details-modal/logs-details-modal';
 import { LogService } from '../../services/logs.service';
 import { DecisionLog } from '../../models/logs.model';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -64,6 +65,7 @@ export class Dashboard implements OnInit, OnDestroy {
     private deviceService: DeviceService,
     private energyService: EnergyReportService,
     private logService: LogService,
+    private logger: LoggerService,
     private cdr: ChangeDetectorRef,
   ) { }
 
@@ -145,7 +147,11 @@ export class Dashboard implements OnInit, OnDestroy {
       );
       this.selectedDashboardLog = { ...log, read: true };
     } catch (error) {
-      console.error('Failed to mark dashboard log as read.', error);
+      this.logger.error('Failed to mark dashboard log as read', error, {
+        component: 'Dashboard',
+        action: 'markLogAsRead',
+        logId: log.id,
+      });
     } finally {
       this.cdr.markForCheck();
     }
