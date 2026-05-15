@@ -15,7 +15,6 @@ import { Room, Schedule } from '../../models/room.model';
 import { RoomService } from '../../services/room.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
-import { LoggerService } from '../../services/logger.service';
 import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
 import { ScheduleBuilder } from '../shared/schedule-builder/schedule-builder';
 import {
@@ -65,7 +64,6 @@ export class FloorPlanRoomModal implements OnChanges {
     private roomService: RoomService,
     private deviceService: DeviceService,
     private dialogService: DialogService,
-    private logger: LoggerService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -181,7 +179,6 @@ export class FloorPlanRoomModal implements OnChanges {
         }, 50);
       });
     } catch (err) {
-      this.logger.error('Failed to assign room to floorplan:', err);
       this.isSaving = false;
       this.cdr.markForCheck();
       this.dialogService.error('Assign Failed', this.toUserMessage(err));
@@ -247,7 +244,6 @@ export class FloorPlanRoomModal implements OnChanges {
         }, 50);
       });
     } catch (err) {
-      this.logger.error('Failed to create assigned room:', err);
       this.isSaving = false;
       this.cdr.markForCheck();
       this.dialogService.error('Create Failed', this.toUserMessage(err));
@@ -321,7 +317,6 @@ export class FloorPlanRoomModal implements OnChanges {
         }, 50);
       });
     } catch (err) {
-      this.logger.error('Failed to update floorplan room:', err);
       this.isSaving = false;
       this.cdr.markForCheck();
       this.dialogService.error('Update Failed', this.toUserMessage(err));
@@ -345,7 +340,6 @@ export class FloorPlanRoomModal implements OnChanges {
             }, 50);
           });
         } catch (err) {
-          this.logger.error('Failed to unassign floorplan room:', err);
           this.isSaving = false;
           this.cdr.markForCheck();
           this.dialogService.error('Unassign Failed', this.toUserMessage(err));
@@ -371,7 +365,6 @@ export class FloorPlanRoomModal implements OnChanges {
             }, 50);
           });
         } catch (err) {
-          this.logger.error('Failed to delete floorplan room:', err);
           this.isSaving = false;
           this.cdr.markForCheck();
           this.dialogService.error('Delete Failed', this.toUserMessage(err));
@@ -427,7 +420,6 @@ export class FloorPlanRoomModal implements OnChanges {
         hint: this.sourceRoom?.device === device ? 'Currently assigned' : 'Available device',
       }));
     } catch (err) {
-      this.logger.error('Failed to load floorplan modal devices:', err);
       this.deviceOptions = [];
       this.dialogService.error('Load Failed', 'Unable to load available devices.');
     } finally {

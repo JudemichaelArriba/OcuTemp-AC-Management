@@ -3,7 +3,6 @@ import { Auth } from '@angular/fire/auth';
 import { Router } from '@angular/router';
 import { UserService } from '../../services/user';
 import { DialogService } from '../../services/dialog.service';
-import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-add-credentials',
@@ -18,8 +17,7 @@ export class AddCredentialsComponent {
     private auth: Auth,
     private userService: UserService,
     private router: Router,
-    private dialogService: DialogService,
-    private logger: LoggerService
+    private dialogService: DialogService
   ) { }
 
   async saveAccount(event: Event) {
@@ -74,7 +72,6 @@ export class AddCredentialsComponent {
       } else {
         this.dialogService.error('Add Credentials Failed', 'Failed to save account. Please try again.');
       }
-      this.logger.error('AddCredentials error:', err);
 
     }
   }

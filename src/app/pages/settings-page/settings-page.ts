@@ -4,7 +4,6 @@ import { AuthStateService } from '../../services/auth-state.service';
 import { User } from '../../models/user.model';
 import { Observable } from 'rxjs';
 import { UserService } from '../../services/user';
-import { LoggerService } from '../../services/logger.service';
 import { DialogService } from '../../services/dialog.service';
 import { AuthService } from '../../services/auth.services';
 import { PASSWORD_PATTERN, PASSWORD_HELP_TEXT } from '../../helpers/auth-validation';
@@ -33,7 +32,6 @@ export class SettingsPage {
   constructor(
     private auhtState: AuthStateService,
     private userService: UserService,
-    private logger: LoggerService,
     private dialogService: DialogService,
     private authService: AuthService
   ) {
@@ -97,7 +95,6 @@ export class SettingsPage {
 
           this.dialogService.success('Updated', 'Your name was updated successfully.');
         } catch (err) {
-          this.logger.error('Failed to update name');
           this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');
         } finally {
           this.isSaving = false;
@@ -200,7 +197,6 @@ export class SettingsPage {
           this.dialogService.success('Updated', 'Your password was updated successfully.');
         } catch (err: any) {
           this.dialogService.error('Update Failed', this.mapAuthError(err));
-          this.logger.error('Password change failed', err);
         } finally {
           this.isPasswordSaving = false;
         }

@@ -12,7 +12,6 @@ import { AuthStateService } from '../../services/auth-state.service';
 import { Subscription } from 'rxjs';
 import { FloorPlanCellSelection, FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 import { FloorPlanRoomModal } from '../../components/floor-plan-room-modal/floor-plan-room-modal';
-import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-room-management',
@@ -56,7 +55,6 @@ export class RoomManagement implements OnInit, OnDestroy {
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef,
     private authState: AuthStateService,
-    private logger: LoggerService,
     private ngZone: NgZone
   ) {}
 
@@ -219,7 +217,6 @@ export class RoomManagement implements OnInit, OnDestroy {
           await this.roomService.deleteRoom(room.uid);
           this.dialogService.success('Room Deleted', `The room "${room.roomName}" has been successfully removed.`);
         } catch (error) {
-          this.logger.error('[RoomManagement] Error deleting room:', error);
           this.dialogService.error('Error', 'An error occurred while deleting the room. Please try again.');
         }
       },

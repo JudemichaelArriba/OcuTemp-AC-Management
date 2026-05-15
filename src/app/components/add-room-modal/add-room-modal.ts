@@ -7,7 +7,6 @@ import { Room, Schedule } from '../../models/room.model';
 import { getRoomNameError } from '../../helpers/room-validation';
 import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
 import { ScheduleBuilder } from '../shared/schedule-builder/schedule-builder';
-import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-add-room-modal',
@@ -37,8 +36,7 @@ export class AddRoomModal implements OnInit {
     private roomService: RoomService,
     private deviceService: DeviceService,
     private dialogService: DialogService,
-    private cdr: ChangeDetectorRef,
-    private logger: LoggerService
+    private cdr: ChangeDetectorRef
   ) { }
 
   async ngOnInit(): Promise<void> {
@@ -116,7 +114,6 @@ export class AddRoomModal implements OnInit {
 
       this.step = 2;
     } catch (err) {
-      this.logger.error('Failed to validate room details:', err);
       this.dialogService.error('Validation Failed', 'Unable to validate room details. Please try again.');
     } finally {
       this.isStepOneLoading = false;
@@ -151,7 +148,6 @@ export class AddRoomModal implements OnInit {
         }, 50);
       });
     } catch (err) {
-      this.logger.error('Failed to create room:', err);
       this.isSaving = false;
       this.cdr.markForCheck();
       this.dialogService.error('Create Failed', 'Something went wrong. Please try again.');

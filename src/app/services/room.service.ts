@@ -40,7 +40,11 @@ export class RoomService {
         return room.roomName.toLowerCase().trim() === normalizedName;
       });
     } catch (error) {
-      this.logger.error('Database error checking room name:', error);
+      this.logger.error('Database error checking room name', error, {
+        service: 'RoomService',
+        action: 'checkRoomNameExists',
+        excludeUid,
+      });
       throw error;
     }
   }
@@ -76,7 +80,11 @@ export class RoomService {
     } catch (err: any) {
 
       if (err.message !== 'Room name already exists' && err.message !== 'Floorplan cell is already assigned') {
-        this.logger.error('System error creating room:', err);
+        this.logger.error('System error creating room', err, {
+          service: 'RoomService',
+          action: 'createRoom',
+          floorPlanCellId: room.floorPlanCellId,
+        });
       }
       throw err;
     }
@@ -93,7 +101,12 @@ export class RoomService {
       await update(roomRef, safeUpdate);
     } catch (err: any) {
       if (err.message !== 'Floorplan cell is already assigned') {
-        this.logger.error(`System error updating room ${uid}:`, err);
+        this.logger.error('System error updating room', err, {
+          service: 'RoomService',
+          action: 'updateRoom',
+          uid,
+          floorPlanCellId: roomUpdate.floorPlanCellId,
+        });
       }
       throw err;
     }
@@ -119,7 +132,12 @@ export class RoomService {
       });
     } catch (err: any) {
       if (err.message !== 'Room not found' && err.message !== 'Floorplan cell is already assigned') {
-        this.logger.error(`System error assigning room ${uid} to floor plan:`, err);
+        this.logger.error('System error assigning room to floor plan', err, {
+          service: 'RoomService',
+          action: 'assignRoomToFloorPlan',
+          uid,
+          floorPlanCellId: assignment.floorPlanCellId,
+        });
       }
       throw err;
     }
@@ -140,14 +158,21 @@ export class RoomService {
       });
     } catch (err: any) {
       if (err.message !== 'Room not found') {
-        this.logger.error(`System error unassigning room ${uid}:`, err);
+        this.logger.error('System error unassigning room', err, {
+          service: 'RoomService',
+          action: 'unassignRoomFromFloorPlan',
+          uid,
+        });
       }
       throw err;
     }
   }
 
 
-  streamRooms(callback: (rooms: Room[]) => void): () => void {
+  streamRooms(
+    callback: (rooms: Room[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
     const roomsRef = ref(this.db, 'rooms');
     return onValue(roomsRef, (snapshot) => {
       if (!snapshot.exists()) {
@@ -162,10 +187,20 @@ export class RoomService {
       })) as Room[];
 
       callback(rooms);
+    }, (error: Error) => {
+      this.logger.error('Room stream failed', error, {
+        service: 'RoomService',
+        action: 'streamRooms',
+      });
+      onError?.(error);
     });
   }
 
-  streamRoomById(uid: string, callback: (room: Room | null) => void): () => void {
+  streamRoomById(
+    uid: string,
+    callback: (room: Room | null) => void,
+    onError?: (error: Error) => void
+  ): () => void {
     const roomRef = ref(this.db, `rooms/${uid}`);
     return onValue(roomRef, (snapshot) => {
       if (!snapshot.exists()) {
@@ -177,10 +212,21 @@ export class RoomService {
         ...rawRoom,
         uid: rawRoom.uid ?? uid,
       } as Room);
+    }, (error: Error) => {
+      this.logger.error('Room detail stream failed', error, {
+        service: 'RoomService',
+        action: 'streamRoomById',
+        uid,
+      });
+      onError?.(error);
     });
   }
 
-  streamRoomsByStatus(status: Room['status'], callback: (rooms: Room[]) => void): () => void {
+  streamRoomsByStatus(
+    status: Room['status'],
+    callback: (rooms: Room[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
     const roomsRef = ref(this.db, 'rooms');
     const q = query(roomsRef, orderByChild('status'), equalTo(status));
     return onValue(q, (snapshot) => {
@@ -194,6 +240,13 @@ export class RoomService {
         uid: room.uid ?? uid,
       })) as Room[];
       callback(rooms);
+    }, (error: Error) => {
+      this.logger.error('Room status stream failed', error, {
+        service: 'RoomService',
+        action: 'streamRoomsByStatus',
+        status,
+      });
+      onError?.(error);
     });
   }
 
@@ -202,7 +255,11 @@ export class RoomService {
       const roomRef = ref(this.db, `rooms/${uid}`);
       await remove(roomRef);
     } catch (err) {
-      this.logger.error(`System error deleting room ${uid}:`, err);
+      this.logger.error('System error deleting room', err, {
+        service: 'RoomService',
+        action: 'deleteRoom',
+        uid,
+      });
       throw err;
     }
   }

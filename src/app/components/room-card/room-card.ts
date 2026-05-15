@@ -6,7 +6,6 @@ import { Device } from '../../models/esp.model';
 import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
 import { AuthStateService } from '../../services/auth-state.service';
 import { DialogService } from '../../services/dialog.service';
-import { LoggerService } from '../../services/logger.service';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -39,7 +38,6 @@ export class RoomCard implements OnInit, OnDestroy {
     private deviceService: DeviceService,
     private authState: AuthStateService,
     private dialogService: DialogService,
-    private logger: LoggerService,
     private cdr: ChangeDetectorRef,
   ) { }
 
@@ -136,7 +134,6 @@ export class RoomCard implements OnInit, OnDestroy {
     try {
       await this.deviceService.sendForcedOff(this.room.device);
     } catch (err) {
-      this.logger.error('[RoomCard] sendForcedOff failed:', err);
     } finally {
       this.isForcingOff.set(false);
     }
@@ -150,7 +147,6 @@ export class RoomCard implements OnInit, OnDestroy {
     try {
       await this.deviceService.setAiAutoApplyEnabled(this.room.device, !this.aiAutoApplyEnabled);
     } catch (err) {
-      this.logger.error('[RoomCard] setAiAutoApplyEnabled failed:', err);
       this.dialogService.error('AI Toggle Failed', 'Unable to update AI auto-apply. Please try again.');
     } finally {
       this.isSavingAiAutoApply.set(false);
