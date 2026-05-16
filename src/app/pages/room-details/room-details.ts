@@ -3,8 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RoomService } from '../../services/room.service';
-import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service'; // ← remove DeviceTelemetry
-import { Device } from '../../models/esp.model'; // ← add Device
+import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
+import { Device } from '../../models/esp.model';
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
 import { DialogService } from '../../services/dialog.service';
@@ -28,7 +28,7 @@ interface TempTick {
 })
 export class RoomDetails implements OnInit, OnDestroy {
   room: Room | null = null;
-  deviceData: Device | null = null; // ← DeviceTelemetry → Device
+  deviceData: Device | null = null;
   loading = true;
   error: string | null = null;
   isEditModalOpen = false;
@@ -166,7 +166,7 @@ export class RoomDetails implements OnInit, OnDestroy {
 
   private streamDeviceData(deviceId: string) {
     this.unsubscribeDevices = this.deviceService.streamDevice(deviceId, (device) => {
-      this.deviceData = device; // ← Device | null, matches perfectly
+      this.deviceData = device;
 
       if (!this.overrideInitialized) {
         const suggestedTemp = device?.control?.targetTemp ?? device?.acState?.currentTemp;
@@ -194,19 +194,19 @@ export class RoomDetails implements OnInit, OnDestroy {
 
   get deviceOnlineStateDotClass(): string {
     switch (this.deviceOnlineState) {
-      case 'online':  return 'bg-emerald-400';
-      case 'stale':   return 'bg-amber-400 animate-pulse';
+      case 'online': return 'bg-emerald-400';
+      case 'stale': return 'bg-amber-400 animate-pulse';
       case 'offline': return 'bg-red-400';
-      default:        return 'bg-slate-300';
+      default: return 'bg-slate-300';
     }
   }
 
   get deviceOnlineStateLabelClass(): string {
     switch (this.deviceOnlineState) {
-      case 'online':  return 'text-emerald-600';
-      case 'stale':   return 'text-amber-600';
+      case 'online': return 'text-emerald-600';
+      case 'stale': return 'text-amber-600';
       case 'offline': return 'text-red-500';
-      default:        return 'text-slate-400';
+      default: return 'text-slate-400';
     }
   }
 
@@ -319,8 +319,10 @@ export class RoomDetails implements OnInit, OnDestroy {
     return 'bg-slate-100 text-slate-600';
   }
 
+  // Fixed: now reads from control.aiAutoApply (the field setAiAutoApplyEnabled writes to)
+  // instead of the old mlSuggestion.autoApplyEnabled path
   get aiAutoApplyEnabled(): boolean {
-    return this.deviceData?.mlSuggestion?.autoApplyEnabled === true;
+    return this.deviceData?.control?.aiAutoApply === true;
   }
 
   get aiAutoApplySwitchDisabled(): boolean {

@@ -19,6 +19,7 @@ import { LogsDetailsModal } from '../../components/logs-details-modal/logs-detai
 import { LogService } from '../../services/logs.service';
 import { DecisionLog } from '../../models/logs.model';
 import { LoggerService } from '../../services/logger.service';
+import { MlSuggestionService } from '../../services/ml-suggestion.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -66,6 +67,7 @@ export class Dashboard implements OnInit, OnDestroy {
     private energyService: EnergyReportService,
     private logService: LogService,
     private logger: LoggerService,
+    private mlSuggestionService: MlSuggestionService,
     private cdr: ChangeDetectorRef,
   ) { }
 
@@ -179,10 +181,11 @@ export class Dashboard implements OnInit, OnDestroy {
   }
 
   private mergeRoomTelemetry(): void {
-    this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
+    const roomsWithTelemetry = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
       fallbackToRoomPower: true,
       defaultPower: false,
     });
+    this.rooms = this.mlSuggestionService.attachPendingSuggestions(roomsWithTelemetry, this.deviceMap);
   }
 
   onMapRoomSelected(room: Room | undefined): void {

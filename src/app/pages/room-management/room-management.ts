@@ -12,6 +12,7 @@ import { AuthStateService } from '../../services/auth-state.service';
 import { Subscription } from 'rxjs';
 import { FloorPlanCellSelection, FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 import { FloorPlanRoomModal } from '../../components/floor-plan-room-modal/floor-plan-room-modal';
+import { MlSuggestionService } from '../../services/ml-suggestion.service';
 
 @Component({
   selector: 'app-room-management',
@@ -55,6 +56,7 @@ export class RoomManagement implements OnInit, OnDestroy {
     private dialogService: DialogService,
     private cdr: ChangeDetectorRef,
     private authState: AuthStateService,
+    private mlSuggestionService: MlSuggestionService,
     private ngZone: NgZone
   ) {}
 
@@ -93,9 +95,10 @@ export class RoomManagement implements OnInit, OnDestroy {
   }
 
   private mergeRoomTelemetryAndFilter(): void {
-    this.rooms = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
+    const roomsWithTelemetry = mergeRoomsWithTelemetry(this.baseRooms, this.deviceMap, {
       defaultPower: false,
     });
+    this.rooms = this.mlSuggestionService.attachPendingSuggestions(roomsWithTelemetry, this.deviceMap);
 
     const query = this.searchQuery.trim().toLowerCase();
     if (!query) {

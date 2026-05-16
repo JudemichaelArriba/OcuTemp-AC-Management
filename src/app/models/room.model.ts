@@ -1,3 +1,5 @@
+import { MlSuggestion } from './ml-suggestion.model';
+
 export interface Schedule {
   day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday' | '';
   startTime: string;
@@ -19,4 +21,5 @@ export interface Room {
   createdAt?: string;
   updatedAt?: string;
   schedules?: Schedule[];
+  pendingMlSuggestion?: MlSuggestion;
 }
