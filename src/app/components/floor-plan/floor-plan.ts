@@ -97,6 +97,11 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     return this.activeRoom.occupancy ? 'Occupied' : 'Vacant';
   }
 
+  get activeMlSuggestionReasonText(): string {
+    const reason = this.activeRoom?.pendingMlSuggestion?.reason;
+    return reason ? reason.replace(/_/g, ' ') : 'suggestion pending';
+  }
+
   constructor(
     private renderer: Renderer2,
     private el: ElementRef,
