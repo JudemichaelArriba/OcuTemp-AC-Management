@@ -2,54 +2,33 @@ import {
   Component,
   OnInit,
   OnDestroy,
-  AfterViewInit,
-  ViewChild,
-  ElementRef,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
-import {
-  Chart,
-  BarController,
-  BarElement,
-  LinearScale,
-  CategoryScale,
-  Tooltip,
-  Legend,
-} from 'chart.js';
+
 
 import { RoomService } from '../../services/room.service';
 import {
   EnergyReportService,
   getTodayKey,
-
 } from '../../services/energy-report.service';
 import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
 import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
-Chart.register(
-  BarController,
-  BarElement,
-  LinearScale,
-  CategoryScale,
-  Tooltip,
-  Legend
-);
+import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-room-widget';
 
 
 @Component({
   selector: 'app-energy-reports',
   standalone: true,
-  imports: [CommonModule, EnergyTrendWidget],
+  imports: [CommonModule, EnergyTrendWidget, EnergyRoomWidget],
   templateUrl: './energy-reports.html',
   styleUrl: './energy-reports.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
-
-  @ViewChild('roomChartCanvas') roomChartCanvas!: ElementRef<HTMLCanvasElement>;
+export class EnergyReports implements OnInit, OnDestroy {
 
 
   isLoading = true;
@@ -60,9 +39,7 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
   currentMonthLabel = '';
 
 
-  private roomChart: Chart | null = null;
-
-  private rooms: Room[] = [];
+  rooms: Room[] = [];
   energyData: Record<string, Record<string, EnergyDaily>> = {};
 
   private energyLoaded = false;
@@ -86,7 +63,6 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
     this.unsubRooms = this.roomService.streamRooms((rooms) => {
       this.rooms = rooms.filter((r) => r.status === 'active');
       this.activeRoomsCount = this.rooms.length;
-      this.tryRender();
       this.cdr.markForCheck();
     });
 
@@ -95,106 +71,15 @@ export class EnergyReports implements OnInit, AfterViewInit, OnDestroy {
       this.energyLoaded = true;
       this.isLoading = false;
       this.refreshSummaryCards();
-      this.tryRender();
       this.cdr.markForCheck();
     });
   }
 
-  ngAfterViewInit(): void {
-    this.buildChartInstances();
-    this.tryRender();
-  }
+
 
   ngOnDestroy(): void {
     this.unsubEnergy?.();
     this.unsubRooms?.();
-
-    this.roomChart?.destroy();
-  }
-
-
-
-  private buildChartInstances(): void {
-
-
-    const roomCtx = this.roomChartCanvas?.nativeElement?.getContext('2d');
-    if (roomCtx && !this.roomChart) {
-      this.roomChart = new Chart(roomCtx, {
-        type: 'bar',
-        data: {
-          labels: [],
-          datasets: [
-            {
-              data: [],
-              backgroundColor: '#3b82f6',
-              hoverBackgroundColor: '#2563eb',
-              borderRadius: 4,
-              barThickness: 24,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: { duration: 800, easing: 'easeOutQuart' },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              backgroundColor: '#1e293b',
-              padding: 12,
-              cornerRadius: 8,
-              displayColors: false,
-              callbacks: {
-                label: (ctx) => `Usage: ${Number(ctx.parsed.y).toFixed(3)} kWh`,
-              },
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              border: { display: false },
-              grid: { color: '#f1f5f9' },
-              ticks: {
-                font: { size: 10 },
-                color: '#64748b',
-                callback: (v) => `${v} kWh`,
-              },
-            },
-            x: {
-              border: { display: false },
-              grid: { display: false },
-              ticks: {
-                font: { size: 10 },
-                color: '#64748b'
-              },
-            },
-          },
-        },
-      });
-    }
-  }
-
-  private tryRender(): void {
-
-    if (!this.roomChart || !this.energyLoaded) return;
-    this.refreshRoomChart();
-  }
-
-  private refreshRoomChart(): void {
-    if (!this.roomChart) return;
-    const today = getTodayKey();
-    const labels: string[] = [];
-    const values: number[] = [];
-
-    for (const room of this.rooms) {
-      const kwh = this.energyData[room.device]?.[today]?.estimatedKwh ?? 0;
-      labels.push(room.roomName);
-      values.push(parseFloat(kwh.toFixed(4)));
-    }
-
-    this.roomChart.data.labels = labels;
-    this.roomChart.data.datasets[0].data = values;
-    this.roomChart.update();
   }
 
   private refreshSummaryCards(): void {
