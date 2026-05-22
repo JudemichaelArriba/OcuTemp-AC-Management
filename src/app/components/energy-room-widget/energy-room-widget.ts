@@ -22,12 +22,39 @@ import {
 
 import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
-import { getTodayKey } from '../../services/energy-report.service';
-
+import {
+  getTodayKey,
+  getLast7DayKeys,
+  sumKwhByDateForDevice,
+  sumKwhByWeekForDevice,
+  sumKwhByMonthForDevice,
+} from '../../services/energy-report.service';
 
 Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip, Legend);
 
 type FilterMode = 'daily' | 'weekly' | 'monthly';
+
+const BAR_PALETTE = [
+  '#0891b2',
+  '#0284c7',
+  '#0369a1',
+  '#2563eb',
+  '#1d4ed8',
+  '#1e40af',
+  '#4f46e5',
+  '#4338ca',
+];
+
+const BAR_PALETTE_HOVER = [
+  '#0e7490',
+  '#0369a1',
+  '#075985',
+  '#1d4ed8',
+  '#1e40af',
+  '#1e3a8a',
+  '#4338ca',
+  '#3730a3',
+];
 
 @Component({
   selector: 'app-energy-room-widget',
@@ -38,12 +65,12 @@ type FilterMode = 'daily' | 'weekly' | 'monthly';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
-
   @Input() energyData: Record<string, Record<string, EnergyDaily>> = {};
   @Input() rooms: Room[] = [];
 
   @ViewChild('roomChartCanvas') roomChartCanvas!: ElementRef<HTMLCanvasElement>;
 
+  filterMode: FilterMode = 'daily';
   private roomChart: Chart | null = null;
   private isViewInit = false;
 
@@ -63,6 +90,18 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
     this.roomChart?.destroy();
   }
 
+  setFilter(mode: FilterMode): void {
+    if (this.filterMode === mode) return;
+    this.filterMode = mode;
+    this.refreshChart();
+  }
+
+  get filterBadgeLabel(): string {
+    if (this.filterMode === 'daily') return 'Today';
+    if (this.filterMode === 'weekly') return 'Last 7 Days';
+    return 'This Month';
+  }
+
   private buildChart(): void {
     const ctx = this.roomChartCanvas?.nativeElement?.getContext('2d');
     if (ctx && !this.roomChart) {
@@ -73,17 +112,25 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
           datasets: [
             {
               data: [],
-              backgroundColor: '#3b82f6',
-              hoverBackgroundColor: '#2563eb',
-              borderRadius: 4,
-              barThickness: 24,
+              backgroundColor: [],
+              hoverBackgroundColor: [],
+              borderRadius: 50,
+              borderSkipped: false,
+              categoryPercentage: 0.55, 
+              barPercentage: 1.0,      
+              maxBarThickness: 52,  
+              minBarLength: 4,         
             },
           ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: { duration: 800, easing: 'easeOutQuart' },
+          animation: {
+            duration: 700,
+            easing: 'easeOutQuart',
+            delay: (context) => context.dataIndex * 80,
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -125,18 +172,39 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
 
   private refreshChart(): void {
     if (!this.roomChart) return;
-    const today = getTodayKey();
+
     const labels: string[] = [];
     const values: number[] = [];
 
-    for (const room of this.rooms) {
-      const kwh = this.energyData[room.device]?.[today]?.estimatedKwh ?? 0;
-      labels.push(room.roomName);
-      values.push(parseFloat(kwh.toFixed(4)));
+    if (this.filterMode === 'daily') {
+      const today = getTodayKey();
+      for (const room of this.rooms) {
+        labels.push(room.roomName);
+        values.push(parseFloat(sumKwhByDateForDevice(this.energyData, room.device, today).toFixed(4)));
+      }
+    } else if (this.filterMode === 'weekly') {
+      const days = getLast7DayKeys();
+      const start = days[0];
+      const end = days[days.length - 1];
+      for (const room of this.rooms) {
+        labels.push(room.roomName);
+        values.push(parseFloat(sumKwhByWeekForDevice(this.energyData, room.device, start, end).toFixed(4)));
+      }
+    } else {
+      const monthKey = getTodayKey().slice(0, 7);
+      for (const room of this.rooms) {
+        labels.push(room.roomName);
+        values.push(parseFloat(sumKwhByMonthForDevice(this.energyData, room.device, monthKey).toFixed(4)));
+      }
     }
+
+    const colors = labels.map((_, i) => BAR_PALETTE[i % BAR_PALETTE.length]);
+    const hoverColors = labels.map((_, i) => BAR_PALETTE_HOVER[i % BAR_PALETTE_HOVER.length]);
 
     this.roomChart.data.labels = labels;
     this.roomChart.data.datasets[0].data = values;
+    this.roomChart.data.datasets[0].backgroundColor = colors;
+    this.roomChart.data.datasets[0].hoverBackgroundColor = hoverColors;
     this.roomChart.update();
   }
 }
