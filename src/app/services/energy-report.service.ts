@@ -3,9 +3,7 @@ import { Database, ref, onValue } from '@angular/fire/database';
 import { EnergyDaily } from '../models/energy.model';
 import { LoggerService } from './logger.service';
 
-
 const TZ = 'Asia/Manila';
-
 
 export function getTodayKey(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: TZ });
@@ -77,7 +75,7 @@ export function sumKwhByWeek(
 
 export function sumKwhByMonth(
   energyData: Record<string, Record<string, EnergyDaily>>,
-  monthKey: string // 'YYYY-MM'
+  monthKey: string
 ): number {
   return Object.values(energyData).reduce((sum, deviceDays) => {
     return (
@@ -89,40 +87,80 @@ export function sumKwhByMonth(
   }, 0);
 }
 
+// --- NEW: per-device variants for room-level aggregation ---
 
+// Returns kWh for a single device on a specific date
+export function sumKwhByDateForDevice(
+  energyData: Record<string, Record<string, EnergyDaily>>,
+  deviceId: string,
+  dateKey: string
+): number {
+  return energyData[deviceId]?.[dateKey]?.estimatedKwh ?? 0;
+}
+
+// Returns kWh for a single device between start and end date keys (inclusive, YYYY-MM-DD string compare)
+export function sumKwhByWeekForDevice(
+  energyData: Record<string, Record<string, EnergyDaily>>,
+  deviceId: string,
+  start: string,
+  end: string
+): number {
+  const deviceDays = energyData[deviceId];
+  if (!deviceDays) return 0;
+  return Object.entries(deviceDays)
+    .filter(([key]) => key >= start && key <= end)
+    .reduce((sum, [, v]) => sum + (v.estimatedKwh ?? 0), 0);
+}
+
+// Returns kWh for a single device within a given month key ('YYYY-MM')
+export function sumKwhByMonthForDevice(
+  energyData: Record<string, Record<string, EnergyDaily>>,
+  deviceId: string,
+  monthKey: string
+): number {
+  const deviceDays = energyData[deviceId];
+  if (!deviceDays) return 0;
+  return Object.entries(deviceDays)
+    .filter(([key]) => key.startsWith(monthKey))
+    .reduce((sum, [, v]) => sum + (v.estimatedKwh ?? 0), 0);
+}
 
 @Injectable({ providedIn: 'root' })
 export class EnergyReportService {
-  constructor(private db: Database, private logger: LoggerService) { }
+  constructor(private db: Database, private logger: LoggerService) {}
 
   AllEnergyDaily(
     callback: (data: Record<string, Record<string, EnergyDaily>>) => void,
     onError?: (error: Error) => void
   ): () => void {
     const devicesRef = ref(this.db, 'devices');
-    const unsub = onValue(devicesRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        callback({});
-        return;
-      }
-
-      const raw = snapshot.val() as Record<string, any>;
-      const result: Record<string, Record<string, EnergyDaily>> = {};
-
-      for (const [deviceId, deviceData] of Object.entries(raw)) {
-        if (deviceData?.energyDaily && typeof deviceData.energyDaily === 'object') {
-          result[deviceId] = deviceData.energyDaily as Record<string, EnergyDaily>;
+    const unsub = onValue(
+      devicesRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          callback({});
+          return;
         }
-      }
 
-      callback(result);
-    }, (error: Error) => {
-      this.logger.error('Energy report stream failed', error, {
-        service: 'EnergyReportService',
-        action: 'AllEnergyDaily',
-      });
-      onError?.(error);
-    });
+        const raw = snapshot.val() as Record<string, any>;
+        const result: Record<string, Record<string, EnergyDaily>> = {};
+
+        for (const [deviceId, deviceData] of Object.entries(raw)) {
+          if (deviceData?.energyDaily && typeof deviceData.energyDaily === 'object') {
+            result[deviceId] = deviceData.energyDaily as Record<string, EnergyDaily>;
+          }
+        }
+
+        callback(result);
+      },
+      (error: Error) => {
+        this.logger.error('Energy report stream failed', error, {
+          service: 'EnergyReportService',
+          action: 'AllEnergyDaily',
+        });
+        onError?.(error);
+      }
+    );
 
     return unsub;
   }

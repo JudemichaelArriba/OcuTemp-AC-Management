@@ -1,0 +1,55 @@
+<div
+  class="relative overflow-hidden rounded-[2.5rem] border border-white bg-white shadow-2xl shadow-slate-200/60 transition-all duration-300">
+  <div class="p-8">
+
+    <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+
+      <div class="flex items-center gap-4">
+        <div class="w-2 h-8 bg-blue-600 rounded-full"></div>
+        <div>
+          <h3 class="text-sm font-black text-slate-900 uppercase tracking-[0.15em]">Room Distribution</h3>
+          <p class="text-xs text-slate-400 font-medium">Energy breakdown per individual unit</p>
+        </div>
+      </div>
+
+
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="p-1.5 bg-slate-100/50 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-inner">
+          <div class="relative grid grid-cols-3 items-center">
+
+            <div
+              class="absolute inset-y-0 left-0 w-1/3 bg-blue-600 rounded-xl shadow-lg shadow-blue-200 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              [class.translate-x-0]="filterMode === 'daily'" [class.translate-x-full]="filterMode === 'weekly'"
+              [class.translate-x-[200%]]="filterMode === 'monthly'">
+            </div>
+
+            <button (click)="setFilter('daily')"
+              [class]="filterMode === 'daily' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
+              class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
+              Daily
+            </button>
+            <button (click)="setFilter('weekly')"
+              [class]="filterMode === 'weekly' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
+              class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
+              Weekly
+            </button>
+            <button (click)="setFilter('monthly')"
+              [class]="filterMode === 'monthly' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
+              class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
+              Monthly
+            </button>
+          </div>
+        </div>
+        <span
+          class="w-[7.5rem] text-center shrink-0 text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-4 py-2.5 rounded-2xl tracking-widest uppercase">
+          {{ filterBadgeLabel }}
+        </span>
+      </div>
+    </div>
+
+    <div class="h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
+      <canvas #roomChartCanvas></canvas>
+    </div>
+
+  </div>
+</div>
