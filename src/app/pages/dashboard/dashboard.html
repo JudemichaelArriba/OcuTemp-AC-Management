@@ -7,7 +7,6 @@
         </div>
         <div class="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-400/5 rounded-full blur-3xl pointer-events-none">
         </div>
-
         <div class="relative z-10">
           <div class="flex items-center gap-2 mb-2">
             <span
@@ -19,7 +18,6 @@
           </h2>
           <p class="text-xs text-slate-500 font-medium mt-2">Real-time telemetrics from active building zones</p>
         </div>
-
         <div class="flex items-center gap-4 relative z-10">
           <div
             class="flex items-center gap-4 text-[10px] font-black text-slate-600 bg-white/50 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-slate-200/50 shadow-sm">
@@ -44,15 +42,16 @@
 
       @if (!isReady) {
       @for (_ of [1,2,3,4]; track $index) {
-      <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm animate-pulse">
-        <div class="flex justify-between items-start mb-6">
-          <div class="w-12 h-12 bg-slate-100 rounded-2xl"></div>
-          <div class="w-16 h-5 bg-slate-100 rounded-lg"></div>
+      <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div class="flex justify-between items-start mb-5">
+          <div class="skeleton-shimmer w-12 h-12 rounded-2xl" [style.animation-delay]="($index * 60) + 'ms'"></div>
+          <div class="skeleton-shimmer h-5 w-14 rounded-lg" [style.animation-delay]="($index * 60 + 20) + 'ms'"></div>
         </div>
-        <div>
-          <div class="w-24 h-3 bg-slate-100 rounded mb-3"></div>
-          <div class="w-16 h-8 bg-slate-200 rounded"></div>
+        <div class="skeleton-shimmer h-2.5 w-28 rounded-full mb-3" [style.animation-delay]="($index * 60 + 40) + 'ms'">
         </div>
+        <div class="skeleton-shimmer-dark h-8 w-20 rounded-xl mb-3" [style.animation-delay]="($index * 60 + 60) + 'ms'">
+        </div>
+        <div class="skeleton-shimmer h-2 w-16 rounded-full" [style.animation-delay]="($index * 60 + 80) + 'ms'"></div>
       </div>
       }
       } @else {
@@ -147,13 +146,11 @@
   <div class="px-4 pb-4">
     <div class="max-w-[1800px] mx-auto w-full">
       <div class="bg-white/80 backdrop-blur-md border border-white rounded-[2rem] shadow-xl shadow-slate-200/50 p-6">
-
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 px-2 gap-4">
           <div class="flex items-center gap-3">
             <div class="w-2 h-6 bg-blue-600 rounded-full"></div>
             <h3 class="font-black text-slate-900 text-lg tracking-tight">Facility Zones</h3>
           </div>
-
           <div
             class="relative grid grid-cols-2 items-center bg-slate-100/50 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/50 shadow-inner">
             <div
@@ -176,19 +173,45 @@
         <div class="w-full max-w-[1200px] mx-auto min-h-[500px]">
           @if (viewMode === 'cards') {
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
             @if (!isReady) {
+
             @for (_ of [1,2,3]; track $index) {
-            <div class="w-full h-64 rounded-3xl bg-white border border-slate-100 p-6 animate-pulse shadow-sm">
-              <div class="flex justify-between items-start mb-6">
-                <div class="w-12 h-12 bg-slate-100 rounded-2xl"></div>
-                <div class="w-3 h-3 bg-slate-100 rounded-full"></div>
+            <div class="w-full rounded-3xl bg-white border border-slate-100 shadow-sm p-6 overflow-hidden">
+              <div class="flex justify-between items-start mb-5">
+                <div class="skeleton-shimmer w-12 h-12 rounded-2xl" [style.animation-delay]="($index * 80) + 'ms'">
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <div class="skeleton-shimmer w-1.5 h-1.5 rounded-full"
+                    [style.animation-delay]="($index * 80 + 20) + 'ms'"></div>
+                  <div class="skeleton-shimmer h-4 w-12 rounded-lg" [style.animation-delay]="($index * 80 + 20) + 'ms'">
+                  </div>
+                </div>
               </div>
-              <div class="h-4 bg-slate-100 rounded w-1/2 mb-2"></div>
-              <div class="h-3 bg-slate-50 rounded w-1/3 mb-8"></div>
+              <div class="skeleton-shimmer-dark h-4 w-2/3 rounded-lg mb-2"
+                [style.animation-delay]="($index * 80 + 40) + 'ms'"></div>
+              <div class="skeleton-shimmer h-2.5 w-1/3 rounded-full mb-6"
+                [style.animation-delay]="($index * 80 + 60) + 'ms'"></div>
               <div class="space-y-3">
-                <div class="h-2 bg-slate-50 rounded"></div>
-                <div class="h-2 bg-slate-50 rounded"></div>
+                <div class="flex items-center justify-between">
+                  <div class="skeleton-shimmer h-2.5 w-1/3 rounded-full"
+                    [style.animation-delay]="($index * 80 + 80) + 'ms'"></div>
+                  <div class="skeleton-shimmer h-2.5 w-1/4 rounded-full"
+                    [style.animation-delay]="($index * 80 + 80) + 'ms'"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <div class="skeleton-shimmer h-2.5 w-2/5 rounded-full"
+                    [style.animation-delay]="($index * 80 + 100) + 'ms'"></div>
+                  <div class="skeleton-shimmer h-2.5 w-1/5 rounded-full"
+                    [style.animation-delay]="($index * 80 + 100) + 'ms'"></div>
+                </div>
+                <div class="skeleton-shimmer h-2 w-full rounded-full"
+                  [style.animation-delay]="($index * 80 + 120) + 'ms'"></div>
+              </div>
+              <div class="flex items-center gap-2 mt-5 pt-4 border-t border-slate-50">
+                <div class="skeleton-shimmer h-7 w-20 rounded-xl" [style.animation-delay]="($index * 80 + 140) + 'ms'">
+                </div>
+                <div class="skeleton-shimmer h-7 w-16 rounded-xl" [style.animation-delay]="($index * 80 + 160) + 'ms'">
+                </div>
               </div>
             </div>
             }
@@ -211,37 +234,130 @@
           } @else {
           <div [class.animate-fade-in]="useFadeIn"
             class="w-full h-[600px] rounded-2xl overflow-hidden border border-slate-100 shadow-inner bg-slate-50">
-            <app-floor-plan [rooms]="rooms" (roomSelected)="onMapRoomSelected($event)">
-            </app-floor-plan>
+            <app-floor-plan [rooms]="rooms" (roomSelected)="onMapRoomSelected($event)"></app-floor-plan>
           </div>
           }
         </div>
-
       </div>
     </div>
   </div>
 
-  @if (isReady) {
+  @if (!isReady) {
+
+
+  <div class="px-4 pb-4">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <div
+        class="relative overflow-hidden rounded-[2.5rem] border border-white bg-white shadow-2xl shadow-slate-200/60">
+        <div class="p-8">
+          <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+            <div class="flex items-center gap-4">
+              <div class="skeleton-shimmer w-2 h-8 rounded-full"></div>
+              <div class="space-y-2.5">
+                <div class="skeleton-shimmer-dark h-3 w-36 rounded-full" style="animation-delay:40ms"></div>
+                <div class="skeleton-shimmer h-2.5 w-52 rounded-full" style="animation-delay:80ms"></div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="skeleton-shimmer h-9 w-44 rounded-2xl" style="animation-delay:120ms"></div>
+              <div class="skeleton-shimmer h-9 w-20 rounded-2xl" style="animation-delay:160ms"></div>
+            </div>
+          </div>
+          <div class="h-[350px] w-full rounded-2xl bg-slate-50/50 p-6 border border-slate-100 flex items-end gap-2">
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:28%;animation-delay:0ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:48%;animation-delay:30ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:38%;animation-delay:60ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:65%;animation-delay:90ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:52%;animation-delay:120ms"></div>
+            <div class="skeleton-shimmer-dark flex-1 rounded-t-lg" style="height:78%;animation-delay:150ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:60%;animation-delay:180ms"></div>
+            <div class="skeleton-shimmer-dark flex-1 rounded-t-lg" style="height:85%;animation-delay:210ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:70%;animation-delay:240ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:55%;animation-delay:270ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:72%;animation-delay:300ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:45%;animation-delay:330ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:62%;animation-delay:360ms"></div>
+            <div class="skeleton-shimmer flex-1 rounded-t-lg" style="height:50%;animation-delay:390ms"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="px-4 pb-4">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <div
+        class="relative overflow-hidden rounded-[2.5rem] border border-white bg-white shadow-2xl shadow-slate-200/60">
+        <div class="p-8">
+
+          <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+            <div class="flex items-center gap-4">
+              <div class="skeleton-shimmer w-2 h-8 rounded-full"></div>
+              <div class="space-y-2.5">
+                <div class="skeleton-shimmer-dark h-3 w-40 rounded-full" style="animation-delay:40ms"></div>
+                <div class="skeleton-shimmer h-2.5 w-48 rounded-full" style="animation-delay:80ms"></div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="skeleton-shimmer h-9 w-44 rounded-2xl" style="animation-delay:120ms"></div>
+              <div class="skeleton-shimmer h-9 w-28 rounded-2xl" style="animation-delay:160ms"></div>
+            </div>
+          </div>
+
+          <div
+            class="h-[350px] w-full rounded-2xl bg-slate-50/50 p-6 border border-slate-100 flex items-end justify-around gap-4">
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="skeleton-shimmer-dark w-full rounded-full" style="height:72%;animation-delay:0ms"></div>
+              <div class="skeleton-shimmer h-2 w-10 rounded-full" style="animation-delay:40ms"></div>
+            </div>
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="skeleton-shimmer w-full rounded-full" style="height:44%;animation-delay:60ms"></div>
+              <div class="skeleton-shimmer h-2 w-10 rounded-full" style="animation-delay:100ms"></div>
+            </div>
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="skeleton-shimmer-dark w-full rounded-full" style="height:88%;animation-delay:120ms"></div>
+              <div class="skeleton-shimmer h-2 w-10 rounded-full" style="animation-delay:160ms"></div>
+            </div>
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="skeleton-shimmer w-full rounded-full" style="height:55%;animation-delay:180ms"></div>
+              <div class="skeleton-shimmer h-2 w-10 rounded-full" style="animation-delay:220ms"></div>
+            </div>
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="skeleton-shimmer w-full rounded-full" style="height:65%;animation-delay:240ms"></div>
+              <div class="skeleton-shimmer h-2 w-10 rounded-full" style="animation-delay:280ms"></div>
+            </div>
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="skeleton-shimmer w-full rounded-full" style="height:38%;animation-delay:300ms"></div>
+              <div class="skeleton-shimmer h-2 w-10 rounded-full" style="animation-delay:340ms"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  } @else {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
     <div class="max-w-[1800px] mx-auto w-full">
-      <app-energy-trend-widget [energyData]="rawEnergyData">
-      </app-energy-trend-widget>
+      <app-energy-trend-widget [energyData]="rawEnergyData"></app-energy-trend-widget>
+    </div>
+  </div>
+  <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
+    <div class="max-w-[1800px] mx-auto w-full">
+      <app-energy-room-widget [energyData]="rawEnergyData" [rooms]="rooms" />
     </div>
   </div>
   }
 
-  <app-logs-modal [isOpen]="isLogsModalOpen" (closed)="closeLogsModal()">
-  </app-logs-modal>
-
+  <app-logs-modal [isOpen]="isLogsModalOpen" (closed)="closeLogsModal()"></app-logs-modal>
   <app-logs-details-modal [isOpen]="isDashboardLogDetailsOpen" [log]="selectedDashboardLog"
-    (closed)="closeDashboardLogDetails()">
-  </app-logs-details-modal>
+    (closed)="closeDashboardLogDetails()"></app-logs-details-modal>
 
   @if (isReady) {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-8">
     <div class="max-w-[1800px] mx-auto w-full">
       <div class="bg-white border border-slate-100 rounded-[2.5rem] shadow-xl shadow-slate-200/40 p-8">
-
         <div class="flex items-center justify-between mb-6">
           <div class="flex items-center gap-3">
             <div class="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -249,14 +365,12 @@
             </div>
             <h3 class="font-black text-slate-900 text-sm uppercase tracking-widest">Recent Activities</h3>
           </div>
-
           <button (click)="openLogsModal()"
             class="relative text-[10px] font-black text-blue-600 hover:text-indigo-600 transition-colors uppercase tracking-[0.2em] flex items-center gap-1.5">
             Activity Log
             <span class="material-symbols-outlined text-xs">arrow_forward</span>
           </button>
         </div>
-
         @if (recentLogs.length === 0) {
         <div class="py-10 text-center">
           <span class="material-symbols-outlined text-slate-200 text-4xl mb-2">history</span>
@@ -269,7 +383,6 @@
           }
         </div>
         }
-
       </div>
     </div>
   </div>

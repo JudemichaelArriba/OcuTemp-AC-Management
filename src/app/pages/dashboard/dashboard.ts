@@ -12,6 +12,7 @@ import { RoomCard } from '../../components/room-card/room-card';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
+import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-room-widget';
 import { EnergyDaily } from '../../models/energy.model';
 import { LogsModal } from '../../components/logs-modal/logs-modal';
 import { LogsCard } from '../../components/logs-card/logs-card';
@@ -24,7 +25,7 @@ import { MlSuggestionService } from '../../services/ml-suggestion.service';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [RoomCard, DecimalPipe, FloorPlanComponent, EnergyTrendWidget, LogsModal, LogsCard, LogsDetailsModal],
+  imports: [RoomCard, DecimalPipe, FloorPlanComponent, EnergyTrendWidget, EnergyRoomWidget, LogsModal, LogsCard, LogsDetailsModal],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
