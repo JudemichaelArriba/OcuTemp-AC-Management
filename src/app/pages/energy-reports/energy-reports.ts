@@ -16,7 +16,7 @@ import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
 import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
 import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-room-widget';
-import { PdfExportService } from '../../services/pdf-export.service'; 
+import { PdfExportService } from '../../services/pdf-export.service';
 
 @Component({
   selector: 'app-energy-reports',
@@ -28,7 +28,7 @@ import { PdfExportService } from '../../services/pdf-export.service';
 })
 export class EnergyReports implements OnInit, OnDestroy {
   isLoading = true;
-  isGenerating = false; 
+  isGenerating = false;
 
   totalKwhDisplay = '0.00';
   totalRuntimeDisplay = '0m';
@@ -38,7 +38,6 @@ export class EnergyReports implements OnInit, OnDestroy {
   rooms: Room[] = [];
   energyData: Record<string, Record<string, EnergyDaily>> = {};
 
-  private energyLoaded = false;
   private unsubEnergy: (() => void) | null = null;
   private unsubRooms: (() => void) | null = null;
 
@@ -46,7 +45,7 @@ export class EnergyReports implements OnInit, OnDestroy {
     private roomService: RoomService,
     private energyService: EnergyReportService,
     private cdr: ChangeDetectorRef,
-    private pdfService: PdfExportService 
+    private pdfService: PdfExportService
   ) {}
 
   ngOnInit(): void {
@@ -64,7 +63,6 @@ export class EnergyReports implements OnInit, OnDestroy {
 
     this.unsubEnergy = this.energyService.AllEnergyDaily((data) => {
       this.energyData = data;
-      this.energyLoaded = true;
       this.isLoading = false;
       this.refreshSummaryCards();
       this.cdr.markForCheck();
@@ -93,7 +91,6 @@ export class EnergyReports implements OnInit, OnDestroy {
         }
       );
     } finally {
- 
       this.isGenerating = false;
       this.cdr.markForCheck();
     }
