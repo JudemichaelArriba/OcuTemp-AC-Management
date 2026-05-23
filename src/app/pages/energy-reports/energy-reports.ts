@@ -7,8 +7,6 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
-
-
 import { RoomService } from '../../services/room.service';
 import {
   EnergyReportService,
@@ -18,7 +16,7 @@ import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
 import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
 import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-room-widget';
-
+import { PdfExportService } from '../../services/pdf-export.service'; 
 
 @Component({
   selector: 'app-energy-reports',
@@ -29,29 +27,27 @@ import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-roo
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EnergyReports implements OnInit, OnDestroy {
-
-
   isLoading = true;
+  isGenerating = false; 
 
   totalKwhDisplay = '0.00';
   totalRuntimeDisplay = '0m';
   activeRoomsCount = 0;
   currentMonthLabel = '';
 
-
   rooms: Room[] = [];
   energyData: Record<string, Record<string, EnergyDaily>> = {};
 
   private energyLoaded = false;
-
   private unsubEnergy: (() => void) | null = null;
   private unsubRooms: (() => void) | null = null;
 
   constructor(
     private roomService: RoomService,
     private energyService: EnergyReportService,
-    private cdr: ChangeDetectorRef
-  ) { }
+    private cdr: ChangeDetectorRef,
+    private pdfService: PdfExportService 
+  ) {}
 
   ngOnInit(): void {
     this.currentMonthLabel = new Date().toLocaleString('en-US', {
@@ -75,11 +71,32 @@ export class EnergyReports implements OnInit, OnDestroy {
     });
   }
 
-
-
   ngOnDestroy(): void {
     this.unsubEnergy?.();
     this.unsubRooms?.();
+  }
+
+  downloadReport(): void {
+    if (this.isGenerating || this.isLoading) return;
+    this.isGenerating = true;
+    this.cdr.markForCheck();
+
+    try {
+      this.pdfService.generateEnergyReport(
+        this.energyData,
+        this.rooms,
+        {
+          totalKwh: this.totalKwhDisplay,
+          totalRuntime: this.totalRuntimeDisplay,
+          activeRooms: this.activeRoomsCount,
+          monthLabel: this.currentMonthLabel,
+        }
+      );
+    } finally {
+ 
+      this.isGenerating = false;
+      this.cdr.markForCheck();
+    }
   }
 
   private refreshSummaryCards(): void {
