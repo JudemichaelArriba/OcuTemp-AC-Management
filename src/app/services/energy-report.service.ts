@@ -48,6 +48,16 @@ export function getLast12MonthKeys(): string[] {
   return keys;
 }
 
+
+export function getLast5YearKeys(): string[] {
+  const keys: string[] = [];
+  const currentYear = new Date().getFullYear();
+  for (let i = 4; i >= 0; i--) {
+    keys.push(String(currentYear - i));
+  }
+  return keys;
+}
+
 export function sumKwhByDate(
   energyData: Record<string, Record<string, EnergyDaily>>,
   dateKey: string
@@ -87,9 +97,23 @@ export function sumKwhByMonth(
   }, 0);
 }
 
-// --- NEW: per-device variants for room-level aggregation ---
 
-// Returns kWh for a single device on a specific date
+export function sumKwhByYear(
+  energyData: Record<string, Record<string, EnergyDaily>>,
+  yearKey: string
+): number {
+  return Object.values(energyData).reduce((sum, deviceDays) => {
+    return (
+      sum +
+      Object.entries(deviceDays)
+        .filter(([key]) => key.startsWith(yearKey))
+        .reduce((s, [, v]) => s + (v.estimatedKwh ?? 0), 0)
+    );
+  }, 0);
+}
+
+
+
 export function sumKwhByDateForDevice(
   energyData: Record<string, Record<string, EnergyDaily>>,
   deviceId: string,
@@ -98,7 +122,6 @@ export function sumKwhByDateForDevice(
   return energyData[deviceId]?.[dateKey]?.estimatedKwh ?? 0;
 }
 
-// Returns kWh for a single device between start and end date keys (inclusive, YYYY-MM-DD string compare)
 export function sumKwhByWeekForDevice(
   energyData: Record<string, Record<string, EnergyDaily>>,
   deviceId: string,
@@ -112,7 +135,6 @@ export function sumKwhByWeekForDevice(
     .reduce((sum, [, v]) => sum + (v.estimatedKwh ?? 0), 0);
 }
 
-// Returns kWh for a single device within a given month key ('YYYY-MM')
 export function sumKwhByMonthForDevice(
   energyData: Record<string, Record<string, EnergyDaily>>,
   deviceId: string,
@@ -122,6 +144,19 @@ export function sumKwhByMonthForDevice(
   if (!deviceDays) return 0;
   return Object.entries(deviceDays)
     .filter(([key]) => key.startsWith(monthKey))
+    .reduce((sum, [, v]) => sum + (v.estimatedKwh ?? 0), 0);
+}
+
+
+export function sumKwhByYearForDevice(
+  energyData: Record<string, Record<string, EnergyDaily>>,
+  deviceId: string,
+  yearKey: string
+): number {
+  const deviceDays = energyData[deviceId];
+  if (!deviceDays) return 0;
+  return Object.entries(deviceDays)
+    .filter(([key]) => key.startsWith(yearKey))
     .reduce((sum, [, v]) => sum + (v.estimatedKwh ?? 0), 0);
 }
 
