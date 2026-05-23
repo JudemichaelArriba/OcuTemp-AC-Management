@@ -28,9 +28,11 @@ import {
   getLast7DayKeys,
   getLast8WeekRanges,
   getLast12MonthKeys,
+  getLast5YearKeys,
   sumKwhByDate,
   sumKwhByWeek,
   sumKwhByMonth,
+  sumKwhByYear,
 } from '../../services/energy-report.service';
 
 Chart.register(
@@ -38,7 +40,7 @@ Chart.register(
   LinearScale, CategoryScale, Tooltip, Filler, Legend
 );
 
-type FilterMode = 'daily' | 'weekly' | 'monthly';
+type FilterMode = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 @Component({
   selector: 'app-energy-trend-widget',
@@ -55,6 +57,14 @@ export class EnergyTrendWidget implements OnChanges, AfterViewInit, OnDestroy {
   filterMode: FilterMode = 'daily';
   private overallChart: Chart | null = null;
   private isViewInit = false;
+
+
+  private readonly filterIndex: Record<FilterMode, number> = {
+    daily: 0,
+    weekly: 1,
+    monthly: 2,
+    yearly: 3,
+  };
 
   ngAfterViewInit(): void {
     this.isViewInit = true;
@@ -78,13 +88,18 @@ export class EnergyTrendWidget implements OnChanges, AfterViewInit, OnDestroy {
     this.refreshOverallChart();
   }
 
+
+  get sliderTranslate(): string {
+    return `translateX(${this.filterIndex[this.filterMode] * 100}%)`;
+  }
+
   private buildChartInstances(): void {
     const overallCtx = this.overallChartCanvas?.nativeElement?.getContext('2d');
     if (overallCtx && !this.overallChart) {
       this.overallChart = new Chart(overallCtx, {
         type: 'line',
-        data: { 
-          labels: [], 
+        data: {
+          labels: [],
           datasets: [
             {
               data: [],
@@ -145,7 +160,7 @@ export class EnergyTrendWidget implements OnChanges, AfterViewInit, OnDestroy {
               ticks: {
                 font: { size: 10, family: 'Inter' },
                 color: '#64748b',
-                padding: 10
+                padding: 10,
               },
             },
           },
@@ -180,13 +195,17 @@ export class EnergyTrendWidget implements OnChanges, AfterViewInit, OnDestroy {
       const weeks = getLast8WeekRanges();
       labels = weeks.map((w) => `${this.formatShortDate(w.start)} - ${this.formatShortDate(w.end)}`);
       values = weeks.map((w) => sumKwhByWeek(this.energyData, w.start, w.end));
-    } else {
+    } else if (this.filterMode === 'monthly') {
       const months = getLast12MonthKeys();
       labels = months.map((m) => {
         const [y, mo] = m.split('-');
         return new Date(+y, +mo - 1, 1).toLocaleString('en-US', { month: 'short', year: '2-digit' });
       });
       values = months.map((m) => sumKwhByMonth(this.energyData, m));
+    } else {
+      const years = getLast5YearKeys();
+      labels = years;
+      values = years.map((y) => sumKwhByYear(this.energyData, y));
     }
 
     this.overallChart.data.labels = labels;

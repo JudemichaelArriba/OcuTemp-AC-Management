@@ -25,35 +25,38 @@ import { EnergyDaily } from '../../models/energy.model';
 import {
   getTodayKey,
   getLast7DayKeys,
+  getLast5YearKeys,
   sumKwhByDateForDevice,
   sumKwhByWeekForDevice,
   sumKwhByMonthForDevice,
+  sumKwhByYearForDevice,
 } from '../../services/energy-report.service';
 
 Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip, Legend);
 
-type FilterMode = 'daily' | 'weekly' | 'monthly';
+
+type FilterMode = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const BAR_PALETTE = [
-  '#0891b2',
+  '#06b6d4',
   '#0284c7',
-  '#0369a1',
-  '#2563eb',
-  '#1d4ed8',
+  '#2563eb', 
+  '#3b82f6', 
+  '#4f46e5', 
+  '#1d4ed8', 
   '#1e40af',
-  '#4f46e5',
-  '#4338ca',
+  '#0f172a', 
 ];
 
 const BAR_PALETTE_HOVER = [
-  '#0e7490',
-  '#0369a1',
-  '#075985',
-  '#1d4ed8',
-  '#1e40af',
-  '#1e3a8a',
-  '#4338ca',
-  '#3730a3',
+  '#0891b2',
+  '#0369a1', 
+  '#1d4ed8', 
+  '#2563eb', 
+  '#4338ca', 
+  '#1e40af', 
+  '#172554', 
+  '#020617', 
 ];
 
 @Component({
@@ -73,6 +76,14 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
   filterMode: FilterMode = 'daily';
   private roomChart: Chart | null = null;
   private isViewInit = false;
+
+
+  private readonly filterIndex: Record<FilterMode, number> = {
+    daily: 0,
+    weekly: 1,
+    monthly: 2,
+    yearly: 3,
+  };
 
   ngAfterViewInit(): void {
     this.isViewInit = true;
@@ -99,7 +110,13 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
   get filterBadgeLabel(): string {
     if (this.filterMode === 'daily') return 'Today';
     if (this.filterMode === 'weekly') return 'Last 7 Days';
-    return 'This Month';
+    if (this.filterMode === 'monthly') return 'This Month';
+    return 'Last 5 Years'; 
+  }
+
+
+  get sliderTranslate(): string {
+    return `translateX(${this.filterIndex[this.filterMode] * 100}%)`;
   }
 
   private buildChart(): void {
@@ -116,10 +133,10 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
               hoverBackgroundColor: [],
               borderRadius: 50,
               borderSkipped: false,
-              categoryPercentage: 0.55, 
-              barPercentage: 1.0,      
-              maxBarThickness: 52,  
-              minBarLength: 4,         
+              categoryPercentage: 0.55,
+              barPercentage: 1.0,
+              maxBarThickness: 52,
+              minBarLength: 4,
             },
           ],
         },
@@ -190,11 +207,22 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
         labels.push(room.roomName);
         values.push(parseFloat(sumKwhByWeekForDevice(this.energyData, room.device, start, end).toFixed(4)));
       }
-    } else {
+    } else if (this.filterMode === 'monthly') {
       const monthKey = getTodayKey().slice(0, 7);
       for (const room of this.rooms) {
         labels.push(room.roomName);
         values.push(parseFloat(sumKwhByMonthForDevice(this.energyData, room.device, monthKey).toFixed(4)));
+      }
+    } else {
+
+      const years = getLast5YearKeys();
+      for (const room of this.rooms) {
+        labels.push(room.roomName);
+        const total = years.reduce(
+          (sum, y) => sum + sumKwhByYearForDevice(this.energyData, room.device, y),
+          0
+        );
+        values.push(parseFloat(total.toFixed(4)));
       }
     }
 
