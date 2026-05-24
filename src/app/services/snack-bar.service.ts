@@ -28,13 +28,17 @@ export interface SnackBarMessage extends Required<Pick<SnackBarConfig, 'title' |
 
 @Injectable({ providedIn: 'root' })
 export class SnackBarService {
+  private static readonly MAX_VISIBLE = 3;
   private static readonly DEFAULT_DURATION_MS = 6500;
+
+  private readonly messagesSubject = new BehaviorSubject<SnackBarMessage[]>([]);
+  readonly messages$ = this.messagesSubject.asObservable();
 
   private readonly currentSubject = new BehaviorSubject<SnackBarMessage | null>(null);
   readonly current$ = this.currentSubject.asObservable();
 
-  private current: SnackBarMessage | null = null;
-  private queue: SnackBarMessage[] = [];
+  private visibleMessages: SnackBarMessage[] = [];
+  private queuedMessages: SnackBarMessage[] = [];
   private nextId = 0;
 
   show(config: SnackBarConfig): SnackBarMessage {
@@ -43,10 +47,11 @@ export class SnackBarService {
 
     const message = this.createMessage(config);
 
-    if (!this.current) {
-      this.setCurrent(message);
+    if (this.visibleMessages.length < SnackBarService.MAX_VISIBLE) {
+      this.visibleMessages = [message, ...this.visibleMessages];
+      this.emitState();
     } else {
-      this.queue.push(message);
+      this.queuedMessages.push(message);
     }
 
     return message;
@@ -69,22 +74,34 @@ export class SnackBarService {
   }
 
   dismiss(id?: string): void {
-    if (id && this.current?.id !== id) {
-      this.queue = this.queue.filter((message) => message.id !== id);
+    if (id) {
+      const visibleIndex = this.visibleMessages.findIndex((message) => message.id === id);
+
+      if (visibleIndex >= 0) {
+        this.visibleMessages = this.visibleMessages.filter((message) => message.id !== id);
+        this.promoteQueuedMessages();
+        this.emitState();
+        return;
+      }
+
+      this.queuedMessages = this.queuedMessages.filter((message) => message.id !== id);
       return;
     }
 
-    if (!this.current) {
-      this.currentSubject.next(null);
+    if (this.visibleMessages.length === 0) {
+      this.emitState();
       return;
     }
 
-    this.setCurrent(this.queue.shift() ?? null);
+    this.visibleMessages = this.visibleMessages.slice(1);
+    this.promoteQueuedMessages();
+    this.emitState();
   }
 
   clear(): void {
-    this.queue = [];
-    this.setCurrent(null);
+    this.visibleMessages = [];
+    this.queuedMessages = [];
+    this.emitState();
   }
 
   private createMessage(config: SnackBarConfig): SnackBarMessage {
@@ -107,12 +124,27 @@ export class SnackBarService {
   private findDuplicate(dedupeKey?: string): SnackBarMessage | undefined {
     const key = dedupeKey?.trim();
     if (!key) return undefined;
-    if (this.current?.dedupeKey === key) return this.current;
-    return this.queue.find((message) => message.dedupeKey === key);
+    return (
+      this.visibleMessages.find((message) => message.dedupeKey === key) ??
+      this.queuedMessages.find((message) => message.dedupeKey === key)
+    );
   }
 
-  private setCurrent(message: SnackBarMessage | null): void {
-    this.current = message;
-    this.currentSubject.next(message);
+  private promoteQueuedMessages(): void {
+    while (
+      this.visibleMessages.length < SnackBarService.MAX_VISIBLE &&
+      this.queuedMessages.length > 0
+    ) {
+      const next = this.queuedMessages.shift();
+      if (next) {
+        this.visibleMessages = [next, ...this.visibleMessages];
+      }
+    }
+  }
+
+  private emitState(): void {
+    const visibleSnapshot = [...this.visibleMessages];
+    this.messagesSubject.next(visibleSnapshot);
+    this.currentSubject.next(visibleSnapshot[0] ?? null);
   }
 }

@@ -18,37 +18,27 @@ import { SnackBarMessage, SnackBarService, SnackBarType } from '../../services/s
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SnackBar implements OnInit, OnDestroy {
-  item: SnackBarMessage | null = null;
-  visible = false;
-  animating = false;
+  messages: SnackBarMessage[] = [];
+  private animatingIds = new Set<string>();
 
   private subscription?: Subscription;
-  private enterTimer?: ReturnType<typeof setTimeout>;
-  private hideTimer?: ReturnType<typeof setTimeout>;
-  private autoDismissTimer?: ReturnType<typeof setTimeout>;
+  private enterTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private autoDismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     private snackBarService: SnackBarService,
     private cdr: ChangeDetectorRef,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
-    this.subscription = this.snackBarService.current$.subscribe((message) => {
-      if (message) {
-        this.present(message);
-      } else {
-        this.hide();
-      }
+    this.subscription = this.snackBarService.messages$.subscribe((messages) => {
+      this.syncMessages(messages);
     });
   }
 
   ngOnDestroy(): void {
     this.subscription?.unsubscribe();
     this.clearTimers();
-  }
-
-  get visibleItem(): SnackBarMessage | null {
-    return this.visible ? this.item : null;
   }
 
   dismiss(id?: string): void {
@@ -95,12 +85,12 @@ export class SnackBar implements OnInit, OnDestroy {
     }
   }
 
-  surfaceStateClass(type: SnackBarType): string {
-    const motionClass = this.animating
+  surfaceStateClass(message: SnackBarMessage): string {
+    const motionClass = this.isAnimating(message.id)
       ? 'translate-y-0 opacity-100 scale-100'
       : 'translate-y-6 opacity-0 scale-[0.96]';
 
-    return `${this.surfaceClass(type)} ${motionClass}`;
+    return `${this.surfaceClass(message.type)} ${motionClass}`;
   }
 
   glowClass(type: SnackBarType): string {
@@ -172,43 +162,77 @@ export class SnackBar implements OnInit, OnDestroy {
     return `${durationMs}ms`;
   }
 
-  private present(message: SnackBarMessage): void {
-    this.clearTimers();
-    this.item = message;
-    this.visible = true;
-    this.animating = false;
-    this.cdr.markForCheck();
+  private syncMessages(messages: SnackBarMessage[]): void {
+    const previousIds = new Set(this.messages.map((message) => message.id));
+    const nextIds = new Set(messages.map((message) => message.id));
 
-    this.enterTimer = setTimeout(() => {
-      this.animating = true;
+    this.clearRemovedMessageState(nextIds);
+    this.messages = messages;
+
+    this.messages.forEach((message) => {
+      if (!previousIds.has(message.id)) {
+        this.scheduleEnter(message.id);
+      }
+      this.ensureAutoDismissTimer(message);
+    });
+
+    this.cdr.markForCheck();
+  }
+
+  private scheduleEnter(id: string): void {
+    clearTimeout(this.enterTimers.get(id));
+
+    const timer = setTimeout(() => {
+      this.animatingIds.add(id);
+      this.enterTimers.delete(id);
       this.cdr.markForCheck();
     }, 20);
 
-    if (!message.persistent && message.durationMs > 0) {
-      this.autoDismissTimer = setTimeout(() => {
-        this.dismiss(message.id);
-      }, message.durationMs);
-    }
+    this.enterTimers.set(id, timer);
   }
 
-  private hide(): void {
-    this.clearTimers();
-    this.animating = false;
-    this.cdr.markForCheck();
+  private ensureAutoDismissTimer(message: SnackBarMessage): void {
+    if (message.persistent || message.durationMs <= 0 || this.autoDismissTimers.has(message.id)) return;
 
-    this.hideTimer = setTimeout(() => {
-      this.visible = false;
-      this.item = null;
-      this.cdr.markForCheck();
-    }, 280);
+    const timer = setTimeout(() => {
+      this.autoDismissTimers.delete(message.id);
+      this.dismiss(message.id);
+    }, message.durationMs);
+
+    this.autoDismissTimers.set(message.id, timer);
+  }
+
+  private isAnimating(id: string): boolean {
+    return this.animatingIds.has(id);
+  }
+
+  private clearRemovedMessageState(nextIds: Set<string>): void {
+    Array.from(this.enterTimers.entries()).forEach(([id, timer]) => {
+      if (!nextIds.has(id)) {
+        clearTimeout(timer);
+        this.enterTimers.delete(id);
+      }
+    });
+
+    Array.from(this.autoDismissTimers.entries()).forEach(([id, timer]) => {
+      if (!nextIds.has(id)) {
+        clearTimeout(timer);
+        this.autoDismissTimers.delete(id);
+      }
+    });
+
+    Array.from(this.animatingIds).forEach((id) => {
+      if (!nextIds.has(id)) {
+        this.animatingIds.delete(id);
+      }
+    });
   }
 
   private clearTimers(): void {
-    clearTimeout(this.enterTimer);
-    clearTimeout(this.hideTimer);
-    clearTimeout(this.autoDismissTimer);
-    this.enterTimer = undefined;
-    this.hideTimer = undefined;
-    this.autoDismissTimer = undefined;
+    this.enterTimers.forEach((timer) => clearTimeout(timer));
+    this.autoDismissTimers.forEach((timer) => clearTimeout(timer));
+    this.enterTimers.clear();
+    this.autoDismissTimers.clear();
+    this.animatingIds.clear();
   }
 }
