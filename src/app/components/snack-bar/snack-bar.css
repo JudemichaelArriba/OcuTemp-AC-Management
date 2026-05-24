@@ -1,0 +1,34 @@
+:host {
+  display: block;
+}
+
+.snack-surface {
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.snack-progress {
+  animation-name: snack-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  transform-origin: left center;
+}
+
+@keyframes snack-progress {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snack-surface {
+    transition: none;
+  }
+
+  .snack-progress {
+    animation: none;
+  }
+}

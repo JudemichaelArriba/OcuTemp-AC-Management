@@ -1,0 +1,79 @@
+@if (messages.length > 0) {
+<div
+  class="fixed inset-x-0 bottom-4 z-[9998] flex flex-col gap-3 px-4 pointer-events-none sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-[calc(100vw-3rem)] sm:max-w-[420px] sm:px-0">
+  @for (current of messages; track current.id) {
+  <section
+    class="snack-surface pointer-events-auto relative w-full overflow-hidden rounded-3xl border bg-white/60 backdrop-blur-2xl shadow-2xl ring-1 ring-white/80 transition-all duration-300"
+    [ngClass]="surfaceStateClass(current)" [attr.role]="roleFor(current.type)"
+    [attr.aria-live]="current.type === 'warning' || current.type === 'error' ? 'assertive' : 'polite'"
+    aria-atomic="true">
+
+    <div class="pointer-events-none absolute -top-6 -left-6 h-32 w-32 rounded-full blur-2xl opacity-60"
+      [ngClass]="'bg-gradient-to-br ' + glowClass(current.type)"></div>
+
+
+    <div
+      class="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent">
+    </div>
+
+
+    <div
+      class="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-white/80 via-white/30 to-transparent">
+    </div>
+
+
+    <div
+      class="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-white/55 via-white/25 to-white/10">
+    </div>
+
+
+    <div class="relative flex items-start gap-3 p-4 pr-3">
+
+      <div
+        class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 backdrop-blur-sm"
+        [ngClass]="iconWrapClass(current.type)">
+        <span class="material-symbols-outlined text-[22px] leading-none">
+          {{ iconName(current) }}
+        </span>
+      </div>
+
+
+      <div class="min-w-0 flex-1 pt-0.5">
+        <p class="text-sm font-black leading-snug tracking-tight" [ngClass]="titleClass(current.type)">
+          {{ current.title }}
+        </p>
+
+        @if (current.message) {
+        <p class="mt-1 text-xs font-medium leading-relaxed text-slate-500/90">
+          {{ current.message }}
+        </p>
+        }
+
+        @if (current.actionLabel) {
+        <button type="button"
+          class="mt-3 inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-black uppercase tracking-widest backdrop-blur-sm transition-all duration-200 focus:outline-none focus-visible:ring-2"
+          [ngClass]="actionClass(current.type)" (click)="onAction(current)">
+          {{ current.actionLabel }}
+          <span class="material-symbols-outlined text-[14px] leading-none">arrow_forward</span>
+        </button>
+        }
+      </div>
+
+
+      <button type="button"
+        class="flex size-8 shrink-0 items-center justify-center rounded-xl text-slate-400/80 backdrop-blur-sm transition-all duration-200 hover:bg-white/50 hover:text-slate-600 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
+        [attr.aria-label]="'Dismiss ' + current.title" (click)="dismiss(current.id)">
+        <span class="material-symbols-outlined text-[18px] leading-none">close</span>
+      </button>
+    </div>
+
+    @if (!current.persistent && current.durationMs > 0) {
+    <div class="absolute inset-x-0 bottom-0 h-[3px] rounded-b-3xl bg-white/20 backdrop-blur-sm">
+      <div class="snack-progress h-full rounded-b-3xl" [ngClass]="progressClass(current.type)"
+        [style.animationDuration]="progressDuration(current.durationMs)"></div>
+    </div>
+    }
+  </section>
+  }
+</div>
+}
