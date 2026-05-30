@@ -4,7 +4,7 @@ import { Room } from '../../models/room.model';
 import { FormsModule } from '@angular/forms';
 import { RoomCard } from '../../components/room-card/room-card';
 import { RoomService } from '../../services/room.service';
-import { DeviceService } from '../../services/device.service';
+import { DeviceService,getDeviceOnlineState } from '../../services/device.service';
 import { Device } from '../../models/esp.model';
 import { DialogService } from '../../services/dialog.service';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
@@ -13,6 +13,7 @@ import { Subscription } from 'rxjs';
 import { FloorPlanCellSelection, FloorPlanComponent } from '../../components/floor-plan/floor-plan';
 import { FloorPlanRoomModal } from '../../components/floor-plan-room-modal/floor-plan-room-modal';
 import { MlSuggestionService } from '../../services/ml-suggestion.service';
+
 
 @Component({
   selector: 'app-room-management',
@@ -207,9 +208,13 @@ export class RoomManagement implements OnInit, OnDestroy {
     ).length;
   }
 
-  get roomsWithoutDevice(): number {
-    return this.rooms.filter((room) => !room.device).length;
-  }
+get roomsWithoutDevice(): number {
+  return this.rooms.filter((room) => {
+    if (!room.device) return true;
+    const device = this.deviceMap[room.device];
+    return getDeviceOnlineState(device?.status?.lastSeen) === 'offline';
+  }).length;
+}
 
   onDeleteRoom(room: Room): void {
     this.dialogService.confirm(
