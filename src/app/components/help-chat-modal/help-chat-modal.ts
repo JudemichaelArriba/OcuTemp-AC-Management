@@ -159,7 +159,7 @@ export class HelpChatModal implements AfterViewChecked, OnChanges, OnDestroy {
         };
         return updated;
       });
-    }, 18);
+    }, 8);
   }
 
   private stopTypewriter(): void {
