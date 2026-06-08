@@ -80,6 +80,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const messages = body.messages.slice(-10);
+  console.log("[debug] messages:", JSON.stringify(messages));
 
   const lastMessage = messages[messages.length - 1];
   if (
@@ -89,21 +90,24 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Message too long", { status: 400 });
   }
 
-try {
-  const result = await streamText({
-    model,
-    system: SYSTEM_PROMPT,
-    messages,
-  });
+  try {
+    const result = await streamText({
+      model,
+      system: SYSTEM_PROMPT,
+      messages,
+      onError({ error }) {
+        console.error("[gemini error]", error); 
+      },
+    });
 
-  return result.toTextStreamResponse();
-} catch (error: any) {
-  if (error?.status === 429) {
-    return new Response(
-      JSON.stringify({ error: "Assistant temporarily unavailable. Try again in a moment." }),
-      { status: 429, headers: { "Content-Type": "application/json" } }
-    );
+    return result.toTextStreamResponse();
+  } catch (error: any) {
+    if (error?.status === 429) {
+      return new Response(
+        JSON.stringify({ error: "Assistant temporarily unavailable. Try again in a moment." }),
+        { status: 429, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response("Something went wrong.", { status: 500 });
   }
-  return new Response("Something went wrong.", { status: 500 });
-}
 }
