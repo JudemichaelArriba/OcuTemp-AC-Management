@@ -93,8 +93,7 @@ export default async function handler(req: Request): Promise<Response> {
     const result = streamText({
       model,
       system: SYSTEM_PROMPT,
-      messages,
-      maxOutputTokens: 180,
+      messages
     });
 
     return result.toTextStreamResponse();
