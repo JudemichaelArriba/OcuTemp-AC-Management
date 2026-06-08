@@ -1,4 +1,8 @@
-import { Component, Input, Output, EventEmitter, signal, ElementRef, ViewChild, AfterViewChecked, OnChanges, SimpleChanges, ChangeDetectorRef, inject } from '@angular/core';
+import {
+  Component, Input, Output, EventEmitter, signal,
+  ElementRef, ViewChild, AfterViewChecked, OnChanges,
+  SimpleChanges, ChangeDetectorRef, OnDestroy, inject
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -14,7 +18,7 @@ interface Message {
   templateUrl: './help-chat-modal.html',
   styleUrl: './help-chat-modal.css',
 })
-export class HelpChatModal implements AfterViewChecked, OnChanges {
+export class HelpChatModal implements AfterViewChecked, OnChanges, OnDestroy {
   @ViewChild('messagesEnd') messagesEnd!: ElementRef;
   @Input() visible = false;
   @Output() visibleChange = new EventEmitter<boolean>();
@@ -23,6 +27,8 @@ export class HelpChatModal implements AfterViewChecked, OnChanges {
 
   animating = false;
   private animTimeout: any;
+  private typewriterInterval: any = null;
+  private charQueue: string[] = [];
 
   messages = signal<Message[]>([]);
   input = signal('');
@@ -53,6 +59,10 @@ export class HelpChatModal implements AfterViewChecked, OnChanges {
     this.scrollToBottom();
   }
 
+  ngOnDestroy(): void {
+    this.stopTypewriter();
+  }
+
   close(): void {
     this.animating = false;
     this.animTimeout = setTimeout(() => {
@@ -76,6 +86,8 @@ export class HelpChatModal implements AfterViewChecked, OnChanges {
       return;
     }
 
+    this.stopTypewriter();
+    this.charQueue = [];
     this.error.set('');
     this.messages.update(m => [...m, { role: 'user', content: text }]);
     this.input.set('');
@@ -103,25 +115,67 @@ export class HelpChatModal implements AfterViewChecked, OnChanges {
       const decoder = new TextDecoder();
       if (!reader) throw new Error('No response stream');
 
+      let firstChunk = true;
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+
         const chunk = decoder.decode(value, { stream: true });
-        this.messages.update(msgs => {
-          const updated = [...msgs];
-          updated[updated.length - 1] = {
-            role: 'assistant',
-            content: updated[updated.length - 1].content + chunk,
-          };
-          return updated;
-        });
+
+        if (firstChunk) {
+          firstChunk = false;
+          this.loading.set(false);
+          this.startTypewriter();
+        }
+
+        for (const char of chunk) {
+          this.charQueue.push(char);
+        }
       }
+
+      await this.drainQueue();
+
     } catch (err: any) {
+      this.stopTypewriter();
+      this.charQueue = [];
       this.messages.update(msgs => msgs.slice(0, -1));
       this.error.set(err.message ?? 'Something went wrong. Please try again.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private startTypewriter(): void {
+    if (this.typewriterInterval) return;
+    this.typewriterInterval = setInterval(() => {
+      if (this.charQueue.length === 0) return;
+      const char = this.charQueue.shift()!;
+      this.messages.update(msgs => {
+        const updated = [...msgs];
+        updated[updated.length - 1] = {
+          role: 'assistant',
+          content: updated[updated.length - 1].content + char,
+        };
+        return updated;
+      });
+    }, 18);
+  }
+
+  private stopTypewriter(): void {
+    clearInterval(this.typewriterInterval);
+    this.typewriterInterval = null;
+  }
+
+  private drainQueue(): Promise<void> {
+    return new Promise(resolve => {
+      const check = setInterval(() => {
+        if (this.charQueue.length === 0) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 50);
+    });
   }
 
   onKeyDown(event: KeyboardEvent): void {
