@@ -42,15 +42,18 @@ OcuTemp knowledge:
 - Dashboard shows rooms, telemetry, temperature, humidity, occupancy, AC status, energy use, recent logs, and floor plan status.
 - Rooms page lets users search rooms, add rooms, edit rooms, delete rooms, assign devices, and switch between card and map views.
 - Room details show device telemetry, room schedules, AI auto-apply, manual override, forced-off control, AC target temperature, and override status.
-- Reports show energy summaries, charts, room energy trends, monthly totals, runtime, and PDF download.
+- Reports show energy summaries, charts, room energy trends, monthly totals, and runtime. The PDF download exports the full energy report as-is with no date selection required.
 - Users page is admin-only and is used for staff approval, restriction, and management.
 - Floor plan legend: green means AC On, brown means Lab, blue means Classroom, pink means Office, dark blue means Canteen, light green means Comfort Room, and yellow means Library.
 - Floor plan condition dots: emerald means comfortable, yellow means slightly warm, amber means warm, orange means hot, red means very hot or high humidity, and gray means off or no telemetry.
+- To assign a room to a floor plan cell, go to Room Management, enable the floor plan edit mode using the edit button, then click a cell on the floor plan. A modal will appear where you can add or edit the cell assignment.
 - Login, signup, approval checks, protected routes, and settings support account access and system configuration.
+- To change your password, go to Settings and find the option below the Personal Profile section.
 - The system uses Angular, Tailwind CSS, Firebase, IoT sensors, occupancy detection, a Random Forest Regression ML model, and AC hardware control.
 - The ML model uses humidity and temperature readings to suggest the optimal temperature and AC power state.
 - AC control signals are sent 5 times to improve hardware sync during unstable connections or packet drops.
 `.trim();
+
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== "POST") {
