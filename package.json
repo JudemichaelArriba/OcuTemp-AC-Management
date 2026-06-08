@@ -26,6 +26,7 @@
   "private": true,
   "packageManager": "npm@11.6.2",
   "dependencies": {
+    "@ai-sdk/google": "^3.0.80",
     "@angular/common": "^21.1.0",
     "@angular/compiler": "^21.1.0",
     "@angular/core": "^21.1.0",
@@ -35,6 +36,9 @@
     "@angular/router": "^21.1.0",
     "@sentry/angular": "^10.51.0",
     "@tailwindcss/postcss": "^4.1.18",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
+    "ai": "^6.0.197",
     "chart.js": "^4.5.1",
     "firebase": "^12.8.0",
     "jspdf": "^4.2.1",
