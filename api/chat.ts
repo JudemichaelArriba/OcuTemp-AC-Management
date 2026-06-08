@@ -89,21 +89,21 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response("Message too long", { status: 400 });
   }
 
-  try {
-    const result = streamText({
-      model,
-      system: SYSTEM_PROMPT,
-      messages
-    });
+try {
+  const result = await streamText({
+    model,
+    system: SYSTEM_PROMPT,
+    messages,
+  });
 
-    return result.toTextStreamResponse();
-  } catch (error: any) {
-    if (error?.status === 429) {
-      return new Response(
-        JSON.stringify({ error: "Assistant temporarily unavailable. Try again in a moment." }),
-        { status: 429, headers: { "Content-Type": "application/json" } }
-      );
-    }
-    return new Response("Something went wrong.", { status: 500 });
+  return result.toTextStreamResponse();
+} catch (error: any) {
+  if (error?.status === 429) {
+    return new Response(
+      JSON.stringify({ error: "Assistant temporarily unavailable. Try again in a moment." }),
+      { status: 429, headers: { "Content-Type": "application/json" } }
+    );
   }
+  return new Response("Something went wrong.", { status: 500 });
+}
 }
