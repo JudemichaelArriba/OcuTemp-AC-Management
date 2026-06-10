@@ -26,14 +26,20 @@ export class SidebarComponent {
   ) { }
 
   currentUser$ = this.authState.currentUser$;
-
+  isMobile = signal(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   isOpen = signal(typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
   helpChatVisible = signal(false);
+
 
   @HostListener('window:resize', ['$event'])
   onResize(event: Event) {
     const width = (event.target as Window).innerWidth;
-    this.isOpen.set(width >= 768);
+    this.isMobile.set(width < 768);
+    if (width >= 768) {
+      this.isOpen.set(true);
+    } else {
+      this.isOpen.set(false);
+    }
   }
 
   toggleSidebar() {

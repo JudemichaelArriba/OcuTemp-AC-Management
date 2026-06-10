@@ -1,6 +1,6 @@
 <div
   class="relative overflow-hidden rounded-[2.5rem] border border-white bg-white shadow-2xl shadow-slate-200/60 transition-all duration-300">
-  <div class="p-8">
+  <div class="p-4 sm:p-8">
 
     <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
 
@@ -14,7 +14,8 @@
 
       <div class="flex flex-wrap items-center gap-4">
 
-        <div class="p-1.5 bg-slate-100/50 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-inner">
+        <div
+          class="flex-1 min-w-0 p-1.5 bg-slate-100/50 backdrop-blur-md rounded-2xl border border-slate-200/50 shadow-inner">
           <div class="relative grid grid-cols-4 items-center">
 
             <div
@@ -25,23 +26,26 @@
             <button (click)="setFilter('daily')"
               [class]="filterMode === 'daily' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
               class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
-              Daily
+              <span class="sm:hidden">D</span>
+              <span class="hidden sm:inline">Daily</span>
             </button>
             <button (click)="setFilter('weekly')"
               [class]="filterMode === 'weekly' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
               class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
-              Weekly
+              <span class="sm:hidden">W</span>
+              <span class="hidden sm:inline">Weekly</span>
             </button>
             <button (click)="setFilter('monthly')"
               [class]="filterMode === 'monthly' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
               class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
-              Monthly
+              <span class="sm:hidden">M</span>
+              <span class="hidden sm:inline">Monthly</span>
             </button>
-
             <button (click)="setFilter('yearly')"
               [class]="filterMode === 'yearly' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
               class="relative z-10 px-5 py-2 rounded-xl text-center text-[10px] font-black tracking-widest uppercase transition-colors duration-300">
-              Yearly
+              <span class="sm:hidden">Y</span>
+              <span class="hidden sm:inline">Yearly</span>
             </button>
 
           </div>
@@ -54,7 +58,7 @@
       </div>
     </div>
 
-    <div class="h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
+    <div class="h-[220px] sm:h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
       <canvas #roomChartCanvas></canvas>
     </div>
 
