@@ -22,7 +22,7 @@ import {
   Legend,
 } from 'chart.js';
 
-import { EnergyDaily } from '../../models/energy.model';
+import { EnergyDaily } from '../../../models/energy.model';
 import {
   getTodayKey,
   getLast7DayKeys,
@@ -33,7 +33,7 @@ import {
   sumKwhByWeek,
   sumKwhByMonth,
   sumKwhByYear,
-} from '../../services/energy-report.service';
+} from '../../../services/energy-report.service';
 
 Chart.register(
   LineController, LineElement, PointElement,

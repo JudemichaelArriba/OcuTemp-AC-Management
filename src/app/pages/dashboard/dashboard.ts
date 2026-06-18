@@ -11,8 +11,8 @@ import { EnergyReportService, getTodayKey, sumKwhByDate } from '../../services/e
 import { RoomCard } from '../../components/room-card/room-card';
 import { mergeRoomsWithTelemetry } from '../../helpers/room-telemetry';
 import { FloorPlanComponent } from '../../components/floor-plan/floor-plan';
-import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
-import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-room-widget';
+import { EnergyTrendWidget } from '../../components/shared/energy-trend-widget/energy-trend-widget';
+import { EnergyRoomWidget } from '../../components/shared/energy-room-widget/energy-room-widget';
 import { EnergyDaily } from '../../models/energy.model';
 import { LogsModal } from '../../components/logs-modal/logs-modal';
 import { LogsCard } from '../../components/logs-card/logs-card';
