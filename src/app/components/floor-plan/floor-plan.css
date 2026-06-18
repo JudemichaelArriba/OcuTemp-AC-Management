@@ -118,7 +118,6 @@
   background-color: var(--zone-on-solid);
 }
 
-
 ::ng-deep g[data-cell-id].room-on rect {
   fill: rgba(12, 145, 0, 0.589) !important;
 }
@@ -143,4 +142,21 @@
   stroke: #2563eb !important;
   stroke-width: 3px !important;
   filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.3));
+}
+
+
+.floor-plan-active-panel {
+  max-height: calc(100% - 3rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+}
+
+.floor-plan-active-panel::-webkit-scrollbar {
+  width: 4px;
+}
+
+.floor-plan-active-panel::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.7);
+  border-radius: 999px;
 }

@@ -14,8 +14,8 @@ import {
 } from '../../services/energy-report.service';
 import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
-import { EnergyTrendWidget } from '../../components/energy-trend-widget/energy-trend-widget';
-import { EnergyRoomWidget } from '../../components/energy-room-widget/energy-room-widget';
+import { EnergyTrendWidget } from '../../components/shared/energy-trend-widget/energy-trend-widget';
+import { EnergyRoomWidget } from '../../components/shared/energy-room-widget/energy-room-widget';
 import { PdfExportService } from '../../services/pdf-export.service';
 
 @Component({

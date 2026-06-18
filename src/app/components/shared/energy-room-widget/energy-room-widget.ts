@@ -20,8 +20,8 @@ import {
   Legend,
 } from 'chart.js';
 
-import { Room } from '../../models/room.model';
-import { EnergyDaily } from '../../models/energy.model';
+import { Room } from '../../../models/room.model';
+import { EnergyDaily } from '../../../models/energy.model';
 import {
   getTodayKey,
   getLast7DayKeys,
@@ -30,7 +30,7 @@ import {
   sumKwhByWeekForDevice,
   sumKwhByMonthForDevice,
   sumKwhByYearForDevice,
-} from '../../services/energy-report.service';
+} from '../../../services/energy-report.service';
 
 Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip, Legend);
 
