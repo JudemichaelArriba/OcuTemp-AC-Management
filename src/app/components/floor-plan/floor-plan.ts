@@ -1,15 +1,24 @@
 import {
   Component, Input, Output, EventEmitter, ElementRef, OnChanges,
   SimpleChanges, ViewChild, ChangeDetectionStrategy, Renderer2,
-  ChangeDetectorRef, NgZone, AfterViewInit, OnDestroy
+  ChangeDetectorRef, NgZone, AfterViewInit, OnDestroy, OnInit
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { Room } from '../../models/room.model';
+import { Device } from '../../models/esp.model';
 import {
   FLOOR_PLAN_STATE_CLASSES,
   FloorPlanRoomState,
   getFloorPlanRoomState,
 } from '../../helpers/floor-plan-state';
+import {
+  DeviceOnlineState,
+  DeviceService,
+  getDeviceOnlineState,
+} from '../../services/device.service';
+import { AuthStateService } from '../../services/auth-state.service';
+import { DialogService } from '../../services/dialog.service';
 
 interface VBox { x: number; y: number; w: number; h: number; }
 
@@ -38,7 +47,7 @@ export interface RoomOverlay {
   styleUrls: ['./floor-plan.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
+export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
   @Input() rooms: Room[] = [];
   @Input() editMode = false;
 
@@ -48,6 +57,8 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
 
   @ViewChild('svgEl', { static: true }) svgEl!: ElementRef<SVGSVGElement>;
 
+  private static readonly DEVICE_STATUS_REFRESH_MS = 60_000;
+
   private readonly DEFAULT: VBox = { x: 0, y: 0, w: 622, h: 820 };
   vb: VBox = { ...this.DEFAULT };
 
@@ -55,9 +66,17 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   activeRoom: Room | undefined;
   activeState: FloorPlanRoomState | null = null;
   isPanning = false;
+  canToggleAiAutoApply = false;
+  isSavingAiAutoApply = false;
 
   overlays: RoomOverlay[] = [];
 
+  private deviceMap: Record<string, Device> = {};
+  private deviceIdsKey = '';
+  private unsubscribeDevices?: () => void;
+  private authSubscription?: Subscription;
+  private statusInterval?: ReturnType<typeof setInterval>;
+  private destroyed = false;
   private panStart = { x: 0, y: 0 };
   private panStartVb: VBox = { ...this.DEFAULT };
   private panMoved = false;
@@ -102,15 +121,98 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     return reason ? reason.replace(/_/g, ' ') : 'suggestion pending';
   }
 
+  get activeDevice(): Device | undefined {
+    return this.activeRoom?.device ? this.deviceMap[this.activeRoom.device] : undefined;
+  }
+
+  get activeDeviceOnlineState(): DeviceOnlineState {
+    if (!this.activeRoom?.device) return 'unknown';
+    return getDeviceOnlineState(this.activeDevice?.status?.lastSeen);
+  }
+
+  get activeDeviceOnlineStateText(): string {
+    if (!this.activeRoom?.device) return 'No device';
+    switch (this.activeDeviceOnlineState) {
+      case 'online': return 'Online';
+      case 'stale': return 'Stale';
+      case 'offline': return 'Offline';
+      default: return 'Unknown';
+    }
+  }
+
+  get activeDeviceOnlineStateDotClass(): string {
+    switch (this.activeDeviceOnlineState) {
+      case 'online': return 'bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.75)]';
+      case 'stale': return 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.75)] animate-pulse';
+      case 'offline': return 'bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.75)]';
+      default: return 'bg-slate-300';
+    }
+  }
+
+  get activeDeviceOnlineStateLabelClass(): string {
+    switch (this.activeDeviceOnlineState) {
+      case 'online': return 'text-emerald-600';
+      case 'stale': return 'text-amber-600';
+      case 'offline': return 'text-red-500';
+      default: return 'text-slate-400';
+    }
+  }
+
+  get activeDeviceIdText(): string {
+    return this.activeRoom?.device || 'Not linked';
+  }
+
+  get aiAutoApplyEnabled(): boolean {
+    return this.activeDevice?.control?.aiAutoApply === true;
+  }
+
+  get aiAutoApplyToggleDisabled(): boolean {
+    return (
+      !this.activeRoom?.device ||
+      this.activeDevice === undefined ||
+      !this.canToggleAiAutoApply ||
+      this.isSavingAiAutoApply
+    );
+  }
+
+  get aiAutoApplyStatusText(): string {
+    if (!this.activeRoom?.device) return 'No device';
+    if (this.activeDevice === undefined) return 'Syncing';
+    return this.aiAutoApplyEnabled ? 'AI On' : 'AI Off';
+  }
+
+  get aiAutoApplyAriaLabel(): string {
+    const roomName = this.activeRoom?.roomName ?? 'this room';
+    return `${this.aiAutoApplyEnabled ? 'Disable' : 'Enable'} AI auto apply for ${roomName}`;
+  }
+
   constructor(
     private renderer: Renderer2,
     private el: ElementRef,
     private cdr: ChangeDetectorRef,
-    private ngZone: NgZone
-  ) {}
+    private ngZone: NgZone,
+    private deviceService: DeviceService,
+    private authState: AuthStateService,
+    private dialogService: DialogService
+  ) { }
+
+  ngOnInit(): void {
+    this.authSubscription = this.authState.currentUser$.subscribe((user) => {
+      this.canToggleAiAutoApply =
+        user?.approved === true && (user?.role === 'admin' || user?.role === 'staff');
+      this.cdr.markForCheck();
+    });
+
+    this.statusInterval = setInterval(() => {
+      if (!this.destroyed) this.cdr.markForCheck();
+    }, FloorPlanComponent.DEVICE_STATUS_REFRESH_MS);
+
+    this.syncDeviceStream();
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['rooms']) {
+      this.syncDeviceStream();
       this.syncFloorPlanState();
       if (this.activeCellId) {
         this.activeRoom = this.findAssignedRoomForCell(this.activeCellId);
@@ -128,6 +230,11 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
+    this.unsubscribeDevices?.();
+    this.authSubscription?.unsubscribe();
+    clearInterval(this.statusInterval);
+
     if (this.wheelHandler) {
       this.svgEl.nativeElement.removeEventListener('wheel', this.wheelHandler);
     }
@@ -135,7 +242,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   }
 
   onMapClick(event: MouseEvent): void {
-    if (this.panMoved) return; 
+    if (this.panMoved) return;
     const roomGroup = this.findAssignableRoomGroup(event.target as Element);
     if (roomGroup) {
       const cellId = roomGroup.getAttribute('data-cell-id');
@@ -194,7 +301,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
         const pad = 55;
         this.animateTo({ x: bbox.x - pad, y: bbox.y - pad, w: bbox.width + pad * 2, h: bbox.height + pad * 2 });
       }
-    } catch { 
+    } catch {
 
     }
 
@@ -281,6 +388,55 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  async toggleAiAutoApply(event: Event): Promise<void> {
+    event.stopPropagation();
+    if (this.aiAutoApplyToggleDisabled || !this.activeRoom?.device) return;
+
+    this.isSavingAiAutoApply = true;
+    this.cdr.markForCheck();
+
+    try {
+      await this.deviceService.setAiAutoApplyEnabled(
+        this.activeRoom.device,
+        !this.aiAutoApplyEnabled
+      );
+    } catch (err) {
+      this.dialogService.error('AI Toggle Failed', 'Unable to update AI auto-apply. Please try again.');
+    } finally {
+      this.isSavingAiAutoApply = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private syncDeviceStream(): void {
+    const deviceIds = Array.from(
+      new Set(
+        this.rooms
+          .map((room) => room.device?.trim())
+          .filter((deviceId): deviceId is string => !!deviceId)
+      )
+    ).sort();
+    const nextKey = deviceIds.join('|');
+
+    if (nextKey === this.deviceIdsKey) return;
+
+    this.deviceIdsKey = nextKey;
+    this.unsubscribeDevices?.();
+    this.unsubscribeDevices = undefined;
+    this.deviceMap = {};
+
+    if (deviceIds.length === 0) {
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.unsubscribeDevices = this.deviceService.streamDevicesByIds(deviceIds, (devices) => {
+      if (this.destroyed) return;
+      this.deviceMap = devices;
+      this.cdr.markForCheck();
+    });
+  }
+
   private animateTo(target: VBox): void {
     if (this.animFrame) cancelAnimationFrame(this.animFrame);
     const start = { ...this.vb };
@@ -324,7 +480,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
       FLOOR_PLAN_STATE_CLASSES.forEach((className) => this.renderer.removeClass(cell, className));
 
       const room = this.findAssignedRoomForCell(cellId);
-      
+
       if (!room) {
         this.renderer.addClass(cell, 'floorplan-state-no-telemetry');
         return;
@@ -358,7 +514,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
     });
 
     this.overlays = newOverlays;
-    this.cdr.detectChanges(); 
+    this.cdr.detectChanges();
   }
 
   private buildSelection(cellId: string, room?: Room): FloorPlanCellSelection {
@@ -383,7 +539,7 @@ export class FloorPlanComponent implements OnChanges, AfterViewInit, OnDestroy {
   getBadgeColorClass(visualState: string | undefined): string {
     switch (visualState) {
       case 'comfortable':
-        return 'bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.8)] border-emerald-400'; 
+        return 'bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.8)] border-emerald-400';
       case 'slightly-warm':
         return 'bg-[#fbbf24] shadow-[0_0_8px_rgba(251,191,36,0.8)] border-amber-300';
       case 'warm':
