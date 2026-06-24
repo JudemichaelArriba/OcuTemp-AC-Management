@@ -1,32 +1,28 @@
 import { inject, Injectable } from '@angular/core';
 import { CanActivate, Router } from '@angular/router';
-import { Auth, onAuthStateChanged } from '@angular/fire/auth';
+import { Auth, authState } from '@angular/fire/auth';
+import { firstValueFrom } from 'rxjs';
 import { AuthStateService } from '../services/auth-state.service';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable({ providedIn: 'root' })
 export class AdminGuard implements CanActivate {
   private auth = inject(Auth);
   private router = inject(Router);
   private authState = inject(AuthStateService);
 
-  canActivate(): Promise<boolean> {
-    return new Promise((resolve) => {
-      onAuthStateChanged(this.auth, async (firebaseUser) => {
-        if (!firebaseUser) {
-          this.router.navigate(['/login']);
-          return resolve(false);
-        }
-
-        const user = await this.authState.getCurrentUserOnce();
-        if (user?.role === 'admin' && user?.approved === true) {
-          resolve(true);
-        } else {
-          this.router.navigate(['/app/dashboard']);
-          resolve(false);
-        }
-      });
-    });
+  async canActivate(): Promise<boolean> {
+    const firebaseUser = await firstValueFrom(authState(this.auth));
+    if (!firebaseUser) {
+      void this.router.navigate(['/login']);
+      return false;
+    }
+    const user = await this.authState.getCurrentUserOnce();
+    if (user?.role === 'admin' && user?.approved === true) return true;
+    if (!firebaseUser.emailVerified) {
+      void this.router.navigate(['/login']);
+      return false;
+    }
+    void this.router.navigate(['/app/dashboard']);
+    return false;
   }
 }
