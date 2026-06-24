@@ -22,9 +22,9 @@ export class LoginComponent implements OnInit {
     private router: Router,
     private cdr: ChangeDetectorRef,
     private dialog: DialogService,
-  ) {}
+  ) { }
 
-  ngOnInit(): void {}
+  ngOnInit(): void { }
 
   async login(event: Event): Promise<void> {
     event.preventDefault();
@@ -44,7 +44,7 @@ export class LoginComponent implements OnInit {
       return;
     }
 
-    const email    = (form.querySelector('#email')    as HTMLInputElement).value.trim();
+    const email = (form.querySelector('#email') as HTMLInputElement).value.trim();
     const password = (form.querySelector('#password') as HTMLInputElement).value;
 
     this.isLoggingIn = true;
@@ -93,11 +93,14 @@ export class LoginComponent implements OnInit {
     if (err?.message === 'not-approved') {
       return 'Your account is pending approval. Please contact Admin support.';
     }
+    if (err?.message === 'email-not-verified') {
+      return 'Please verify your email before signing in. Check your inbox for the verification link.';
+    }
     switch (err?.code) {
-      case 'auth/user-not-found':      return 'No account found with that email address.';
-      case 'auth/wrong-password':      return 'Incorrect password. Please try again.';
-      case 'auth/invalid-credential':  return 'Invalid credentials. Please check your details.';
-      default:                         return 'Sign in failed. Please check your email and password.';
+      case 'auth/user-not-found': return 'No account found with that email address.';
+      case 'auth/wrong-password': return 'Incorrect password. Please try again.';
+      case 'auth/invalid-credential': return 'Invalid credentials. Please check your details.';
+      default: return 'Sign in failed. Please check your email and password.';
     }
   }
 }
