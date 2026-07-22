@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.1] - 2026-07-23
+### Fixed
+- Fix Floorplan and room-details layout and components for mobile view responsiveness.
+
+
 ## [1.2.0] - 2026-06-24
 ### Added
 - Email Verification upon sign-up using firebase built in verification
