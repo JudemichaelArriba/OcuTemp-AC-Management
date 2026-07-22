@@ -83,6 +83,9 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
   private viewReady = false;
   private animFrame: number | null = null;
   private wheelHandler!: (e: WheelEvent) => void;
+  private touchStartDistance = 0;
+  private touchStartVb: VBox | null = null;
+  private touchIdentifiers: number[] = [];
 
   get viewBoxString(): string {
     return `${this.vb.x} ${this.vb.y} ${this.vb.w} ${this.vb.h}`;
@@ -226,6 +229,12 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
     this.viewReady = true;
     this.wheelHandler = (e: WheelEvent) => this.ngZone.run(() => this.onWheel(e));
     this.svgEl.nativeElement.addEventListener('wheel', this.wheelHandler, { passive: false });
+    
+    // Add touch event handlers for mobile
+    this.svgEl.nativeElement.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: true });
+    this.svgEl.nativeElement.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+    this.svgEl.nativeElement.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: true });
+    
     this.syncFloorPlanState();
   }
 
@@ -238,6 +247,12 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
     if (this.wheelHandler) {
       this.svgEl.nativeElement.removeEventListener('wheel', this.wheelHandler);
     }
+    
+    // Remove touch event handlers
+    this.svgEl.nativeElement.removeEventListener('touchstart', this.onTouchStart.bind(this));
+    this.svgEl.nativeElement.removeEventListener('touchmove', this.onTouchMove.bind(this));
+    this.svgEl.nativeElement.removeEventListener('touchend', this.onTouchEnd.bind(this));
+    
     if (this.animFrame) cancelAnimationFrame(this.animFrame);
   }
 
@@ -386,6 +401,89 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
   onMouseUp(): void {
     this.isPanning = false;
     this.cdr.markForCheck();
+  }
+
+  private onTouchStart(event: TouchEvent): void {
+    if (event.touches.length === 1) {
+      // Single touch - start panning
+      this.panMoved = false;
+      this.isPanning = true;
+      this.panStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      this.panStartVb = { ...this.vb };
+      this.touchIdentifiers = [event.touches[0].identifier];
+      this.cdr.markForCheck();
+    } else if (event.touches.length === 2) {
+      // Two touches - prepare for pinch zoom
+      this.isPanning = false;
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      this.touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+      this.touchStartVb = { ...this.vb };
+      this.touchIdentifiers = [event.touches[0].identifier, event.touches[1].identifier];
+      this.panMoved = true; // Prevent click event
+    }
+  }
+
+  private onTouchMove(event: TouchEvent): void {
+    if (event.touches.length === 1 && this.isPanning && this.touchIdentifiers.length === 1) {
+      // Single touch panning
+      const dx = event.touches[0].clientX - this.panStart.x;
+      const dy = event.touches[0].clientY - this.panStart.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+        this.panMoved = true;
+        event.preventDefault(); // Prevent scrolling
+      }
+      if (!this.panMoved) return;
+      const rect = this.svgEl.nativeElement.getBoundingClientRect();
+      this.vb = {
+        ...this.panStartVb,
+        x: this.panStartVb.x - dx * (this.vb.w / rect.width),
+        y: this.panStartVb.y - dy * (this.vb.h / rect.height)
+      };
+      this.cdr.markForCheck();
+    } else if (event.touches.length === 2 && this.touchStartVb && this.touchIdentifiers.length === 2) {
+      // Pinch zoom
+      event.preventDefault(); // Prevent default pinch zoom
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      const currentDistance = Math.sqrt(dx * dx + dy * dy);
+      const scale = this.touchStartDistance / currentDistance;
+      
+      // Get center point between two touches
+      const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+      const rect = this.svgEl.nativeElement.getBoundingClientRect();
+      const mx = ((centerX - rect.left) / rect.width) * this.touchStartVb.w + this.touchStartVb.x;
+      const my = ((centerY - rect.top) / rect.height) * this.touchStartVb.h + this.touchStartVb.y;
+      
+      const nw = Math.min(Math.max(this.touchStartVb.w * scale, 60), this.DEFAULT.w * 1.8);
+      const nh = Math.min(Math.max(this.touchStartVb.h * scale, 80), this.DEFAULT.h * 1.8);
+      
+      this.vb = {
+        x: mx - (mx - this.touchStartVb.x) * (nw / this.touchStartVb.w),
+        y: my - (my - this.touchStartVb.y) * (nh / this.touchStartVb.h),
+        w: nw,
+        h: nh
+      };
+      this.cdr.markForCheck();
+    }
+  }
+
+  private onTouchEnd(event: TouchEvent): void {
+    if (event.touches.length === 0) {
+      this.isPanning = false;
+      this.touchStartVb = null;
+      this.touchIdentifiers = [];
+      this.cdr.markForCheck();
+    } else if (event.touches.length === 1 && this.touchIdentifiers.length === 2) {
+      // Went from two touches to one - reset to panning mode
+      this.touchStartVb = null;
+      this.isPanning = true;
+      this.panStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      this.panStartVb = { ...this.vb };
+      this.touchIdentifiers = [event.touches[0].identifier];
+      this.panMoved = true; // Prevent accidental clicks
+    }
   }
 
   async toggleAiAutoApply(event: Event): Promise<void> {
