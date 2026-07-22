@@ -68,6 +68,7 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
   isPanning = false;
   canToggleAiAutoApply = false;
   isSavingAiAutoApply = false;
+  legendExpanded = false;
 
   overlays: RoomOverlay[] = [];
 
@@ -117,6 +118,11 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
   get activeOccupancyText(): string {
     if (this.activeRoom?.occupancy === undefined) return '--';
     return this.activeRoom.occupancy ? 'Occupied' : 'Vacant';
+  }
+
+  get activeOccupancyShortText(): string {
+    if (this.activeRoom?.occupancy === undefined) return '--';
+    return this.activeRoom.occupancy ? 'OCP' : 'VCT';
   }
 
   get activeMlSuggestionReasonText(): string {
@@ -484,6 +490,12 @@ export class FloorPlanComponent implements OnInit, OnChanges, AfterViewInit, OnD
       this.touchIdentifiers = [event.touches[0].identifier];
       this.panMoved = true; // Prevent accidental clicks
     }
+  }
+
+  toggleLegend(event: Event): void {
+    event.stopPropagation();
+    this.legendExpanded = !this.legendExpanded;
+    this.cdr.markForCheck();
   }
 
   async toggleAiAutoApply(event: Event): Promise<void> {

@@ -26,12 +26,24 @@
   </div>
 
   <div
-    class="floor-plan-legend absolute right-3 sm:right-6 bottom-3 sm:bottom-6 z-20 pointer-events-none backdrop-blur-xl border border-white/80 rounded-xl sm:rounded-[1.5rem] p-2 sm:p-2.5 md:p-4 w-auto max-w-[180px] sm:max-w-none sm:w-54 shadow-xl">
-    <div class="flex items-center gap-1 sm:gap-1.5 md:gap-2.5 mb-1.5 sm:mb-2 md:mb-3.5">
-      <span class="material-symbols-outlined text-[12px] sm:text-[14px] md:text-[18px] text-blue-600">layers</span>
-      <span class="text-[8px] sm:text-[9px] md:text-[11px] font-black uppercase tracking-widest text-slate-500">Legend</span>
+    class="floor-plan-legend absolute right-3 sm:right-6 bottom-3 sm:bottom-6 z-20 backdrop-blur-xl border border-white/80 rounded-xl sm:rounded-[1.5rem] p-2 sm:p-2.5 md:p-4 w-auto max-w-[180px] sm:max-w-none sm:w-54 shadow-xl transition-all duration-300">
+    <div class="flex items-center justify-between gap-1 sm:gap-1.5 md:gap-2.5 mb-1.5 sm:mb-2 md:mb-3.5">
+      <div class="flex items-center gap-1 sm:gap-1.5 md:gap-2.5">
+        <span class="material-symbols-outlined text-[12px] sm:text-[14px] md:text-[18px] text-blue-600">layers</span>
+        <span class="text-[8px] sm:text-[9px] md:text-[11px] font-black uppercase tracking-widest text-slate-500">Legend</span>
+      </div>
+      <button (click)="toggleLegend($event)" 
+        class="sm:hidden pointer-events-auto w-5 h-5 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-200/50 active:bg-slate-300/50 transition-all touch-manipulation"
+        [attr.aria-label]="legendExpanded ? 'Collapse legend' : 'Expand legend'"
+        [attr.aria-expanded]="legendExpanded">
+        <span class="material-symbols-outlined text-[14px] transition-transform duration-300" 
+          [class.rotate-180]="legendExpanded">expand_more</span>
+      </button>
     </div>
-    <div class="space-y-1 sm:space-y-1.5 md:space-y-2">
+    <div class="space-y-1 sm:space-y-1.5 md:space-y-2 overflow-hidden transition-all duration-300"
+      [class.max-h-0]="!legendExpanded"
+      [class.max-h-96]="legendExpanded"
+      [class.sm:max-h-none]="true">
       <div
         class="floor-plan-legend__row flex items-center gap-1.5 sm:gap-2 md:gap-3 rounded-lg sm:rounded-xl border border-white/70 px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2.5">
         <span
@@ -79,76 +91,85 @@
 
   @if (activeCellId) {
   <div
-    class="floor-plan-active-panel absolute top-3 sm:top-6 left-3 sm:left-6 z-20 w-[calc(100%-6rem)] sm:w-[min(360px,calc(100%-7rem))] bg-white/80 backdrop-blur-xl border border-white/70 p-3 sm:p-4 rounded-2xl sm:rounded-[24px] shadow-2xl shadow-slate-900/10 animate-in fade-in slide-in-from-left-5">
-    <div class="flex items-start justify-between gap-2 sm:gap-3">
-      <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-        <div
-          class="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 shrink-0">
-          <span class="material-symbols-outlined text-[20px] sm:text-[24px]">analytics</span>
-        </div>
-        <div class="min-w-0">
-          <div class="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-widest leading-none mb-1">
-            {{ editMode ? 'Edit Target' : 'Active Monitoring' }}
-          </div>
-          <div class="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate">{{ activeDisplayName }}</div>
-          <div class="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{{ activeCellId }}</div>
-        </div>
+    class="floor-plan-active-panel absolute top-3 sm:top-6 left-3 sm:left-6 z-20 w-[calc(100%-5rem)] xs:w-[calc(100%-6rem)] sm:w-[min(360px,calc(100%-7rem))] bg-white/80 backdrop-blur-xl border border-white/70 p-2.5 xs:p-3 sm:p-4 rounded-2xl sm:rounded-[24px] shadow-2xl shadow-slate-900/10 animate-in fade-in slide-in-from-left-5">
+    
+    <!-- Header Section -->
+    <div class="flex items-start gap-2 xs:gap-2.5 sm:gap-3 mb-2 xs:mb-2.5 sm:mb-3">
+      <div
+        class="w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 shrink-0">
+        <span class="material-symbols-outlined text-[18px] xs:text-[20px] sm:text-[24px]">analytics</span>
       </div>
-      <span class="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest border border-white/70 shrink-0"
+      <div class="min-w-0 flex-1">
+        <div class="text-[8px] xs:text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none mb-0.5 xs:mb-1">
+          {{ editMode ? 'Edit Target' : 'Active' }}
+        </div>
+        <div class="text-[11px] xs:text-xs sm:text-sm font-black text-slate-900 leading-tight break-words">{{ activeDisplayName }}</div>
+        <div class="text-[8px] xs:text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5 xs:mt-1 break-words">{{ activeCellId }}</div>
+      </div>
+      <span class="px-1.5 xs:px-2 sm:px-3 py-0.5 xs:py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[8px] xs:text-[9px] sm:text-[10px] font-black uppercase tracking-wider border border-white/70 shrink-0 whitespace-nowrap"
         [ngClass]="activeRoom?.power === true ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'">
         {{ activeStatusText }}
       </span>
     </div>
 
     @if (activeRoom) {
-    <div class="mt-3 sm:mt-4 grid grid-cols-3 gap-1.5 sm:gap-2">
-      <div class="rounded-xl sm:rounded-2xl bg-white/70 border border-slate-200/50 p-2 sm:p-3 shadow-sm">
-        <p class="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
-          <span class="material-symbols-outlined text-[12px] sm:text-[14px]">device_thermostat</span> Temp
+    <!-- Telemetry Grid -->
+    <div class="grid grid-cols-3 gap-1 xs:gap-1.5 sm:gap-2 mb-2 xs:mb-2.5 sm:mb-3">
+      <div class="rounded-lg xs:rounded-xl sm:rounded-2xl bg-white/70 border border-slate-200/50 p-1.5 xs:p-2 sm:p-3 shadow-sm">
+        <p class="text-[7px] xs:text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-center xs:justify-start gap-0.5 xs:gap-1 mb-0.5 xs:mb-1">
+          <span class="material-symbols-outlined text-[12px] xs:text-[12px] sm:text-[14px]">device_thermostat</span>
+          <span class="hidden xs:inline">Temp</span>
         </p>
-        <p class="text-xs sm:text-sm font-black text-slate-900 mt-1">{{ activeTemperatureText }}</p>
+        <p class="text-[11px] xs:text-xs sm:text-sm font-black text-slate-900 text-center xs:text-left">{{ activeTemperatureText }}</p>
       </div>
-      <div class="rounded-xl sm:rounded-2xl bg-white/70 border border-slate-200/50 p-2 sm:p-3 shadow-sm">
-        <p class="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
-          <span class="material-symbols-outlined text-[12px] sm:text-[14px]">water_drop</span> Humid
+      <div class="rounded-lg xs:rounded-xl sm:rounded-2xl bg-white/70 border border-slate-200/50 p-1.5 xs:p-2 sm:p-3 shadow-sm">
+        <p class="text-[7px] xs:text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-center xs:justify-start gap-0.5 xs:gap-1 mb-0.5 xs:mb-1">
+          <span class="material-symbols-outlined text-[12px] xs:text-[12px] sm:text-[14px]">water_drop</span>
+          <span class="hidden xs:inline">Humid</span>
         </p>
-        <p class="text-xs sm:text-sm font-black text-slate-900 mt-1">{{ activeHumidityText }}</p>
+        <p class="text-[11px] xs:text-xs sm:text-sm font-black text-slate-900 text-center xs:text-left">{{ activeHumidityText }}</p>
       </div>
-      <div class="rounded-xl sm:rounded-2xl bg-white/70 border border-slate-200/50 p-2 sm:p-3 shadow-sm">
-        <p class="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
-          <span class="material-symbols-outlined text-[12px] sm:text-[14px]">person</span> Occup
+      <div class="rounded-lg xs:rounded-xl sm:rounded-2xl bg-white/70 border border-slate-200/50 p-1.5 xs:p-2 sm:p-3 shadow-sm">
+        <p class="text-[7px] xs:text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-center xs:justify-start gap-0.5 xs:gap-1 mb-0.5 xs:mb-1">
+          <span class="material-symbols-outlined text-[12px] xs:text-[12px] sm:text-[14px]">person</span>
+          <span class="hidden xs:inline">Occup</span>
         </p>
-        <p class="text-xs sm:text-sm font-black text-slate-900 mt-1 truncate">{{ activeOccupancyText }}</p>
+        <p class="text-[9px] xs:text-xs sm:text-sm font-black text-slate-900 text-center xs:text-left">
+          <span class="xs:hidden">{{ activeOccupancyShortText }}</span>
+          <span class="hidden xs:inline truncate">{{ activeOccupancyText }}</span>
+        </p>
       </div>
     </div>
 
-    <div class="mt-2 sm:mt-3 flex items-center justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-slate-900/90 text-white px-3 sm:px-4 py-2 sm:py-3">
-      <div class="min-w-0">
-        <p class="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-white/40">Condition</p>
-        <p class="text-[10px] sm:text-[11px] font-black uppercase tracking-widest truncate">{{ activeState?.condition }}</p>
+    <!-- Condition Bar -->
+    <div class="flex items-center justify-between gap-2 sm:gap-3 rounded-lg xs:rounded-xl sm:rounded-2xl bg-slate-900/90 text-white px-2.5 xs:px-3 sm:px-4 py-1.5 xs:py-2 sm:py-3 mb-2 xs:mb-2.5 sm:mb-3">
+      <div class="min-w-0 flex-1">
+        <p class="text-[7px] xs:text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-white/40">Condition</p>
+        <p class="text-[9px] xs:text-[10px] sm:text-[11px] font-black uppercase tracking-wider truncate">{{ activeState?.condition }}</p>
       </div>
-      <span class="size-2.5 sm:size-3 rounded-full shrink-0 border" [ngClass]="getBadgeColorClass(activeState?.visualState)"></span>
+      <span class="size-2 xs:size-2.5 sm:size-3 rounded-full shrink-0 border" [ngClass]="getBadgeColorClass(activeState?.visualState)"></span>
     </div>
 
-    <div class="mt-2 sm:mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2">
-      <div class="rounded-xl sm:rounded-2xl bg-white/75 border border-slate-200/60 px-2.5 sm:px-3 py-2 sm:py-2.5 shadow-sm min-w-0">
-        <div class="flex items-center justify-between gap-2">
-          <p class="text-[8px] font-black uppercase tracking-widest text-slate-500">Device</p>
-          <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <span class="size-1 sm:size-1.5 rounded-full" [ngClass]="activeDeviceOnlineStateDotClass"></span>
-            <span class="text-[8px] font-black uppercase tracking-widest" [ngClass]="activeDeviceOnlineStateLabelClass">
+    <!-- Device & AI Auto Grid -->
+    <div class="grid grid-cols-1 gap-1.5 xs:gap-2 sm:gap-2 mb-2 xs:mb-2.5 sm:mb-3">
+      <div class="rounded-lg xs:rounded-xl sm:rounded-2xl bg-white/75 border border-slate-200/60 px-2 xs:px-2.5 sm:px-3 py-1.5 xs:py-2 sm:py-2.5 shadow-sm">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <p class="text-[7px] xs:text-[8px] font-black uppercase tracking-wider text-slate-500">Device</p>
+          <div class="flex items-center gap-1 xs:gap-1.5 shrink-0">
+            <span class="size-1 xs:size-1.5 rounded-full" [ngClass]="activeDeviceOnlineStateDotClass"></span>
+            <span class="text-[7px] xs:text-[8px] font-black uppercase tracking-wider" [ngClass]="activeDeviceOnlineStateLabelClass">
               {{ activeDeviceOnlineStateText }}
             </span>
           </div>
         </div>
-        <p class="mt-1 sm:mt-1.5 text-[9px] sm:text-[10px] font-black text-slate-800 truncate">{{ activeDeviceIdText }}</p>
+        <p class="text-[9px] xs:text-[10px] font-black text-slate-800 truncate">{{ activeDeviceIdText }}</p>
       </div>
 
-      <div class="rounded-xl sm:rounded-2xl bg-white/75 border border-slate-200/60 px-2.5 sm:px-3 py-2 sm:py-2.5 shadow-sm min-w-0">
-        <div class="flex items-center justify-between gap-2 sm:gap-3">
-          <div class="min-w-0">
-            <p class="text-[8px] font-black uppercase tracking-widest text-slate-500">AI Auto</p>
-            <p class="mt-1 sm:mt-1.5 text-[9px] sm:text-[10px] font-black uppercase tracking-widest truncate"
+      <div class="rounded-lg xs:rounded-xl sm:rounded-2xl bg-white/75 border border-slate-200/60 px-2 xs:px-2.5 sm:px-3 py-1.5 xs:py-2 sm:py-2.5 shadow-sm">
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <p class="text-[7px] xs:text-[8px] font-black uppercase tracking-wider text-slate-500 mb-1">AI Auto</p>
+            <p class="text-[9px] xs:text-[10px] font-black uppercase tracking-wider truncate"
               [ngClass]="aiAutoApplyEnabled ? 'text-blue-700' : 'text-slate-500'">
               {{ aiAutoApplyStatusText }}
             </p>
@@ -156,14 +177,14 @@
           <button type="button" role="switch" [attr.aria-checked]="aiAutoApplyEnabled"
             [attr.aria-label]="aiAutoApplyAriaLabel" [disabled]="aiAutoApplyToggleDisabled"
             (click)="toggleAiAutoApply($event)"
-            class="relative inline-flex h-4 w-8 sm:h-5 sm:w-9 shrink-0 items-center rounded-full border border-white/80 shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-1 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
+            class="relative inline-flex h-4 w-7 xs:w-8 sm:h-5 sm:w-9 shrink-0 items-center rounded-full border border-white/80 shadow-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-1 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 touch-manipulation"
             [ngClass]="aiAutoApplyEnabled ? 'bg-blue-600 shadow-blue-500/20' : 'bg-slate-200'">
             <span class="sr-only">{{ aiAutoApplyAriaLabel }}</span>
             <span
               class="pointer-events-none inline-flex h-3 w-3 sm:h-4 sm:w-4 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-black/5 transition-transform duration-200"
-              [ngClass]="aiAutoApplyEnabled ? 'translate-x-[1.1rem] sm:translate-x-4' : 'translate-x-0.5'">
+              [ngClass]="aiAutoApplyEnabled ? 'translate-x-3 xs:translate-x-[1.1rem] sm:translate-x-4' : 'translate-x-0.5'">
               @if (isSavingAiAutoApply) {
-              <span class="h-2 w-2 sm:h-2.5 sm:w-2.5 animate-spin rounded-full border border-blue-500 border-t-transparent"></span>
+              <span class="h-1.5 w-1.5 xs:h-2 xs:w-2 sm:h-2.5 sm:w-2.5 animate-spin rounded-full border border-blue-500 border-t-transparent"></span>
               }
             </span>
           </button>
@@ -171,32 +192,33 @@
       </div>
     </div>
 
+    <!-- ML Suggestion Section -->
     @if (activeRoom.pendingMlSuggestion; as suggestion) {
-    <div class="mt-2 sm:mt-3 rounded-xl sm:rounded-2xl border border-violet-100 bg-violet-50/80 px-3 sm:px-4 py-2 sm:py-3 shadow-sm">
-      <div class="flex items-start justify-between gap-2 sm:gap-3">
-        <div class="min-w-0">
-          <p class="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-violet-500 flex items-center gap-1">
-            <span class="material-symbols-outlined text-[12px] sm:text-[14px]">psychology</span>
+    <div class="rounded-lg xs:rounded-xl sm:rounded-2xl border border-violet-100 bg-violet-50/80 px-2.5 xs:px-3 sm:px-4 py-2 xs:py-2.5 sm:py-3 shadow-sm">
+      <div class="flex items-start justify-between gap-2 sm:gap-3 mb-2 xs:mb-2.5 sm:mb-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-[7px] xs:text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-violet-500 flex items-center gap-1 mb-0.5 xs:mb-1">
+            <span class="material-symbols-outlined text-[10px] xs:text-[12px] sm:text-[14px]">psychology</span>
             ML Suggestion
           </p>
-          <p class="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-slate-700 truncate mt-1">
+          <p class="text-[9px] xs:text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-700 truncate">
             {{ activeMlSuggestionReasonText }}
           </p>
         </div>
         <div class="text-right shrink-0">
-          <p class="text-xl sm:text-2xl font-black leading-none text-violet-700">
-            {{ suggestion.suggestedTemp | number:'1.0-0' }}<span class="text-[10px] sm:text-xs">&deg;C</span>
+          <p class="text-lg xs:text-xl sm:text-2xl font-black leading-none text-violet-700">
+            {{ suggestion.suggestedTemp | number:'1.0-0' }}<span class="text-[9px] xs:text-[10px] sm:text-xs">&deg;C</span>
           </p>
-          <p class="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-violet-400 mt-1">
+          <p class="text-[7px] xs:text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-violet-400 mt-0.5 xs:mt-1">
             Suggested
           </p>
         </div>
       </div>
 
-      <div class="mt-2 sm:mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
-        <div class="rounded-lg sm:rounded-xl bg-white/70 border border-white px-2 sm:px-2.5 py-1.5 sm:py-2">
-          <p class="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-slate-400">Current</p>
-          <div class="text-[10px] sm:text-[11px] font-black text-slate-800 mt-1">
+      <div class="grid grid-cols-3 gap-1 xs:gap-1.5 sm:gap-2">
+        <div class="rounded-lg sm:rounded-xl bg-white/70 border border-white px-1.5 xs:px-2 sm:px-2.5 py-1 xs:py-1.5 sm:py-2">
+          <p class="text-[7px] sm:text-[8px] font-black uppercase tracking-wider text-slate-400">Current</p>
+          <div class="text-[9px] xs:text-[10px] sm:text-[11px] font-black text-slate-800 mt-0.5 xs:mt-1">
             @if (suggestion.currentRoomTemp !== undefined) {
             {{ suggestion.currentRoomTemp | number:'1.0-1' }}<span>&deg;C</span>
             } @else {
@@ -204,9 +226,9 @@
             }
           </div>
         </div>
-        <div class="rounded-lg sm:rounded-xl bg-white/70 border border-white px-2 sm:px-2.5 py-1.5 sm:py-2">
-          <p class="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-slate-400">Target</p>
-          <div class="text-[10px] sm:text-[11px] font-black text-slate-800 mt-1">
+        <div class="rounded-lg sm:rounded-xl bg-white/70 border border-white px-1.5 xs:px-2 sm:px-2.5 py-1 xs:py-1.5 sm:py-2">
+          <p class="text-[7px] sm:text-[8px] font-black uppercase tracking-wider text-slate-400">Target</p>
+          <div class="text-[9px] xs:text-[10px] sm:text-[11px] font-black text-slate-800 mt-0.5 xs:mt-1">
             @if (suggestion.targetTemp !== undefined) {
             {{ suggestion.targetTemp | number:'1.0-0' }}<span>&deg;C</span>
             } @else {
@@ -214,18 +236,24 @@
             }
           </div>
         </div>
-        <div class="rounded-lg sm:rounded-xl bg-white/70 border border-white px-2 sm:px-2.5 py-1.5 sm:py-2">
-          <p class="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-slate-400">Updated</p>
-          <p class="text-[10px] sm:text-[11px] font-black text-slate-800 mt-1 truncate">
+        <div class="rounded-lg sm:rounded-xl bg-white/70 border border-white px-1.5 xs:px-2 sm:px-2.5 py-1 xs:py-1.5 sm:py-2">
+          <p class="text-[7px] sm:text-[8px] font-black uppercase tracking-wider text-slate-400">Updated</p>
+          <p class="text-[9px] xs:text-[10px] sm:text-[11px] font-black text-slate-800 mt-0.5 xs:mt-1 truncate">
             {{ suggestion.updatedAt | date:'h:mm a' }}
           </p>
         </div>
       </div>
     </div>
     }
+    
     } @else {
-    <div class="mt-3 sm:mt-4 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 px-3 sm:px-4 py-2 sm:py-3">
-      <p class="text-[10px] sm:text-[11px] font-bold text-slate-500">No room is assigned to this floorplan cell.</p>
+    <!-- Unassigned State -->
+    <div class="rounded-lg xs:rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 px-3 xs:px-3.5 sm:px-4 py-3 xs:py-3.5 sm:py-4 text-center">
+      <div class="w-10 h-10 xs:w-12 xs:h-12 bg-slate-200 rounded-xl mx-auto mb-2 xs:mb-2.5 flex items-center justify-center">
+        <span class="material-symbols-outlined text-slate-400 text-[20px] xs:text-[24px]">home_work</span>
+      </div>
+      <p class="text-[10px] xs:text-[11px] sm:text-[12px] font-black text-slate-900 uppercase tracking-wider mb-1">Unassigned Cell</p>
+      <p class="text-[9px] xs:text-[10px] font-medium text-slate-500 leading-relaxed">No room is assigned to this floorplan cell.</p>
     </div>
     }
   </div>

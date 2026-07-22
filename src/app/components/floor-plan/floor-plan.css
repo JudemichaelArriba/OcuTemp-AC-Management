@@ -92,6 +92,7 @@ svg {
 .floor-plan-legend {
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82));
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.14);
+  pointer-events: auto;
 }
 
 @media (max-width: 640px) {
@@ -102,6 +103,7 @@ svg {
 
 .floor-plan-legend__row {
   background: rgba(248, 250, 252, 0.72);
+  pointer-events: none;
 }
 
 .floor-plan-legend__swatch {
@@ -168,13 +170,15 @@ svg {
 .floor-plan-active-panel {
   max-height: calc(100vh - 8rem);
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 640px) {
   .floor-plan-active-panel {
-    max-height: calc(100vh - 6rem);
+    max-height: calc(100vh - 10rem);
   }
 }
 
