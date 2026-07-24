@@ -7,6 +7,7 @@ import { ChatFallbackTableComponent } from '../chat-fallback-table/chat-fallback
   selector: 'app-chat-message',
   standalone: true,
   imports: [CommonModule, ChatFallbackTableComponent],
+  styleUrl: './chat-message.css',
   template: `
     @if (msg().role === 'user' || msg().text) {
       <div class="flex gap-2.5" [class.justify-end]="msg().role === 'user'">
