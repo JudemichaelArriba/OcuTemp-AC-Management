@@ -320,4 +320,7 @@
 
 }
 
-<app-help-chat-modal [visible]="helpChatVisible()" (visibleChange)="helpChatVisible.set($event)" />
+@if (currentUser$ | async; as currentUser) {
+<app-chat-sidebar [visible]="helpChatVisible()" [userRole]="isAdmin(currentUser) ? 'admin' : 'staff'"
+  (visibleChange)="helpChatVisible.set($event)" />
+}

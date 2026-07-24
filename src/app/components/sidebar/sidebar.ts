@@ -6,13 +6,14 @@ import { AuthStateService } from '../../services/auth-state.service';
 import { DialogService } from '../../services/dialog.service';
 import { User } from '../../models/user.model';
 import { LoggerService } from '../../services/logger.service';
-import { HelpChatModal } from '../help-chat-modal/help-chat-modal';
+import { ChatSidebarComponent } from '../chat-sidebar/chat-sidebar';
+
 
 @Component({
   selector: 'app-sidebar',
   templateUrl: './sidebar.html',
   standalone: true,
-  imports: [CommonModule, RouterModule, HelpChatModal],
+  imports: [CommonModule, RouterModule, ChatSidebarComponent],
   encapsulation: ViewEncapsulation.None
 })
 export class SidebarComponent {
