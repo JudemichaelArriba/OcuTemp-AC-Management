@@ -267,48 +267,82 @@ export class ChatToolsService {
     /** Converts RoomService's live stream into a single resolved snapshot. */
     private getRoomsOnce(): Promise<Room[]> {
         return new Promise((resolve, reject) => {
-            const unsub = this.roomService.streamRooms(
+            let unsub: (() => void) | undefined;
+            let settled = false;
+
+            unsub = this.roomService.streamRooms(
                 (rooms) => {
-                    unsub();
+                    if (settled) return;
+                    settled = true;
+                    unsub?.();
                     resolve(rooms);
                 },
                 (err) => {
-                    unsub();
+                    if (settled) return;
+                    settled = true;
+                    unsub?.();
                     reject(err);
                 },
             );
+
+            if (settled) {
+                // Callback already fired synchronously before unsub was assigned above.
+                unsub?.();
+            }
         });
     }
 
     /** Converts DeviceService's live stream into a single resolved snapshot. */
     private getDevicesOnce(): Promise<Record<string, Device>> {
         return new Promise((resolve, reject) => {
-            const unsub = this.deviceService.streamDevices(
+            let unsub: (() => void) | undefined;
+            let settled = false;
+
+            unsub = this.deviceService.streamDevices(
                 (devices) => {
-                    unsub();
+                    if (settled) return;
+                    settled = true;
+                    unsub?.();
                     resolve(devices);
                 },
                 (err) => {
-                    unsub();
+                    if (settled) return;
+                    settled = true;
+                    unsub?.();
                     reject(err);
                 },
             );
+
+            if (settled) {
+                unsub?.();
+            }
         });
     }
 
     /** Converts EnergyReportService's live stream into a single resolved snapshot. */
     private getEnergyDailyOnce(): Promise<EnergyByDevice> {
         return new Promise((resolve, reject) => {
-            const unsub = this.energyReportService.AllEnergyDaily(
+            let unsub: (() => void) | undefined;
+            let settled = false;
+
+            unsub = this.energyReportService.AllEnergyDaily(
                 (data) => {
-                    unsub();
+                    if (settled) return;
+                    settled = true;
+                    unsub?.();
                     resolve(data);
                 },
                 (err) => {
-                    unsub();
+                    if (settled) return;
+                    settled = true;
+                    unsub?.();
                     reject(err);
                 },
             );
+
+            if (settled) {
+                unsub?.();
+            }
         });
     }
 }
