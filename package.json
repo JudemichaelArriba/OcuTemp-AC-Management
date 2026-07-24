@@ -27,6 +27,7 @@
   "packageManager": "npm@11.6.2",
   "dependencies": {
     "@ai-sdk/google": "^3.0.80",
+    "@ai-sdk/groq": "^3.0.39",
     "@angular/common": "^21.1.0",
     "@angular/compiler": "^21.1.0",
     "@angular/core": "^21.1.0",

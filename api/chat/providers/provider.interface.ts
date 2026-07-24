@@ -24,7 +24,7 @@ export interface ProviderGenerateRequest {
     readonly messages: ChatMessage[];
     readonly systemPrompt: string;
     /** Only attached on the planning step see orchestrator.ts. */
-    readonly toolSchema?: ProviderToolSchema[];
+    readonly toolSchema?: readonly ProviderToolSchema[];
 }
 
 /**
