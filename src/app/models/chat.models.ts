@@ -89,3 +89,5 @@ export class ChatRequestError extends Error {
         this.name = 'ChatRequestError';
     }
 }
+
+export type ChatUserRole = 'staff' | 'admin';
