@@ -9,6 +9,7 @@ export type ChatRole = 'user' | 'model' | 'function';
 export type ChatToolName =
     | 'get_room_telemetry'
     | 'get_energy_rankings'
+    | 'get_energy_usage'
     | 'get_climate_prediction_logs'
     | 'get_system_help';
 
