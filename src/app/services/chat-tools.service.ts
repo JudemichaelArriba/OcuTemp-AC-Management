@@ -113,6 +113,8 @@ export class ChatToolsService {
             humidity: device?.humidity ?? room.humidity ?? null,
             occupancy: device?.occupancy ?? room.occupancy ?? null,
             acPower: device?.acState?.power ?? room.power ?? null,
+            aiAutoApply: device?.control?.aiAutoApply ?? false,
+            activeSchedulesCount: room.schedules?.length ?? 0,
             lastSeen: cleanTimestamp(device?.status?.lastSeen ?? null),
         };
     }
@@ -345,4 +347,6 @@ export class ChatToolsService {
             }
         });
     }
+
+
 }

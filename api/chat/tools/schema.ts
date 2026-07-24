@@ -13,9 +13,10 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
     {
         name: 'get_room_telemetry',
         description:
-            'Fetch current temperature, humidity, AC status, and energy metrics ' +
-            'for a specific room, or for all rooms if no room name is given. ' +
-            'Use for questions about live conditions in a room right now.',
+            'Fetch current temperature, humidity, AC status, AI auto-apply status, ' +
+            'and active schedule count for a specific room, or for all rooms if no ' +
+            'room name is given. Use for questions about live conditions, whether ' +
+            'AI auto-apply is enabled, or how many schedules a room has right now.',
         parameters: {
             type: 'object',
             properties: {
