@@ -1,3 +1,4 @@
+// chat-tool-schema.ts
 import type { ProviderToolSchema } from '../providers/provider.interface';
 
 /**
@@ -13,10 +14,14 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
     {
         name: 'get_room_telemetry',
         description:
-            'Fetch current temperature, humidity, AC status, AI auto-apply status, ' +
-            'and active schedule count for a specific room, or for all rooms if no ' +
-            'room name is given. Use for questions about live conditions, whether ' +
-            'AI auto-apply is enabled, or how many schedules a room has right now.',
+            'Live snapshot of a room\'s current sensor and control state: ' +
+            'temperature, humidity, occupancy, AC power, AI auto-apply flag, ' +
+            'online/offline status, and active schedule count. Use for ' +
+            '"right now" questions about a room\'s status — is the AC on, is ' +
+            'auto-apply enabled, is the room occupied. Does NOT return energy ' +
+            'consumption (kWh) — use get_energy_rankings or get_energy_usage ' +
+            'for that. Omit roomName to fetch every room at once, e.g. "how ' +
+            'are all the rooms doing right now".',
         parameters: {
             type: 'object',
             properties: {
@@ -30,11 +35,14 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
     {
         name: 'get_energy_rankings',
         description:
-            'Fetch rooms ranked by current energy consumption, optionally ' +
-            'filtered by AC status (active vs standby). Use for "right now" ' +
-            'questions like "which room uses the most energy" or "top energy ' +
-            'consumers right now". For totals over a time period, use ' +
-            'get_energy_usage instead.',
+            'Ranks rooms against each other by energy consumption today ' +
+            '(kWh so far), optionally filtered to only active or only ' +
+            'standby AC units. Use ONLY for live comparison questions like ' +
+            '"which room is using the most energy right now" or "top energy ' +
+            'consumers today". Do NOT use this for totals over a stated time ' +
+            'period (this week, last month, this year) — that is ' +
+            'get_energy_usage. Do NOT use this for a single room\'s AC status ' +
+            '— that is get_room_telemetry.',
         parameters: {
             type: 'object',
             properties: {
@@ -53,12 +61,13 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
     {
         name: 'get_energy_usage',
         description:
-            'Fetch total energy consumption (kWh) over a time period — daily, ' +
-            'weekly, monthly, or yearly — either for the whole facility or for ' +
-            'one specific room. Use for questions like "how much energy did ' +
-            'Room 204 use this month" or "what was our total energy usage last ' +
-            'week". For a live snapshot of who is using the most right now, use ' +
-            'get_energy_rankings instead.',
+            'Time-series energy totals (kWh) for the whole facility or one ' +
+            'named room, bucketed daily (last 7 days), weekly (last 8 ' +
+            'weeks), monthly (last 12 months), or yearly (last 5 years). Use ' +
+            'for any question naming a time period or trend, e.g. "how much ' +
+            'energy did Room 204 use this month" or "facility usage last ' +
+            'week". Do NOT use this to compare rooms against each other right ' +
+            'now — that is get_energy_rankings.',
         parameters: {
             type: 'object',
             properties: {
@@ -87,9 +96,13 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
     {
         name: 'get_climate_prediction_logs',
         description:
-            'Fetch the latest environmental variables and reasoning used by the ' +
-            'AC climate prediction model for a specific device or room. Use for ' +
-            'questions about why the AI suggested a particular temperature.',
+            'The AI climate model\'s latest suggested temperature for one ' +
+            'room, its stated reasoning, and whether it was applied or ' +
+            'auto-apply is enabled. Use ONLY when the user asks why the AI ' +
+            'suggested a temperature or wants to see its reasoning. Not for ' +
+            'general room status — use get_room_telemetry for that. ' +
+            'roomName is required; if the user hasn\'t named a room, ask ' +
+            'which one instead of calling this tool.',
         parameters: {
             type: 'object',
             properties: {
@@ -104,10 +117,14 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
     {
         name: 'get_system_help',
         description:
-            'Fetch instructions for using the OcuTemp system itself — navigation, ' +
-            'how to perform an action, or where a feature is located. Use for ' +
-            'questions like "how do I change my password" or "where do I add a ' +
-            'room", as opposed to questions about live room/energy data.',
+            'Instructions for using the OcuTemp dashboard itself — never live ' +
+            'room or energy data. Use for "how do I..." or "where is..." ' +
+            'questions about the UI. Pass the topic key that most closely ' +
+            'matches the request. Known topics include: change-password, ' +
+            'add-room, assign-floor-plan-cell, manage-schedules, ' +
+            'approve-staff, view-energy-reports. If nothing matches well, ' +
+            'still pass your best-guess key — the tool reports back if no ' +
+            'entry is found rather than failing.',
         parameters: {
             type: 'object',
             properties: {
