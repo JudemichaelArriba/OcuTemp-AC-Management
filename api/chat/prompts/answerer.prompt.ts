@@ -49,7 +49,9 @@ ANSWER LENGTH AND DEPTH:
   inventing a cause for it is not).
 - For energy usage or telemetry results with multiple time periods,
   multiple rooms, or multiple schedules, list one item per line (e.g.
-  "April 2026: 12.0 kWh") instead of cramming them into one sentence.
+  "April 2026: 12.0 kWh" or "July 27, 2026: 5.3 kWh") instead of 
+  cramming them into one sentence. The tool result will provide dates
+  in human-readable format already—use them as given.
   Skip periods or entries with no meaningful data rather than listing
   every zero value, unless the user specifically asked about a
   zero-usage period or an empty result matters to their question.

@@ -23,7 +23,7 @@ import {
 } from './energy-report.service';
 import { LoggerService } from './logger.service';
 import { getSystemHelpEntry } from '../helpers/system-help-content';
-import { roundAllNumbers, cleanTimestamp } from '../helpers/chat-response-cleaner';
+import { roundAllNumbers, cleanTimestamp, formatDateLabel } from '../helpers/chat-response-cleaner';
 
 type EnergyByDevice = Record<string, Record<string, EnergyDaily>>;
 
@@ -171,6 +171,13 @@ export class ChatToolsService {
         const device = devices[room.device];
         const onlineState = getDeviceOnlineState(device?.status?.lastSeen);
 
+        const schedules = (room.schedules ?? []).map(schedule => ({
+            day: schedule.day,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            subject: schedule.subject,
+        }));
+
         return {
             roomName: room.roomName,
             status: room.status,
@@ -180,7 +187,7 @@ export class ChatToolsService {
             occupancy: device?.occupancy ?? room.occupancy ?? null,
             acPower: device?.acState?.power ?? room.power ?? null,
             aiAutoApply: device?.control?.aiAutoApply ?? false,
-            activeSchedulesCount: room.schedules?.length ?? 0,
+            schedules: schedules.length > 0 ? schedules : null,
             lastSeen: cleanTimestamp(device?.status?.lastSeen ?? null),
         };
     }
@@ -248,10 +255,10 @@ export class ChatToolsService {
         energyData: EnergyByDevice,
         period: 'daily' | 'weekly' | 'monthly' | 'yearly',
         deviceId?: string,
-    ): Array<{ label: string; kwh: number }> {
+    ): Array<{ date: string; kwh: number }> {
         if (period === 'daily') {
             return getLast7DayKeys().map((day) => ({
-                label: day,
+                date: formatDateLabel(day),
                 kwh: deviceId
                     ? sumKwhByDateForDevice(energyData, deviceId, day)
                     : sumKwhByDate(energyData, day),
@@ -259,7 +266,7 @@ export class ChatToolsService {
         }
         if (period === 'weekly') {
             return getLast8WeekRanges().map((wk) => ({
-                label: wk.label,
+                date: formatDateLabel(wk.label),
                 kwh: deviceId
                     ? sumKwhByWeekForDevice(energyData, deviceId, wk.start, wk.end)
                     : sumKwhByWeek(energyData, wk.start, wk.end),
@@ -267,14 +274,14 @@ export class ChatToolsService {
         }
         if (period === 'monthly') {
             return getLast12MonthKeys().map((month) => ({
-                label: month,
+                date: formatDateLabel(month),
                 kwh: deviceId
                     ? sumKwhByMonthForDevice(energyData, deviceId, month)
                     : sumKwhByMonth(energyData, month),
             }));
         }
         return getLast5YearKeys().map((year) => ({
-            label: year,
+            date: year,
             kwh: deviceId
                 ? sumKwhByYearForDevice(energyData, deviceId, year)
                 : sumKwhByYear(energyData, year),

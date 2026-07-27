@@ -19,13 +19,15 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
         description:
             'READ-ONLY: Fetch live snapshot of room sensor and control state. ' +
             'Returns: temperature, humidity, occupancy, AC power status, AI ' +
-            'auto-apply flag, online/offline status, active schedule count. ' +
-            'Use for "right now" questions about a room\'s current status. ' +
-            'DOES return: current temperature, AC on/off, occupancy, device online state. ' +
+            'auto-apply flag, online/offline status, and room schedules (day, ' +
+            'startTime, endTime, subject). ' +
+            'Use for "right now" questions about a room\'s current status or ' +
+            'schedule details (when classes are, what time activities start). ' +
+            'DOES return: current temperature, AC on/off, occupancy, device online state, schedule times. ' +
             'Does NOT return: energy consumption (use get_energy_rankings or get_energy_usage), ' +
             'historical data (use get_energy_usage), AI reasoning (use get_climate_prediction_logs). ' +
             'Parameters: roomName (exact match, e.g. "Room 204"). Omit roomName to fetch ALL rooms. ' +
-            'CANNOT: turn AC on/off, change temperature, modify settings. Read-only.',
+            'CANNOT: turn AC on/off, change temperature, modify settings, edit schedules. Read-only.',
         parameters: {
             type: 'object',
             properties: {

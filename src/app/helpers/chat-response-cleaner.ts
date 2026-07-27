@@ -79,6 +79,45 @@ export function cleanTimestamp(isoString: string | null | undefined): string | n
 }
 
 /**
+ * Formats date keys into human-readable format for chatbot responses.
+ */
+export function formatDateLabel(label: string): string {
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(label)) {
+        const date = new Date(label + 'T00:00:00');
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+
+
+    if (/^\d{4}-\d{2}$/.test(label)) {
+        const [year, month] = label.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long'
+        });
+    }
+
+
+    if (label.startsWith('Week of ')) {
+        const dateStr = label.replace('Week of ', '');
+        const date = new Date(dateStr + 'T00:00:00');
+        return `Week of ${date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        })}`;
+    }
+
+
+    return label;
+}
+
+/**
  * Removes internal fields and PII from an object before sending to LLM.
  * Prevents leaking sensitive identifiers and reduces token usage.
  */
