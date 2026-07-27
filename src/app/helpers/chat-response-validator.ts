@@ -112,6 +112,12 @@ function validateDataAnswer(answerText: string, data: unknown): ChatValidationRe
         };
     }
 
+    // Check timestamps/dates - must match or be absent
+    const timestampCheck = validateTimestamps(answerText, data);
+    if (!timestampCheck.isValid) {
+        return timestampCheck;
+    }
+
     return { isValid: true };
 }
 
@@ -232,4 +238,51 @@ function extractRoomNames(data: unknown): string[] {
 /** Finds any known room name that appears as a substring of the answer text. */
 function extractRoomNamesFromText(text: string, knownRoomNames: string[]): string[] {
     return knownRoomNames.filter((room) => text.includes(room));
+}
+
+/**
+ * Validates that dates/timestamps in the answer match those in the tool
+ * result. Prevents AI from inventing or misreading dates.
+ */
+function validateTimestamps(answerText: string, data: unknown): ChatValidationResult {
+
+    const payloadTimestamps = extractFormattedDates(JSON.stringify(data));
+
+
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+
+
+    for (const month of months) {
+        if (answerText.includes(month)) {
+
+            const hasMatchingMonth = payloadTimestamps.some(ts => ts.includes(month));
+            if (!hasMatchingMonth && payloadTimestamps.length > 0) {
+                return {
+                    isValid: false,
+                    reason: `Answer mentions ${month} which doesn't appear in the tool result timestamps`,
+                };
+            }
+        }
+    }
+
+    return { isValid: true };
+}
+
+/**
+ * Extracts formatted dates from JSON (after cleanTimestamp conversion).
+ * Looks for patterns like "May 18, 2026 at 11:43 AM"
+ */
+function extractFormattedDates(jsonString: string): string[] {
+    const dates: string[] = [];
+
+
+    const datePattern = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\s+at\s+\d{1,2}:\d{2}\s+[AP]M/g;
+    const matches = jsonString.match(datePattern);
+
+    if (matches) {
+        dates.push(...matches);
+    }
+
+    return dates;
 }

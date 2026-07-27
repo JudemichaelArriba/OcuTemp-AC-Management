@@ -130,14 +130,16 @@ export function checkContextRelevance(message: string): ContextCheckResult {
         return { isRelevant: true };
     }
 
-    if (normalized.includes('?') && normalized.length > 20) {
+    // For questions without in-scope keywords but not explicitly out-of-scope,
+    // be PERMISSIVE - only reject very long questions (> 50 chars)
+    if (normalized.includes('?') && normalized.length > 50) {
         return {
             isRelevant: false,
             reason: 'Question does not appear to be about OcuTemp facility operations',
         };
     }
 
-
+    // Default to allowing - better to let planner reject than block valid questions
     return { isRelevant: true };
 }
 
