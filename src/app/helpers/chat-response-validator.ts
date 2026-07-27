@@ -2,16 +2,56 @@ import { ChatToolResult, ChatValidationResult } from '../models/chat.models';
 import { getSystemHelpEntry } from './system-help-content';
 
 /**
- * Deterministic, zero-LLM guardrail. Checks a
- * model's final answer text against the clean tool result it was
- * supposed to be grounded in, before the answer is allowed to render.
- * Pure functions, no network calls — this must stay fast and free.
+ * Deterministic, zero-LLM guardrail. Checks a model's final answer text
+ * against the clean tool result it was supposed to be grounded in,
+ * before the answer is allowed to render. This is the last line of
+ * defense against hallucinations.
  *
- * Two distinct rule sets: data tools (numbers/room names must appear
- * in the payload) vs get_system_help (steps/route must match the
- * stored entry exactly, since that content is static and already
- * correct any deviation means the model embellished).
+ * Pure functions, no network calls — must stay fast and free.
+ *
+ * Validation checks:
+ * 1. Numbers in answer must exist in tool result
+ * 2. Room names in answer must exist in tool result
+ * 3. Timestamps must match or be absent
+ * 4. No control/modification claims ("I turned off", "I set", "I changed")
+ * 5. No invented causal explanations without data support
+ * 6. For system help: steps/routes must match stored entries exactly
  */
+
+/** Phrases that indicate control actions (always invalid - chatbot is read-only) */
+const CONTROL_PHRASES = [
+    "I turned",
+    "I set",
+    "I changed",
+    "I updated",
+    "I modified",
+    "I adjusted",
+    "I controlled",
+    "I will turn",
+    "I will set",
+    "I will change",
+    "I'll turn",
+    "I'll set",
+    "I'll change",
+    "turning on",
+    "turning off",
+    "setting the",
+] as const;
+
+/** Speculation phrases that suggest invented causation */
+const SPECULATION_PHRASES = [
+    "probably",
+    "likely",
+    "might be",
+    "could be",
+    "perhaps",
+    "possibly",
+    "seems like",
+    "appears to be due to",
+    "because of",
+    "caused by",
+    "due to",
+] as const;
 export function validateChatAnswer(
     answerText: string,
     toolResult: ChatToolResult | null,
@@ -28,13 +68,21 @@ export function validateChatAnswer(
 }
 
 /**
- * For data tools: every number mentioned in the answer must appear
- * somewhere in the clean payload (rounded the same way), and every
- * room name mentioned must appear in the payload's room names.
- * Doesn't try to verify the answer is a complete or well-phrased
- * summary — only that it isn't inventing figures.
+ * For data tools: validates that the answer is grounded in the tool
+ * result and doesn't contain hallucinations, control claims, or
+ * speculation.
  */
 function validateDataAnswer(answerText: string, data: unknown): ChatValidationResult {
+    const controlCheck = detectControlClaims(answerText);
+    if (!controlCheck.isValid) {
+        return controlCheck;
+    }
+
+    const speculationCheck = detectExcessiveSpeculation(answerText);
+    if (!speculationCheck.isValid) {
+        return speculationCheck;
+    }
+
     const payloadNumbers = extractNumbers(JSON.stringify(data));
     const answerNumbers = extractNumbers(answerText);
 
@@ -57,6 +105,70 @@ function validateDataAnswer(answerText: string, data: unknown): ChatValidationRe
         };
     }
 
+    if (answerText.includes('/devices/') || answerText.includes('/rooms/') || answerText.includes('/energy/')) {
+        return {
+            isValid: false,
+            reason: 'Answer contains internal Firebase paths',
+        };
+    }
+
+    return { isValid: true };
+}
+
+/**
+ * Detects if the answer claims to have performed control actions,
+ * which is always invalid since the chatbot is read-only.
+ */
+function detectControlClaims(answerText: string): ChatValidationResult {
+    const lowerAnswer = answerText.toLowerCase();
+
+    for (const phrase of CONTROL_PHRASES) {
+        if (lowerAnswer.includes(phrase.toLowerCase())) {
+            return {
+                isValid: false,
+                reason: `Answer claims to perform control action: "${phrase}"`,
+            };
+        }
+    }
+
+    return { isValid: true };
+}
+
+/**
+ * Detects excessive speculation that suggests the model is inventing
+ * causal explanations without data support. Simple observations like
+ * "31°C is quite warm" are OK, but "probably because" or "likely due
+ * to" are not.
+ */
+function detectExcessiveSpeculation(answerText: string): ChatValidationResult {
+    const lowerAnswer = answerText.toLowerCase();
+
+    let speculationCount = 0;
+    let detectedPhrase = '';
+
+    for (const phrase of SPECULATION_PHRASES) {
+        if (lowerAnswer.includes(phrase.toLowerCase())) {
+            speculationCount++;
+            detectedPhrase = phrase;
+
+
+            if (phrase.includes('because') || phrase.includes('due to') || phrase.includes('caused')) {
+                return {
+                    isValid: false,
+                    reason: `Answer contains unsupported causal explanation: "${phrase}"`,
+                };
+            }
+        }
+    }
+
+
+    if (speculationCount > 2) {
+        return {
+            isValid: false,
+            reason: `Answer contains too much speculation (detected "${detectedPhrase}" and others)`,
+        };
+    }
+
     return { isValid: true };
 }
 
@@ -70,13 +182,13 @@ function validateDataAnswer(answerText: string, data: unknown): ChatValidationRe
 function validateSystemHelpAnswer(answerText: string, data: unknown): ChatValidationResult {
     const topic = (data as { topic?: string } | null)?.topic;
     if (!topic) {
-        // Tool result was a "not found" — nothing to validate against.
+
         return { isValid: true };
     }
 
     const entry = getSystemHelpEntry(topic);
     if (!entry) {
-        return { isValid: true }; // shouldn't happen if the executor is correct; fail open here, not closed
+        return { isValid: true }; closed
     }
 
     if (entry.route && answerText.includes('/app/') && !answerText.includes(entry.route)) {

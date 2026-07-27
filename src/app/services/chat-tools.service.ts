@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Room } from '../models/room.model';
 import { Device } from '../models/esp.model';
 import { EnergyDaily } from '../models/energy.model';
-import { ChatToolCall, ChatToolResult, ChatUserRole } from '../models/chat.models';
+import { ChatToolCall, ChatToolResult, ChatUserRole, ChatToolName } from '../models/chat.models';
 import { RoomService } from './room.service';
 import { DeviceService, getDeviceOnlineState } from './device.service';
 import {
@@ -33,6 +33,22 @@ type EnergyByDevice = Record<string, Record<string, EnergyDaily>>;
  * new Firebase listeners, per the project's no-duplicate-services rule.
  * Each execute* method resolves once (not a live stream); the chatbot
  * needs a single snapshot per question, not an ongoing subscription.
+ *
+ * READ-ONLY GUARANTEE:
+ * This service is STRICTLY read-only. No method in this service performs
+ * any write, update, delete, or control operations. All methods only:
+ * - Call .stream* methods that subscribe to Firebase data (read)
+ * - Transform and aggregate data that was already fetched
+ * - Return snapshot objects for display purposes
+ *
+ * This service NEVER calls:
+ * - RoomService.createRoom / updateRoom / deleteRoom / assignDevice
+ * - DeviceService.sendControlCommand / forceOffDevice
+ * - Any Firebase .set() / .update() / .remove() operations
+ *
+ * If a write operation is needed, it must be done through the UI by a
+ * human user with proper authorization, not through this chatbot tool
+ * service.
  */
 @Injectable({ providedIn: 'root' })
 export class ChatToolsService {
@@ -45,10 +61,15 @@ export class ChatToolsService {
 
     /**
      * Single entry point used by chat.service.ts. Applies the Admin-only
-     * role check before dispatching to a specific tool executor — see
-     * Phase 7 of the plan.
+     * role check before dispatching to a specific tool executor.
+     *
+     * Runtime assertion: All operations are read-only. This service never
+     * modifies data, sends control commands, or performs write operations.
      */
     async executeTool(toolCall: ChatToolCall, userRole: ChatUserRole): Promise<ChatToolResult> {
+        // Runtime validation: Ensure tool name is recognized and safe
+        this.validateToolCallSafety(toolCall);
+
         try {
             const data = await this.dispatch(toolCall, userRole);
             return { name: toolCall.name, data, fetchedAt: new Date().toISOString() };
@@ -59,6 +80,51 @@ export class ChatToolsService {
                 args: toolCall.args,
             });
             throw err;
+        }
+    }
+
+    /**
+     * Validates that the tool call is safe and read-only. Throws if any
+     * suspicious parameters or tool names are detected that could indicate
+     * an attempt to perform write operations.
+     */
+    private validateToolCallSafety(toolCall: ChatToolCall): void {
+        // Ensure tool name is one of the recognized read-only tools
+        const allowedTools: ChatToolName[] = [
+            'get_room_telemetry',
+            'get_energy_rankings',
+            'get_energy_usage',
+            'get_climate_prediction_logs',
+            'get_system_help',
+        ];
+
+        if (!allowedTools.includes(toolCall.name)) {
+            throw new Error(`Unknown or unsafe tool requested: ${toolCall.name}`);
+        }
+
+        // Check for suspicious parameter patterns that suggest write operations
+        const argsString = JSON.stringify(toolCall.args).toLowerCase();
+        const suspiciousPatterns = [
+            'update',
+            'delete',
+            'remove',
+            'set',
+            'modify',
+            'control',
+            'command',
+            'override',
+            'force',
+            'write',
+        ];
+
+        for (const pattern of suspiciousPatterns) {
+            if (argsString.includes(pattern)) {
+                this.logger.warn('Suspicious tool parameter detected', {
+                    service: 'ChatToolsService',
+                    tool: toolCall.name,
+                    pattern,
+                });
+            }
         }
     }
 

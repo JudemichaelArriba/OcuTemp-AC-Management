@@ -11,6 +11,9 @@ import { ChatToolsService } from './chat-tools.service';
 import { LoggerService } from './logger.service';
 import { trimChatHistory } from '../helpers/chat-history-trimmer';
 import { validateChatAnswer } from '../helpers/chat-response-validator';
+import { checkContextRelevance } from '../helpers/chat-context-checker';
+import { sanitizeResponse, containsUnsafeContent } from '../helpers/chat-response-sanitizer';
+import { environment } from '../../environments/environment';
 
 const CHAT_API_ENDPOINT = '/api/chat';
 const MAX_TOOL_HOPS_PER_TURN = 1;
@@ -53,6 +56,32 @@ export class ChatService {
         const trimmedText = text.trim();
         if (!trimmedText || this.isLoading()) return;
 
+        // Check context relevance before processing
+        const contextCheck = checkContextRelevance(trimmedText);
+        if (!contextCheck.isRelevant) {
+            const userMessage = this.buildMessage('user', trimmedText);
+            this.appendToHistory(userMessage);
+            this.appendRenderable({ id: userMessage.id, role: 'user', text: trimmedText, isFallback: false });
+
+            const rejectionMessage = this.buildMessage(
+                'model',
+                "I can only help with OcuTemp facility management — room monitoring, energy usage, AC status, and system navigation. For other topics, please use a general-purpose assistant."
+            );
+            this.appendToHistory(rejectionMessage);
+            this.appendRenderable({
+                id: rejectionMessage.id,
+                role: 'assistant',
+                text: rejectionMessage.content,
+                isFallback: false,
+            });
+            
+            this.logger.warn('Chat message rejected due to context relevance', {
+                service: 'ChatService',
+                reason: contextCheck.reason,
+            });
+            return;
+        }
+
         const userMessage = this.buildMessage('user', trimmedText);
         this.appendToHistory(userMessage);
         this.appendRenderable({ id: userMessage.id, role: 'user', text: trimmedText, isFallback: false });
@@ -62,10 +91,26 @@ export class ChatService {
             await this.runTurn(userRole);
         } catch (err) {
             this.logger.error('Chat turn failed', err, { service: 'ChatService', action: 'sendMessage' });
+            
+            // Provide more specific error messages based on error type
+            let errorMessage = "Something went wrong. Please try again in a moment.";
+            
+            if (err instanceof ChatRequestError) {
+                if (err.message.includes('rate limit') || err.message.includes('Too many')) {
+                    errorMessage = "You're sending messages too quickly. Please wait a moment and try again.";
+                } else if (err.message.includes('network') || err.message.includes('Network')) {
+                    errorMessage = "Connection issue. Please check your internet and try again.";
+                } else if (err.message.includes('timeout')) {
+                    errorMessage = "The request took too long. Please try a simpler question.";
+                } else {
+                    errorMessage = "Unable to process your message. Please try rephrasing your question.";
+                }
+            }
+            
             this.appendRenderable({
                 id: this.generateId(),
                 role: 'assistant',
-                text: "Something went wrong on my end. Please try again in a moment.",
+                text: errorMessage,
                 isFallback: false,
             });
         } finally {
@@ -89,10 +134,25 @@ export class ChatService {
                 throw new ChatRequestError('Model requested more than one tool call in a single turn');
             }
 
+            // Log tool call for monitoring
+            this.logger.warn('Executing tool call', {
+                service: 'ChatService',
+                toolName: response.toolCall.name,
+                hasArgs: Object.keys(response.toolCall.args).length > 0,
+            });
+
             const toolCallMessage = this.buildMessage('model', '', { toolCall: response.toolCall });
             this.appendToHistory(toolCallMessage);
 
             const toolResult = await this.chatTools.executeTool(response.toolCall, userRole);
+            
+            // Log tool result for monitoring
+            this.logger.warn('Tool execution completed', {
+                service: 'ChatService',
+                toolName: toolResult.name,
+                dataSize: JSON.stringify(toolResult.data).length,
+            });
+            
             const toolResultMessage = this.buildMessage('function', '', { toolResult });
             this.appendToHistory(toolResultMessage);
 
@@ -106,18 +166,69 @@ export class ChatService {
         const lastToolResult = this.findLastToolResult();
         const validation = validateChatAnswer(response.answer, lastToolResult);
 
-        const answerMessage = this.buildMessage('model', response.answer);
+        // Sanitize the answer as final safety layer
+        const sanitizationResult = sanitizeResponse(response.answer);
+        
+        if (sanitizationResult.hadChanges) {
+            this.logger.warn('Answer was sanitized to remove unsafe content', {
+                service: 'ChatService',
+                changes: sanitizationResult.changesLog,
+            });
+        }
+        
+        // Additional check for unsafe content that might have been missed
+        if (containsUnsafeContent(sanitizationResult.sanitized)) {
+            this.logger.error('Answer still contains unsafe content after sanitization', {
+                service: 'ChatService',
+            });
+        }
+
+        const finalAnswer = sanitizationResult.sanitized;
+        const answerMessage = this.buildMessage('model', finalAnswer);
         this.appendToHistory(answerMessage);
 
         if (!validation.isValid) {
+            // Log validation failure with details for monitoring
             this.logger.warn('Chat answer failed validation, falling back to raw data', {
                 service: 'ChatService',
                 reason: validation.reason,
+                toolName: lastToolResult?.name,
+                answerLength: finalAnswer.length,
+                hadSanitization: sanitizationResult.hadChanges,
             });
+            
+            // Track specific types of hallucinations for analysis
+            if (validation.reason?.includes('number')) {
+                this.logger.warn('Hallucination detected: invented number', {
+                    service: 'ChatService',
+                    hallucinationType: 'invented_number',
+                });
+            } else if (validation.reason?.includes('room')) {
+                this.logger.warn('Hallucination detected: invented room name', {
+                    service: 'ChatService',
+                    hallucinationType: 'invented_room',
+                });
+            } else if (validation.reason?.includes('control')) {
+                this.logger.warn('Hallucination detected: claimed control action', {
+                    service: 'ChatService',
+                    hallucinationType: 'control_claim',
+                });
+            } else if (validation.reason?.includes('speculation')) {
+                this.logger.warn('Hallucination detected: excessive speculation', {
+                    service: 'ChatService',
+                    hallucinationType: 'speculation',
+                });
+            } else if (validation.reason?.includes('Firebase')) {
+                this.logger.warn('Security issue: Firebase path in answer', {
+                    service: 'ChatService',
+                    hallucinationType: 'path_leak',
+                });
+            }
+            
             this.appendRenderable({
                 id: answerMessage.id,
                 role: 'assistant',
-                text: response.answer,
+                text: finalAnswer,
                 isFallback: true,
                 fallbackData: lastToolResult?.data,
             });
@@ -127,9 +238,19 @@ export class ChatService {
         this.appendRenderable({
             id: answerMessage.id,
             role: 'assistant',
-            text: response.answer,
+            text: finalAnswer,
             isFallback: false,
         });
+        
+        // Log successful response for quality metrics (console only, not Sentry)
+        if (!environment.production) {
+            console.log('Chat answer validated successfully:', {
+                service: 'ChatService',
+                toolUsed: lastToolResult?.name ?? 'none',
+                answerLength: finalAnswer.length,
+                hadSanitization: sanitizationResult.hadChanges,
+            });
+        }
     }
 
     private async callChatApi(userRole: ChatUserRole): Promise<ChatApiResponse> {
