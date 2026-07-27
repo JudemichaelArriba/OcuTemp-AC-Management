@@ -71,11 +71,28 @@ export function roundAllNumbers<T>(value: T, decimals = 1): T {
     return value;
 }
 
+/**
+ * Converts ISO timestamp to human-readable format for chatbot responses.
+ * Returns null for invalid timestamps.
+ */
 export function cleanTimestamp(isoString: string | null | undefined): string | null {
     if (!isoString) return null;
     const date = new Date(isoString);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+    const dateStr = date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+
+    const timeStr = date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+
+    return `${dateStr} at ${timeStr}`;
 }
 
 /**
