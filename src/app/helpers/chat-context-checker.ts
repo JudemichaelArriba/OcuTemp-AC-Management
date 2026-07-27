@@ -59,28 +59,38 @@ const IN_SCOPE_KEYWORDS = [
 
 /** Phrases that clearly indicate out-of-scope requests */
 const OUT_OF_SCOPE_PATTERNS = [
-    /what is.*\?$/i,
+
+    /what is (?!.*(?:status|temperature|temp|humidity|occupancy|energy|power|consumption|room|ac|air conditioning|device|schedule|floor plan|ocutemp))/i,
     /who is.*\?$/i,
-    /when did.*\?$/i,
+    /who was.*\?$/i,
+    /when did.*(?!room|device|ac|energy)/i,
     /where is.*(?!ocutemp|room|facility)/i,
     /how does.*(?!room|ac|energy|system)/i,
     /calculate/i,
     /what is \d+.*[\+\-\*\/]/i,
     /weather outside/i,
+    /weather forecast/i,
     /forecast/i,
-    /rain/i,
-    /sunny/i,
+    /\brain\b(?!.*schedule)/i,
+    /\bsunny\b/i,
+    /\bcloudy\b/i,
+    /\bsnow/i,
     /my birthday/i,
     /my name/i,
+    /my age/i,
     /write.*essay/i,
     /write.*email/i,
     /write.*code/i,
+    /write.*story/i,
+    /write.*poem/i,
     /recipe for/i,
     /how to cook/i,
+    /how to bake/i,
     /google/i,
     /facebook/i,
     /twitter/i,
     /youtube/i,
+    /instagram/i,
 ] as const;
 
 export interface ContextCheckResult {
