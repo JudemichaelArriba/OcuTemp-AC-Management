@@ -41,14 +41,6 @@ type EnergyByDevice = Record<string, Record<string, EnergyDaily>>;
  * - Transform and aggregate data that was already fetched
  * - Return snapshot objects for display purposes
  *
- * This service NEVER calls:
- * - RoomService.createRoom / updateRoom / deleteRoom / assignDevice
- * - DeviceService.sendControlCommand / forceOffDevice
- * - Any Firebase .set() / .update() / .remove() operations
- *
- * If a write operation is needed, it must be done through the UI by a
- * human user with proper authorization, not through this chatbot tool
- * service.
  */
 @Injectable({ providedIn: 'root' })
 export class ChatToolsService {
@@ -67,7 +59,7 @@ export class ChatToolsService {
      * modifies data, sends control commands, or performs write operations.
      */
     async executeTool(toolCall: ChatToolCall, userRole: ChatUserRole): Promise<ChatToolResult> {
-        // Runtime validation: Ensure tool name is recognized and safe
+ 
         this.validateToolCallSafety(toolCall);
 
         try {
@@ -93,6 +85,7 @@ export class ChatToolsService {
         const allowedTools: ChatToolName[] = [
             'get_room_telemetry',
             'get_energy_rankings',
+            'get_energy_rankings_by_period',
             'get_energy_usage',
             'get_climate_prediction_logs',
             'get_system_help',
@@ -135,6 +128,10 @@ export class ChatToolsService {
             case 'get_energy_rankings':
                 return this.getEnergyRankings(
                     toolCall.args as { acStatus?: 'active' | 'standby' | 'all'; limit?: number },
+                );
+            case 'get_energy_rankings_by_period':
+                return this.getEnergyRankingsByPeriod(
+                    toolCall.args as { period: 'daily' | 'weekly' | 'monthly' | 'yearly'; limit?: number },
                 );
             case 'get_energy_usage':
                 return this.getEnergyUsage(
@@ -219,6 +216,54 @@ export class ChatToolsService {
                 return entry.acPower !== true;
             })
             .sort((a, b) => b.kwhToday - a.kwhToday)
+            .slice(0, limit);
+
+        return roundAllNumbers(ranked);
+    }
+
+    private async getEnergyRankingsByPeriod(args: {
+        period: 'daily' | 'weekly' | 'monthly' | 'yearly';
+        limit?: number;
+    }): Promise<unknown> {
+        const rooms = await this.getRoomsOnce();
+        const energyData = await this.getEnergyDailyOnce();
+        const limit = args.limit ?? 10;
+
+        const ranked = rooms
+            .filter((room) => room.device)
+            .map((room) => {
+                const deviceId = room.device;
+                let totalKwh = 0;
+
+                if (args.period === 'daily') {
+     
+                    const dayKeys = getLast7DayKeys();
+                    totalKwh = dayKeys.reduce((sum, day) => 
+                        sum + sumKwhByDateForDevice(energyData, deviceId, day), 0);
+                } else if (args.period === 'weekly') {
+             
+                    const weekRanges = getLast8WeekRanges();
+                    totalKwh = weekRanges.reduce((sum, wk) => 
+                        sum + sumKwhByWeekForDevice(energyData, deviceId, wk.start, wk.end), 0);
+                } else if (args.period === 'monthly') {
+           
+                    const monthKeys = getLast12MonthKeys();
+                    totalKwh = monthKeys.reduce((sum, month) => 
+                        sum + sumKwhByMonthForDevice(energyData, deviceId, month), 0);
+                } else {
+       
+                    const yearKeys = getLast5YearKeys();
+                    totalKwh = yearKeys.reduce((sum, year) => 
+                        sum + sumKwhByYearForDevice(energyData, deviceId, year), 0);
+                }
+
+                return { 
+                    roomName: room.roomName, 
+                    totalKwh,
+                    period: args.period
+                };
+            })
+            .sort((a, b) => b.totalKwh - a.totalKwh)
             .slice(0, limit);
 
         return roundAllNumbers(ranked);

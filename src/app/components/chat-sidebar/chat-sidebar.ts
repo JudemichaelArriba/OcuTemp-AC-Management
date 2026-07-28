@@ -36,7 +36,7 @@ export class ChatSidebarComponent implements AfterViewChecked, OnChanges {
 
     readonly suggestions = computed<string[]>(() => {
         const base = [
-            'How hot is my room right now?',
+            'What Room is active right now?',
             'Which room is using the most energy?',
             'How do I add a new room?',
         ];

@@ -47,7 +47,7 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
             'USE ONLY FOR: live comparison questions like "which room is using ' +
             'the most energy right now" or "top 5 energy consumers today". ' +
             'Do NOT use for: totals over a stated time period (this week, last ' +
-            'month, this year) — that is get_energy_usage. Do NOT use for a ' +
+            'month, this year) — that is get_energy_rankings_by_period. Do NOT use for a ' +
             'single room\'s AC status — that is get_room_telemetry. Do NOT use ' +
             'for "how much energy" questions — that is get_energy_usage. ' +
             'CANNOT: reduce energy, turn off devices, change rankings. Read-only.',
@@ -64,6 +64,40 @@ export const CHAT_TOOL_SCHEMA: readonly ProviderToolSchema[] = [
                     description: 'Max rooms to return, ranked highest first. Defaults to 5. Max 50.',
                 },
             },
+        },
+    },
+    {
+        name: 'get_energy_rankings_by_period',
+        description:
+            'READ-ONLY: Rank rooms by energy consumption over a time period ' +
+            '(daily/weekly/monthly/yearly), returning rooms sorted highest first. ' +
+            'Returns room rankings with total kWh for the selected period. ' +
+            'USE FOR: any ranking question with a stated time period like "rank ' +
+            'consumption per room this year", "which room used most energy this ' +
+            'month", "show energy consumption ranked weekly", "top consumers this week". ' +
+            'Do NOT use for: today\'s live rankings (that is get_energy_rankings). ' +
+            'Do NOT use for: totals without ranking (that is get_energy_usage). ' +
+            'Do NOT use for: single room queries (that is get_energy_usage). ' +
+            'DOES return: rooms ranked by total kWh over the period, highest first. ' +
+            'Does NOT return: time series data (use get_energy_usage), today\'s data ' +
+            '(use get_energy_rankings), AC status (use get_room_telemetry). ' +
+            'CANNOT: reduce usage, change settings, control devices. Read-only.',
+        parameters: {
+            type: 'object',
+            properties: {
+                period: {
+                    type: 'string',
+                    enum: ['daily', 'weekly', 'monthly', 'yearly'],
+                    description:
+                        "Time period to rank over: daily = last 7 days total, weekly = last 8 weeks total, " +
+                        "monthly = last 12 months total, yearly = last 5 years total.",
+                },
+                limit: {
+                    type: 'number',
+                    description: 'Max rooms to return, ranked highest first. Defaults to 10. Max 50.',
+                },
+            },
+            required: ['period'],
         },
     },
     {

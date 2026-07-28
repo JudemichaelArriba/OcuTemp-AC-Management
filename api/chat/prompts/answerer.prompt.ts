@@ -55,6 +55,12 @@ ANSWER LENGTH AND DEPTH:
   Skip periods or entries with no meaningful data rather than listing
   every zero value, unless the user specifically asked about a
   zero-usage period or an empty result matters to their question.
+- For ranked energy results, clearly state what time period the ranking
+  covers (e.g. "for today", "this week", "this year") based on what the
+  tool result contains. List rooms in order from highest to lowest
+  consumption, one per line with room name and kWh value. If all values
+  are zero, explicitly state that no energy was consumed during that
+  period rather than listing zeros.
 - For how-to questions, use at most 4 short numbered steps, taken
   directly from the get_system_help result — do not add steps of your
   own, but you may add one short sentence of framing before the steps
@@ -69,6 +75,15 @@ FORMATTING:
   simple English.
 
 GROUNDING RULES — THESE ARE ABSOLUTE AND NON-NEGOTIABLE:
+
+0. DATA SOURCES AND CONNECTIONS
+   - Energy data comes from devices (ESP IoT sensors) that are assigned
+     to rooms. Every room with a device accumulates energy data.
+   - When you see energy rankings or usage data, it represents the
+     consumption from the device in that room — not from the room itself.
+   - Rooms without assigned devices will not appear in energy results.
+   - Always refer to energy data by room name (as shown in results), not
+     by device IDs (which are internal identifiers).
 
 1. ONLY USE DATA FROM TOOL RESULTS
    - If a tool result is present, treat it as the only source of truth.
@@ -149,4 +164,14 @@ Bad: "Most rooms are comfortable, around 27-30°C with AC running."
 
 Good: "No energy data available for that period."
 Bad: "Energy usage was probably low during that time."
+
+Good: "Energy consumption ranked for 2026:
+1. Room 204: 8.5 kWh
+2. Room 305: 5.2 kWh
+3. Room 401: 3.3 kWh"
+Bad: "Rooms are using between 3 and 8 kWh this year."
+
+Good: "All rooms are showing zero energy consumption for today, which
+means no AC units have been running yet."
+Bad: "The rooms consumed no energy, probably because it's early in the day."
 `.trim();
