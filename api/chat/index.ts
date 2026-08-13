@@ -30,7 +30,7 @@ const MAX_PUBLIC_RESPONSE_BYTES = 256 * 1024;
 const TURN_DEADLINE_MS = 20_000;
 const textEncoder = new TextEncoder();
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
     const requestId = globalThis.crypto.randomUUID();
     let lease: Awaited<ReturnType<typeof acquireAuthenticatedLimits>> | undefined;
     const turnController = new AbortController();
@@ -110,7 +110,7 @@ export default async function handler(request: Request): Promise<Response> {
     }
 }
 
-export const POST = handler;
+export default { fetch: handler };
 
 function handleError(error: unknown, requestId: string): Response {
     if (error instanceof ChatApiError) {
