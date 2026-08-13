@@ -116,15 +116,15 @@
   </div>
 
   <div class="px-2.5 mb-1">
-    <button type="button" (click)="openHelpChat(); toggleSidebar()"
-      class="relative w-full flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
-      [ngClass]="helpChatVisible() ? 'bg-blue-50/50 !text-blue-600 shadow-sm' : ''">
+    <a [routerLink]="['/app/ocu-guide']" routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm"
+      (click)="toggleSidebar()"
+      class="relative w-full flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group">
       <span
         class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">support_agent</span>
-      <span class="text-[12px] font-bold tracking-tight">Help</span>
-      <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 transition-transform duration-300"
-        [class.scale-100]="helpChatVisible()" [class.scale-0]="!helpChatVisible()"></span>
-    </button>
+      <span class="text-[12px] font-bold tracking-tight">OcuGuide</span>
+      <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300"
+        routerLinkActive="scale-100"></span>
+    </a>
   </div>
 
   <div class="p-2.5">
@@ -270,16 +270,16 @@
     </div>
 
     <div class="px-2.5 mb-1">
-      <button type="button" (click)="openHelpChat()"
+      <a [routerLink]="['/app/ocu-guide']" routerLinkActive="bg-blue-50/50 !text-blue-600 shadow-sm"
         class="relative w-full flex items-center gap-3 px-3 py-2.5 text-slate-500 hover:text-blue-600 rounded-xl transition-all duration-300 group"
         [class.justify-center]="!isOpen()" [class.justify-start]="isOpen()"
-        [ngClass]="helpChatVisible() ? 'bg-blue-50/50 !text-blue-600 shadow-sm' : ''" title="Help">
+        title="OcuGuide">
         <span
           class="material-symbols-outlined text-[20px] group-hover:scale-110 transition-transform shrink-0">support_agent</span>
-        @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">Help</span> }
-        <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 transition-transform duration-300"
-          [class.scale-100]="helpChatVisible()" [class.scale-0]="!helpChatVisible()"></span>
-      </button>
+        @if (isOpen()) { <span class="text-[12px] font-bold tracking-tight">OcuGuide</span> }
+        <span class="absolute right-2 w-1.5 h-1.5 rounded-full bg-blue-600 scale-0 transition-transform duration-300"
+          routerLinkActive="scale-100"></span>
+      </a>
     </div>
 
     <div class="p-2.5">
@@ -318,9 +318,4 @@
   </div>
 </aside>
 
-}
-
-@if (currentUser$ | async; as currentUser) {
-<app-chat-sidebar [visible]="helpChatVisible()" [userRole]="isAdmin(currentUser) ? 'admin' : 'staff'"
-  (visibleChange)="helpChatVisible.set($event)" />
 }

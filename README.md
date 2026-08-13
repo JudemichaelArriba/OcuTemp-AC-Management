@@ -53,6 +53,35 @@ FIREBASE_APP_ID=your-firebase-app-id
 SENTRY_DSN=your-sentry-dsn
 ```
 
+The Vercel chat function also requires server-only environment variables. Add these in
+**Vercel → Project → Settings → Environment Variables**; never expose them through Angular
+environment files:
+
+```env
+GOOGLE_GENERATIVE_AI_API_KEY=your-gemini-key
+GROQ_API_KEY=your-groq-key
+UPSTASH_REDIS_REST_URL=your-upstash-rest-url
+UPSTASH_REDIS_REST_TOKEN=your-upstash-rest-token
+CHAT_STATE_SECRET=base64-encoded-32-byte-random-secret
+CHAT_ALLOWED_ORIGINS=https://your-production-domain.example
+```
+
+`CHAT_STATE_SECRET` encrypts the short-lived conversation context. Generate a separate value
+for each environment with PowerShell:
+
+```powershell
+$secretBytes = [byte[]]::new(32)
+$random = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$random.GetBytes($secretBytes)
+$random.Dispose()
+[Convert]::ToBase64String($secretBytes)
+```
+
+Rotate it if exposed. Rotation invalidates existing OcuGuide conversation context but does not
+affect Firebase sign-in or facility data. `CHAT_ALLOWED_ORIGINS` is a comma-separated allowlist rather than a credential;
+include each exact production/preview origin and `http://localhost:4200` only for development.
+The chat runs in the existing Vercel `/api/chat` function and does not use Firebase Functions.
+
 Do not commit real environment values. The `.env` file is already ignored by git.
 
 Start the local development server:
@@ -82,6 +111,7 @@ npm run build
 ```
 
 Generates environment files, clears the Angular cache, and creates a production build in `dist/Ocutemp`.
+The build also type-checks the Vercel chat function before compiling Angular.
 
 ```bash
 npm run watch
@@ -123,13 +153,12 @@ Keep database rules aligned with the admin and staff access model used by the An
 
 ## Deployment
 
-The project includes a Vercel configuration. For deployment, configure the same environment variables in the hosting provider instead of committing them to the repository.
+The project includes a Vercel configuration. For deployment, configure the public Firebase/Sentry values and the server-only OcuGuide values listed above in Vercel instead of committing them to the repository.
 
 The Vercel build command is:
 
 ```bash
-node set-env.js && ng build
+npm run build
 ```
 
-The app is configured as a single-page application, so Vercel rewrites all routes to `index.html`.
-
+This command generates Angular environment files, type-checks the Vercel chat function, and builds Angular. The app is configured as a single-page application, so Vercel rewrites all non-API routes to `index.html`.

@@ -9,7 +9,6 @@ import { ApprovedGuard } from './guards/approved.guard';
 import { RoomManagement } from './pages/room-management/room-management';
 // import { EnergyReports } from './pages/energy-reports/energy-reports';
 import { UserManagement } from './pages/user-management/user-management';
-import { } from './pages/room-management/room-management';
 import { AddCredentialsComponent } from './pages/add-credentials/add-credentials';
 import { AdminGuard } from './guards/admin.guard';
 import { SignupComponent } from './pages/signup/signup';
@@ -32,9 +31,13 @@ export const routes: Routes = [
       { path: 'dashboard', component: Dashboard },
       { path: 'room-management', component: RoomManagement },
       { path: 'room-details/:uid', component: RoomDetails },
-     { 
-        path: 'energy-reports', 
-        loadComponent: () => import('./pages/energy-reports/energy-reports').then(m => m.EnergyReports) 
+      {
+        path: 'energy-reports',
+        loadComponent: () => import('./pages/energy-reports/energy-reports').then(m => m.EnergyReports)
+      },
+      {
+        path: 'ocu-guide',
+        loadComponent: () => import('./pages/ocu-guide/ocu-guide').then(m => m.OcuGuidePage),
       },
       { path: 'settings', component: SettingsPage },
       {

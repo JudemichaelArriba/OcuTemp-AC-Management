@@ -6,14 +6,13 @@ import { AuthStateService } from '../../services/auth-state.service';
 import { DialogService } from '../../services/dialog.service';
 import { User } from '../../models/user.model';
 import { LoggerService } from '../../services/logger.service';
-import { ChatSidebarComponent } from '../chat-sidebar/chat-sidebar';
 
 
 @Component({
   selector: 'app-sidebar',
   templateUrl: './sidebar.html',
   standalone: true,
-  imports: [CommonModule, RouterModule, ChatSidebarComponent],
+  imports: [CommonModule, RouterModule],
   encapsulation: ViewEncapsulation.None
 })
 export class SidebarComponent {
@@ -29,7 +28,6 @@ export class SidebarComponent {
   currentUser$ = this.authState.currentUser$;
   isMobile = signal(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   isOpen = signal(typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
-  helpChatVisible = signal(false);
 
 
   @HostListener('window:resize', ['$event'])
@@ -45,10 +43,6 @@ export class SidebarComponent {
 
   toggleSidebar() {
     this.isOpen.update(v => !v);
-  }
-
-  openHelpChat(): void {
-    this.helpChatVisible.set(true);
   }
 
   isAdmin(user?: User): boolean {

@@ -1,0 +1,447 @@
+<article class="report" aria-labelledby="ocu-guide-report-title">
+  <header class="border-b border-slate-200 bg-[linear-gradient(145deg,#fff_45%,#eff6ff)] p-6 max-sm:p-4">
+    <div class="flex items-center gap-2 text-[.68rem] font-extrabold uppercase tracking-[.12em] text-blue-700">
+      <span class="material-symbols-outlined text-base" aria-hidden="true">fact_check</span>
+      Grounded report
+      @if (response().evidence.partial) {
+        <span class="ml-auto rounded-lg bg-amber-50 px-2 py-1 text-[.58rem] text-amber-700">Partial data</span>
+      }
+    </div>
+    <h2 class="my-2 text-[clamp(1.35rem,2vw,1.8rem)] leading-tight tracking-[-.025em]" id="ocu-guide-report-title">{{ response().answer.headline }}</h2>
+    <p class="max-w-[70ch] text-sm leading-6 text-slate-600">{{ response().answer.summary }}</p>
+
+    @if (response().answer.highlights.length > 0) {
+      <ul class="mt-3 grid list-none gap-2 p-0" aria-label="Report highlights">
+        @for (highlight of response().answer.highlights; track highlight.text) {
+          <li class="flex gap-2 text-[.8rem] leading-5 text-slate-700">
+            <span class="material-symbols-outlined text-lg text-blue-600" aria-hidden="true">arrow_right_alt</span>
+            <span>{{ highlight.text }}</span>
+          </li>
+        }
+      </ul>
+    }
+
+    @if (response().answer.caveats.length > 0 || response().evidence.notices.length > 0) {
+      <aside class="mt-4 flex gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[.72rem] leading-5 text-amber-800" aria-label="Data notes">
+        <span class="material-symbols-outlined text-base" aria-hidden="true">info</span>
+        <div>
+          @for (caveat of response().answer.caveats; track caveat) {
+            <p>{{ caveat }}</p>
+          }
+          @for (notice of response().evidence.notices; track notice) {
+            <p class="mt-1">{{ notice }}</p>
+          }
+        </div>
+      </aside>
+    }
+
+    <p class="mt-4 flex items-center gap-1.5 text-[.65rem] font-bold text-slate-500">
+      <span class="material-symbols-outlined text-sm" aria-hidden="true">schedule</span>
+      Evidence as of {{ formatDateTime(response().evidence.asOf) }} PHT
+    </p>
+  </header>
+
+  <div class="report__evidence">
+    @for (presentation of response().presentations; track presentation.id) {
+      @switch (presentation.kind) {
+        @case ('energy-report') {
+          <section class="evidence-card energy" [attr.aria-labelledby]="'energy-title-' + presentation.id">
+            <div class="evidence-card__heading">
+              <div class="evidence-card__icon evidence-card__icon--energy">
+                <span class="material-symbols-outlined" aria-hidden="true">bolt</span>
+              </div>
+              <div>
+                <p class="evidence-card__type">Estimated energy</p>
+                <h3 [id]="'energy-title-' + presentation.id">{{ presentation.title }}</h3>
+                <p>{{ presentation.range.label }} · {{ presentation.range.start }} to {{ presentation.range.end }}</p>
+              </div>
+            </div>
+
+            <div class="energy-tabs" role="tablist" aria-label="Energy report sections">
+              <button type="button" role="tab"
+                [attr.aria-selected]="energyState(presentation.id).view === 'summary'"
+                [attr.tabindex]="energyState(presentation.id).view === 'summary' ? 0 : -1"
+                [class.is-active]="energyState(presentation.id).view === 'summary'"
+                (click)="setEnergyView(presentation.id, 'summary')">Summary</button>
+              <button type="button" role="tab"
+                [attr.aria-selected]="energyState(presentation.id).view === 'rooms'"
+                [attr.tabindex]="energyState(presentation.id).view === 'rooms' ? 0 : -1"
+                [class.is-active]="energyState(presentation.id).view === 'rooms'"
+                (click)="setEnergyView(presentation.id, 'rooms')">By room</button>
+              <button type="button" role="tab"
+                [attr.aria-selected]="energyState(presentation.id).view === 'trend'"
+                [attr.tabindex]="energyState(presentation.id).view === 'trend' ? 0 : -1"
+                [class.is-active]="energyState(presentation.id).view === 'trend'"
+                (click)="setEnergyView(presentation.id, 'trend')">Trend</button>
+              <button type="button" role="tab"
+                [attr.aria-selected]="energyState(presentation.id).view === 'source'"
+                [attr.tabindex]="energyState(presentation.id).view === 'source' ? 0 : -1"
+                [class.is-active]="energyState(presentation.id).view === 'source'"
+                (click)="setEnergyView(presentation.id, 'source')">Source data</button>
+            </div>
+
+            <div class="energy-view" role="tabpanel"
+              [hidden]="energyState(presentation.id).view !== 'summary'">
+              <div class="metric-grid">
+                <div class="metric metric--primary">
+                  <span>Estimated use</span>
+                  <strong>{{ presentation.metrics.totalKwh | number:'1.2-2' }} <small>kWh</small></strong>
+                  <em>Calculated, not utility-metered</em>
+                </div>
+                <div class="metric">
+                  <span>AC runtime</span>
+                  <strong>{{ formatRuntime(presentation.metrics.runtimeSeconds) }}</strong>
+                  <em>Across rooms with records</em>
+                </div>
+                <div class="metric">
+                  <span>Sessions</span>
+                  <strong>{{ presentation.metrics.sessionCount | number }}</strong>
+                  <em>Recorded AC activity</em>
+                </div>
+                <div class="metric">
+                  <span>Data coverage</span>
+                  <strong>{{ presentation.metrics.roomsWithRecords }}<small>/{{ presentation.metrics.activeRooms }}</small></strong>
+                  <em>{{ coveragePercent(presentation) | number:'1.0-0' }}% of active rooms</em>
+                </div>
+              </div>
+
+              <div class="chart-block">
+                <div class="chart-block__heading">
+                  <div>
+                    <span>Highest estimated consumption</span>
+                    <h4>Top {{ topEnergyRooms(presentation).length }} active rooms</h4>
+                  </div>
+                  <span class="unit-chip">kWh</span>
+                </div>
+                @if (topEnergyRooms(presentation).length > 0) {
+                  <div class="chart-frame chart-frame--ranking">
+                    <canvas #reportChart role="img"
+                      [attr.aria-label]="'Horizontal bar chart of the top rooms by estimated energy for ' + presentation.range.label">
+                      Top room energy rankings are also available in the By room table.
+                    </canvas>
+                  </div>
+                } @else {
+                  <div class="empty-inline">
+                    <span class="material-symbols-outlined" aria-hidden="true">data_usage</span>
+                    No energy records were found for this range.
+                  </div>
+                  <canvas #reportChart class="chart-placeholder" aria-hidden="true"></canvas>
+                }
+              </div>
+            </div>
+
+            <div class="energy-view" role="tabpanel"
+              [hidden]="energyState(presentation.id).view !== 'rooms'">
+              <div class="table-tools">
+                <label class="table-search">
+                  <span class="material-symbols-outlined" aria-hidden="true">search</span>
+                  <span class="sr-only">Search rooms</span>
+                  <input type="search" [value]="energyState(presentation.id).query"
+                    (input)="updateEnergyQuery(presentation.id, $event)"
+                    placeholder="Search every active room" />
+                </label>
+                <p>{{ filteredEnergyRooms(presentation).length }} of {{ presentation.rooms.length }} rooms</p>
+              </div>
+
+              <div class="data-table-wrap">
+                <table class="data-table">
+                  <caption class="sr-only">Estimated energy by active room</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">
+                        <button type="button" (click)="toggleEnergySort(presentation.id, 'rank')"
+                          [attr.aria-label]="'Sort by rank. ' + sortLabel(presentation.id, 'rank')">
+                          Rank <span class="material-symbols-outlined" aria-hidden="true">{{ sortIcon(presentation.id, 'rank') }}</span>
+                        </button>
+                      </th>
+                      <th scope="col">
+                        <button type="button" (click)="toggleEnergySort(presentation.id, 'room')"
+                          [attr.aria-label]="'Sort by room. ' + sortLabel(presentation.id, 'room')">
+                          Room <span class="material-symbols-outlined" aria-hidden="true">{{ sortIcon(presentation.id, 'room') }}</span>
+                        </button>
+                      </th>
+                      <th scope="col">
+                        <button type="button" (click)="toggleEnergySort(presentation.id, 'energy')"
+                          [attr.aria-label]="'Sort by estimated energy. ' + sortLabel(presentation.id, 'energy')">
+                          Est. kWh <span class="material-symbols-outlined" aria-hidden="true">{{ sortIcon(presentation.id, 'energy') }}</span>
+                        </button>
+                      </th>
+                      <th scope="col">
+                        <button type="button" (click)="toggleEnergySort(presentation.id, 'share')"
+                          [attr.aria-label]="'Sort by share. ' + sortLabel(presentation.id, 'share')">
+                          Share <span class="material-symbols-outlined" aria-hidden="true">{{ sortIcon(presentation.id, 'share') }}</span>
+                        </button>
+                      </th>
+                      <th scope="col">
+                        <button type="button" (click)="toggleEnergySort(presentation.id, 'runtime')"
+                          [attr.aria-label]="'Sort by runtime. ' + sortLabel(presentation.id, 'runtime')">
+                          Runtime <span class="material-symbols-outlined" aria-hidden="true">{{ sortIcon(presentation.id, 'runtime') }}</span>
+                        </button>
+                      </th>
+                      <th scope="col">Sessions</th>
+                      <th scope="col">
+                        <button type="button" (click)="toggleEnergySort(presentation.id, 'status')"
+                          [attr.aria-label]="'Sort by data status. ' + sortLabel(presentation.id, 'status')">
+                          Data <span class="material-symbols-outlined" aria-hidden="true">{{ sortIcon(presentation.id, 'status') }}</span>
+                        </button>
+                      </th>
+                      <th scope="col">Last update</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (room of pagedEnergyRooms(presentation); track room.roomName) {
+                      <tr>
+                        <td class="data-table__rank">{{ room.rank ?? '—' }}</td>
+                        <th scope="row">{{ room.roomName }}</th>
+                        <td>{{ room.estimatedKwh === null ? '—' : (room.estimatedKwh | number:'1.2-2') }}</td>
+                        <td>{{ room.sharePercent === null ? '—' : ((room.sharePercent | number:'1.1-1') + '%') }}</td>
+                        <td>{{ formatRuntime(room.runtimeSeconds) }}</td>
+                        <td>{{ room.sessionCount ?? '—' }}</td>
+                        <td><span class="status-pill" [attr.data-status]="room.status">{{ energyStatusLabel(room.status) }}</span></td>
+                        <td class="data-table__muted">{{ formatDateTime(room.lastUpdatedAt) }}</td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="8" class="data-table__empty">No rooms match this search.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <nav class="pagination" aria-label="Energy room pages">
+                <p>Showing {{ energyShowingStart(presentation) }}–{{ energyShowingEnd(presentation) }} of {{ filteredEnergyRooms(presentation).length }}</p>
+                <div>
+                  <button type="button" (click)="setEnergyPage(presentation, energyPage(presentation) - 1)"
+                    [disabled]="energyPage(presentation) === 1" aria-label="Previous page">
+                    <span class="material-symbols-outlined" aria-hidden="true">chevron_left</span>
+                  </button>
+                  <span>Page {{ energyPage(presentation) }} of {{ energyTotalPages(presentation) }}</span>
+                  <button type="button" (click)="setEnergyPage(presentation, energyPage(presentation) + 1)"
+                    [disabled]="energyPage(presentation) === energyTotalPages(presentation)" aria-label="Next page">
+                    <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+                  </button>
+                </div>
+              </nav>
+            </div>
+
+            <div class="energy-view" role="tabpanel"
+              [hidden]="energyState(presentation.id).view !== 'trend'">
+              <div class="chart-block">
+                <div class="chart-block__heading">
+                  <div>
+                    <span>{{ presentation.range.bucket }} buckets</span>
+                    <h4>Estimated use over time</h4>
+                  </div>
+                  <span class="unit-chip">{{ presentation.trend.length }} points</span>
+                </div>
+                @if (presentation.trend.length > 0) {
+                  <div class="chart-frame chart-frame--trend">
+                    <canvas #reportChart role="img"
+                      [attr.aria-label]="'Line chart of estimated energy over ' + presentation.range.label">
+                      Trend source values are available in the Source data tab.
+                    </canvas>
+                  </div>
+                } @else {
+                  <div class="empty-inline">
+                    <span class="material-symbols-outlined" aria-hidden="true">show_chart</span>
+                    No trend points were available for this range.
+                  </div>
+                  <canvas #reportChart class="chart-placeholder" aria-hidden="true"></canvas>
+                }
+              </div>
+            </div>
+
+            <div class="energy-view" role="tabpanel"
+              [hidden]="energyState(presentation.id).view !== 'source'">
+              <dl class="source-grid">
+                <div><dt>Reporting range</dt><dd>{{ presentation.range.start }} – {{ presentation.range.end }}</dd></div>
+                <div><dt>Aggregation</dt><dd>{{ presentation.range.bucket | titlecase }}</dd></div>
+                <div><dt>Active rooms</dt><dd>{{ presentation.metrics.activeRooms }}</dd></div>
+                <div><dt>Rooms with records</dt><dd>{{ presentation.metrics.roomsWithRecords }}</dd></div>
+              </dl>
+              <div class="source-note">
+                <span class="material-symbols-outlined" aria-hidden="true">calculate</span>
+                <p><strong>Estimated energy</strong> is calculated from OcuTemp device activity. It is not a utility meter reading.</p>
+              </div>
+              <div class="data-table-wrap">
+                <table class="data-table data-table--source">
+                  <caption>Trend source values</caption>
+                  <thead><tr><th scope="col">Bucket</th><th scope="col">Start</th><th scope="col">End</th><th scope="col">Est. kWh</th></tr></thead>
+                  <tbody>
+                    @for (point of presentation.trend; track point.start + point.end) {
+                      <tr><th scope="row">{{ point.label }}</th><td>{{ point.start }}</td><td>{{ point.end }}</td><td>{{ point.estimatedKwh | number:'1.2-2' }}</td></tr>
+                    } @empty {
+                      <tr><td colspan="4" class="data-table__empty">No source buckets available.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <div class="data-table-wrap">
+                <table class="data-table data-table--source">
+                  <caption>All active-room source values</caption>
+                  <thead><tr><th scope="col">Room</th><th scope="col">Rank</th><th scope="col">Est. kWh</th><th scope="col">Runtime</th><th scope="col">Sessions</th><th scope="col">Data status</th></tr></thead>
+                  <tbody>
+                    @for (room of presentation.rooms; track room.roomName) {
+                      <tr><th scope="row">{{ room.roomName }}</th><td>{{ room.rank ?? '—' }}</td><td>{{ room.estimatedKwh === null ? '—' : (room.estimatedKwh | number:'1.2-2') }}</td><td>{{ formatRuntime(room.runtimeSeconds) }}</td><td>{{ room.sessionCount ?? '—' }}</td><td>{{ energyStatusLabel(room.status) }}</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        }
+
+        @case ('room-telemetry') {
+          <section class="evidence-card" [attr.aria-labelledby]="'telemetry-title-' + presentation.id">
+            <div class="evidence-card__heading">
+              <div class="evidence-card__icon evidence-card__icon--telemetry">
+                <span class="material-symbols-outlined" aria-hidden="true">sensors</span>
+              </div>
+              <div>
+                <p class="evidence-card__type">Live snapshot</p>
+                <h3 [id]="'telemetry-title-' + presentation.id">{{ presentation.title }}</h3>
+                <p>{{ presentation.rooms.length }} room{{ presentation.rooms.length === 1 ? '' : 's' }} returned</p>
+              </div>
+            </div>
+            <div class="data-table-wrap">
+              <table class="data-table telemetry-table">
+                <caption class="sr-only">Current room telemetry</caption>
+                <thead>
+                  <tr><th scope="col">Room</th><th scope="col">Connection</th><th scope="col">Temperature</th><th scope="col">Humidity</th><th scope="col">Condition</th><th scope="col">Occupancy</th><th scope="col">AC</th><th scope="col">Last seen</th></tr>
+                </thead>
+                <tbody>
+                  @for (room of presentation.rooms; track room.roomName) {
+                    <tr>
+                      <th scope="row">
+                        {{ room.roomName }}
+                        <small class="mt-1 block text-[.55rem] font-medium text-slate-500">{{ room.schedules.length }} active schedule{{ room.schedules.length === 1 ? '' : 's' }}</small>
+                      </th>
+                      <td><span class="state-dot" [attr.data-state]="room.onlineState"><i aria-hidden="true"></i>{{ room.onlineState | titlecase }}</span></td>
+                      <td class="data-table__measure">{{ room.temperature === null ? '—' : ((room.temperature | number:'1.1-1') + ' °C') }}</td>
+                      <td>{{ room.humidity === null ? '—' : ((room.humidity | number:'1.0-1') + '%') }}</td>
+                      <td><span class="condition-pill" [attr.data-condition]="room.condition">{{ conditionLabel(room.condition) }}</span></td>
+                      <td>{{ room.occupancy === null ? 'Unknown' : (room.occupancy ? 'Occupied' : 'Vacant') }}</td>
+                      <td>
+                        {{ room.acPower === null ? 'Unknown' : (room.acPower ? 'On' : 'Off') }}
+                        <small class="mt-1 block text-[.55rem] text-slate-500">AI auto-apply {{ room.aiAutoApply ? 'on' : 'off' }}</small>
+                      </td>
+                      <td class="data-table__muted">{{ formatDateTime(room.lastSeen) }}</td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="8" class="data-table__empty">No telemetry was available for the requested rooms.</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+
+        @case ('climate-suggestions') {
+          <section class="evidence-card" [attr.aria-labelledby]="'climate-title-' + presentation.id">
+            <div class="evidence-card__heading">
+              <div class="evidence-card__icon evidence-card__icon--climate">
+                <span class="material-symbols-outlined" aria-hidden="true">thermostat</span>
+              </div>
+              <div>
+                <p class="evidence-card__type">Climate model</p>
+                <h3 [id]="'climate-title-' + presentation.id">{{ presentation.title }}</h3>
+                <p>Current conditions compared with the latest suggestion</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-3 p-4 max-sm:grid-cols-1 max-sm:p-3">
+              @for (room of presentation.rooms; track room.roomName) {
+                <article class="rounded-xl border border-slate-200 bg-slate-50 p-3.5" [attr.data-status]="room.status">
+                  <header class="flex justify-between gap-2">
+                    <div><h4 class="text-[.8rem] font-bold">{{ room.roomName }}</h4><p class="mt-0.5 text-[.58rem] text-slate-500">{{ room.status === 'available' ? 'Suggestion available' : (room.status | titlecase) }}</p></div>
+                    <span class="self-start rounded-full bg-indigo-100 px-1.5 py-1 text-[.52rem] font-extrabold text-indigo-700">{{ room.applied ? 'Applied' : (room.autoApplyEnabled ? 'Auto-apply on' : 'Review') }}</span>
+                  </header>
+                  <div class="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg bg-white p-2.5">
+                    <div><span class="text-[.55rem] text-slate-500">Current</span><strong class="mt-0.5 block text-base text-slate-800">{{ room.currentRoomTemp === null ? '—' : ((room.currentRoomTemp | number:'1.1-1') + ' °C') }}</strong></div>
+                    <span class="material-symbols-outlined text-base text-slate-500" aria-hidden="true">arrow_forward</span>
+                    <div class="text-right"><span class="text-[.55rem] text-slate-500">Suggested</span><strong class="mt-0.5 block text-base text-slate-800">{{ room.suggestedTemp === null ? '—' : ((room.suggestedTemp | number:'1.1-1') + ' °C') }}</strong></div>
+                  </div>
+                  <p class="mt-2 text-[.62rem] font-extrabold text-blue-700">Change: {{ formatDelta(room) }}</p>
+                  <p class="mt-1 text-[.6rem] font-bold text-slate-500">Humidity: {{ room.humidity === null ? 'Not reported' : ((room.humidity | number:'1.0-1') + '%') }}</p>
+                  @if (room.reason) { <p class="mt-2 text-[.67rem] leading-6 text-slate-600">{{ room.reason }}</p> }
+                  <footer class="mt-2.5 text-[.55rem] text-slate-400">Updated {{ formatDateTime(room.updatedAt) }}</footer>
+                </article>
+              } @empty {
+                <div class="empty-inline">No climate suggestions were available.</div>
+              }
+            </div>
+          </section>
+        }
+
+        @case ('recent-events') {
+          <section class="evidence-card" [attr.aria-labelledby]="'events-title-' + presentation.id">
+            <div class="evidence-card__heading">
+              <div class="evidence-card__icon evidence-card__icon--events">
+                <span class="material-symbols-outlined" aria-hidden="true">history</span>
+              </div>
+              <div>
+                <p class="evidence-card__type">Operational history</p>
+                <h3 [id]="'events-title-' + presentation.id">{{ presentation.title }}</h3>
+                <p>{{ presentation.events.length }} recent event{{ presentation.events.length === 1 ? '' : 's' }}</p>
+              </div>
+            </div>
+            <ol class="m-0 list-none p-4 max-sm:p-3">
+              @for (event of presentation.events; track event.updatedAt + event.roomName + event.eventType) {
+                <li class="group grid grid-cols-[1rem_1fr] gap-2.5">
+                  <div class="relative flex justify-center" aria-hidden="true">
+                    <span class="z-10 mt-1.5 size-2 rounded-full border-2 border-white bg-blue-600 ring-2 ring-blue-200"></span>
+                    <i class="absolute inset-y-4 bottom-0 w-px bg-slate-300 group-last:hidden"></i>
+                  </div>
+                  <article class="pb-4">
+                    <header class="flex justify-between gap-2 max-sm:flex-col max-sm:gap-0.5"><strong class="text-xs">{{ event.roomName }}</strong><time class="text-[.58rem] text-slate-500" [attr.datetime]="event.updatedAt">{{ formatDateTime(event.updatedAt) }}</time></header>
+                    <p class="my-0.5 text-[.58rem] font-extrabold uppercase text-blue-600">{{ event.eventType }} @if (event.mode) { <span>· {{ event.mode }}</span> }</p>
+                    <p class="text-[.7rem] leading-5 text-slate-600">{{ event.detail }}</p>
+                    @if (event.applied !== null) {
+                      <span class="mt-1.5 inline-flex rounded-full bg-slate-100 px-1.5 py-1 text-[.55rem] font-extrabold text-slate-500" [class.!bg-emerald-50]="event.applied" [class.!text-emerald-700]="event.applied">{{ event.applied ? 'Applied' : 'Not applied' }}</span>
+                    }
+                  </article>
+                </li>
+              } @empty {
+                <li class="block text-xs text-slate-500">No recent events matched this request.</li>
+              }
+            </ol>
+          </section>
+        }
+
+        @case ('system-help') {
+          <section class="evidence-card help-card" [attr.aria-labelledby]="'help-title-' + presentation.id">
+            <div class="evidence-card__heading">
+              <div class="evidence-card__icon evidence-card__icon--help">
+                <span class="material-symbols-outlined" aria-hidden="true">map</span>
+              </div>
+              <div>
+                <p class="evidence-card__type">OcuTemp guide</p>
+                <h3 [id]="'help-title-' + presentation.id">{{ presentation.title }}</h3>
+                <p>{{ presentation.topic | titlecase }}</p>
+              </div>
+            </div>
+            @if (presentation.restricted) {
+              <div class="m-4 flex items-center gap-2 rounded-xl bg-red-50 p-3 text-xs text-red-700"><span class="material-symbols-outlined" aria-hidden="true">lock</span>This guide is restricted for your account role.</div>
+            } @else {
+              <ol class="m-0 grid list-none gap-2.5 p-4">
+                @for (step of presentation.steps; track step; let index = $index) {
+                  <li class="grid grid-cols-[1.65rem_1fr] items-start gap-2.5"><span class="grid size-[1.65rem] place-items-center rounded-lg bg-blue-50 text-[.65rem] font-black text-blue-700" aria-hidden="true">{{ index + 1 }}</span><p class="pt-1 text-xs leading-5 text-slate-700">{{ step }}</p></li>
+                }
+              </ol>
+              @if (presentation.route) {
+                <a class="m-4 mt-0 flex items-center justify-between rounded-xl bg-blue-600 p-3 text-xs font-extrabold text-white no-underline" [routerLink]="presentation.route">
+                  Open this OcuTemp page
+                  <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+                </a>
+              }
+            }
+          </section>
+        }
+      }
+    } @empty {
+      <div class="p-12 text-center text-slate-500">
+        <span class="material-symbols-outlined text-3xl" aria-hidden="true">description</span>
+        <h3 class="my-1 text-sm font-bold text-slate-700">No evidence panel was needed</h3>
+        <p class="text-xs">This answer did not require facility data or a system guide.</p>
+      </div>
+    }
+  </div>
+</article>

@@ -1,118 +1,47 @@
 import { createGroq } from '@ai-sdk/groq';
-import { generateText, jsonSchema, tool, type ModelMessage } from 'ai';
-import type {
-    ChatProvider,
-    ProviderGenerateRequest,
-    ProviderToolSchema,
-} from './provider.interface';
-import { ProviderRateLimitError, ProviderUnavailableError } from './provider.interface';
-import type { ChatMessage, ChatToolName, ProviderGenerateResult } from '../types/chat.types';
+import { generateText, jsonSchema, Output } from 'ai';
+import type { ChatProvider, StructuredGenerationRequest } from './provider.interface';
+import { mapProviderError, ProviderRecoverableError } from './provider.interface';
 
 declare const process: { env: Record<string, string | undefined> };
 
-/**
- * Fallback provider, used only when Gemini hits a rate limit or is
- * unavailable see retry.ts. Must support tool calling since it may
- * be substituted mid-conversation for either the planning or answering
- * step.
- */
-const GROQ_MODEL_ID = 'llama-3.3-70b-versatile';
-
-const groq = createGroq({
-    apiKey: process.env['GROQ_API_KEY'],
-});
+const GROQ_MODEL_ID = 'openai/gpt-oss-120b';
 
 export class GroqProvider implements ChatProvider {
     readonly id = 'groq' as const;
-    private readonly model = groq(GROQ_MODEL_ID);
 
-    supportsTools(): boolean {
-        return true;
-    }
+    async generateStructured<T>(request: StructuredGenerationRequest): Promise<T> {
+        const apiKey = process.env['GROQ_API_KEY'];
+        if (!apiKey) throw new ProviderRecoverableError(this.id, 'unavailable');
 
-    async generate(request: ProviderGenerateRequest): Promise<ProviderGenerateResult> {
+        const groq = createGroq({ apiKey });
         try {
             const result = await generateText({
-                model: this.model,
+                model: groq(GROQ_MODEL_ID),
                 system: request.systemPrompt,
-                messages: toModelMessages(request.messages),
-                tools: request.toolSchema ? toAiSdkTools(request.toolSchema) : undefined,
+                prompt: request.prompt,
+                output: Output.object<T>({
+                    schema: jsonSchema<T>(request.schema as never),
+                    name: request.schemaName,
+                    description: request.schemaDescription,
+                }),
+                maxOutputTokens: request.maxOutputTokens,
+                temperature: request.temperature,
+                maxRetries: 0,
+                timeout: { totalMs: request.timeoutMs },
+                abortSignal: request.abortSignal,
+                providerOptions: {
+                    groq: {
+                        reasoningEffort: request.reasoningEffort ?? 'low',
+                        reasoningFormat: 'hidden',
+                        structuredOutputs: true,
+                        strictJsonSchema: true,
+                    },
+                },
             });
-
-            const requestedCall = result.toolCalls?.[0];
-            if (requestedCall) {
-                return {
-                    toolCall: {
-                        name: requestedCall.toolName as ChatToolName,
-                        args: requestedCall.input as Record<string, unknown>,
-                    },
-                };
-            }
-
-            return { answer: result.text };
+            return result.output;
         } catch (error: unknown) {
-            throw mapGroqError(error);
+            throw mapProviderError(this.id, error);
         }
     }
-}
-
-function toAiSdkTools(schema: readonly ProviderToolSchema[]) {
-    const tools: Record<string, ReturnType<typeof tool>> = {};
-    for (const entry of schema) {
-        tools[entry.name] = tool({
-            description: entry.description,
-            inputSchema: jsonSchema(entry.parameters),
-        });
-    }
-    return tools;
-}
-
-/**
- * Same translation logic as gemini.provider.ts's toModelMessages —
- * both providers consume the same ai-sdk v6 ModelMessage[] shape,
- * since both go through the same 'ai' core package.
- */
-function toModelMessages(messages: ChatMessage[]): ModelMessage[] {
-    return messages.map((msg): ModelMessage => {
-        if (msg.role === 'function' && msg.toolResult) {
-            return {
-                role: 'tool',
-                content: [
-                    {
-                        type: 'tool-result',
-                        toolCallId: msg.toolResult.name,
-                        toolName: msg.toolResult.name,
-                        output: { type: 'json', value: msg.toolResult.data as never },
-                    },
-                ],
-            };
-        }
-
-        if (msg.role === 'model' && msg.toolCall) {
-            return {
-                role: 'assistant',
-                content: [
-                    {
-                        type: 'tool-call',
-                        toolCallId: msg.toolCall.name,
-                        toolName: msg.toolCall.name,
-                        input: msg.toolCall.args,
-                    },
-                ],
-            };
-        }
-
-        return {
-            role: msg.role === 'model' ? 'assistant' : 'user',
-            content: msg.content,
-        };
-    });
-}
-
-function mapGroqError(error: unknown): ProviderRateLimitError | ProviderUnavailableError {
-    const status = (error as { status?: number })?.status;
-    if (status === 429) {
-        return new ProviderRateLimitError('groq', error);
-    }
-    return new ProviderUnavailableError('groq', error);
 }

@@ -1,327 +1,284 @@
-import { Injectable, signal } from '@angular/core';
+import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import { Auth, onAuthStateChanged } from '@angular/fire/auth';
 import {
-    ChatApiRequest,
-    ChatApiResponse,
-    ChatMessage,
-    ChatRequestError,
-    ChatUserRole,
-    ChatToolResult,
+  ChatErrorBody,
+  ChatRequestError,
+  ChatTurnRequest,
+  ChatTurnResponse,
+  RenderableChatMessage,
 } from '../models/chat.models';
-import { ChatToolsService } from './chat-tools.service';
 import { LoggerService } from './logger.service';
-import { trimChatHistory } from '../helpers/chat-history-trimmer';
-import { validateChatAnswer } from '../helpers/chat-response-validator';
-import { checkContextRelevance } from '../helpers/chat-context-checker';
-import { sanitizeResponse, containsUnsafeContent } from '../helpers/chat-response-sanitizer';
-import { environment } from '../../environments/environment';
 
 const CHAT_API_ENDPOINT = '/api/chat';
-const MAX_TOOL_HOPS_PER_TURN = 1;
+const MAX_MESSAGE_LENGTH = 500;
 
-export interface RenderableChatMessage {
-    readonly id: string;
-    readonly role: 'user' | 'assistant';
-    readonly text: string;
-    readonly isFallback: boolean;
-    readonly fallbackData?: unknown;
-}
+export type ChatLoadingStage =
+  | 'idle'
+  | 'understanding'
+  | 'retrieving'
+  | 'comparing'
+  | 'preparing';
 
-/**
- * Owns chat state and orchestrates one full turn: send user message ->
- * planning request -> optionally execute a tool via ChatToolsService ->
- * answering request -> validate -> expose to the UI.
- *
- * Maintains two separate histories, deliberately:
- * - `fullHistory` (internal): every message, used to build requests and
- *   to render the conversation on screen.
- * - trimmed history (never stored, built fresh per request): only what
- *   gets sent to /api/chat, via chat-history-trimmer.ts. Trimming must
- *   never affect what's rendered see that file's own doc comment.
- */
 @Injectable({ providedIn: 'root' })
 export class ChatService {
-    private fullHistory: ChatMessage[] = [];
-    private readonly isLoading = signal(false);
-    private readonly renderableMessages = signal<RenderableChatMessage[]>([]);
+  private readonly auth = inject(Auth);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly logger = inject(LoggerService);
+  private readonly isLoading = signal(false);
+  private readonly currentStage = signal<ChatLoadingStage>('idle');
+  private readonly renderableMessages = signal<RenderableChatMessage[]>([]);
+  private readonly latestTurn = signal<ChatTurnResponse | null>(null);
+  private stateToken: string | undefined;
+  private lastUserMessage = '';
+  private activeUid: string | null = null;
+  private stageTimer: ReturnType<typeof setInterval> | undefined;
+  private requestController: AbortController | undefined;
 
-    readonly loading = this.isLoading.asReadonly();
-    readonly messages = this.renderableMessages.asReadonly();
+  readonly loading = this.isLoading.asReadonly();
+  readonly loadingStage = this.currentStage.asReadonly();
+  readonly messages = this.renderableMessages.asReadonly();
+  readonly latestResponse = this.latestTurn.asReadonly();
 
-    constructor(
-        private chatTools: ChatToolsService,
-        private logger: LoggerService,
-    ) { }
+  constructor() {
+    const unsubscribe = onAuthStateChanged(this.auth, (user) => {
+      const nextUid = user?.uid ?? null;
+      if (nextUid !== this.activeUid) {
+        this.activeUid = nextUid;
+        this.clearConversation();
+      }
+    });
+    this.destroyRef.onDestroy(unsubscribe);
+  }
 
-    async sendMessage(text: string, userRole: ChatUserRole): Promise<void> {
-        const trimmedText = text.trim();
-        if (!trimmedText || this.isLoading()) return;
-
-        // Check context relevance before processing
-        const contextCheck = checkContextRelevance(trimmedText);
-        if (!contextCheck.isRelevant) {
-            const userMessage = this.buildMessage('user', trimmedText);
-            this.appendToHistory(userMessage);
-            this.appendRenderable({ id: userMessage.id, role: 'user', text: trimmedText, isFallback: false });
-
-            const rejectionMessage = this.buildMessage(
-                'model',
-                "I can only help with OcuTemp facility management — room monitoring, energy usage, AC status, and system navigation. For other topics, please use a general-purpose assistant."
-            );
-            this.appendToHistory(rejectionMessage);
-            this.appendRenderable({
-                id: rejectionMessage.id,
-                role: 'assistant',
-                text: rejectionMessage.content,
-                isFallback: false,
-            });
-            
-            this.logger.warn('Chat message rejected due to context relevance', {
-                service: 'ChatService',
-                reason: contextCheck.reason,
-            });
-            return;
-        }
-
-        const userMessage = this.buildMessage('user', trimmedText);
-        this.appendToHistory(userMessage);
-        this.appendRenderable({ id: userMessage.id, role: 'user', text: trimmedText, isFallback: false });
-
-        this.isLoading.set(true);
-        try {
-            await this.runTurn(userRole);
-        } catch (err) {
-            this.logger.error('Chat turn failed', err, { service: 'ChatService', action: 'sendMessage' });
-            
-            // Provide more specific error messages based on error type
-            let errorMessage = "Something went wrong. Please try again in a moment.";
-            
-            if (err instanceof ChatRequestError) {
-                if (err.message.includes('rate limit') || err.message.includes('Too many')) {
-                    errorMessage = "You're sending messages too quickly. Please wait a moment and try again.";
-                } else if (err.message.includes('network') || err.message.includes('Network')) {
-                    errorMessage = "Connection issue. Please check your internet and try again.";
-                } else if (err.message.includes('timeout')) {
-                    errorMessage = "The request took too long. Please try a simpler question.";
-                } else {
-                    errorMessage = "Unable to process your message. Please try rephrasing your question.";
-                }
-            }
-            
-            this.appendRenderable({
-                id: this.generateId(),
-                role: 'assistant',
-                text: errorMessage,
-                isFallback: false,
-            });
-        } finally {
-            this.isLoading.set(false);
-        }
+  async sendMessage(text: string): Promise<void> {
+    const message = text.trim();
+    if (!message || this.isLoading()) return;
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      this.appendError(
+        `Messages can contain at most ${MAX_MESSAGE_LENGTH} characters. Shorten the question and try again.`,
+        'invalid_request',
+      );
+      return;
     }
 
-    clearConversation(): void {
-        this.fullHistory = [];
-        this.renderableMessages.set([]);
-    }
+    const userId = crypto.randomUUID();
+    this.lastUserMessage = message;
+    this.renderableMessages.update((items) => [
+      ...items,
+      { id: userId, role: 'user', text: message, presentations: [] },
+    ]);
 
+    await this.performTurn(message);
+  }
 
+  async retryLastMessage(): Promise<void> {
+    if (!this.lastUserMessage || this.isLoading()) return;
+    await this.performTurn(this.lastUserMessage);
+  }
 
-    private async runTurn(userRole: ChatUserRole, toolHopsUsed = 0): Promise<void> {
-        const response = await this.callChatApi(userRole);
+  clearConversation(): void {
+    this.requestController?.abort();
+    this.requestController = undefined;
+    this.stateToken = undefined;
+    this.lastUserMessage = '';
+    this.renderableMessages.set([]);
+    this.latestTurn.set(null);
+    this.isLoading.set(false);
+    this.currentStage.set('idle');
+    this.stopStageProgression();
+  }
 
-        if (response.toolCall) {
-            if (toolHopsUsed >= MAX_TOOL_HOPS_PER_TURN) {
+  private async performTurn(message: string): Promise<void> {
+    this.requestController?.abort();
+    const controller = new AbortController();
+    this.requestController = controller;
+    this.isLoading.set(true);
+    this.startStageProgression();
 
-                throw new ChatRequestError('Model requested more than one tool call in a single turn');
-            }
+    try {
+      const response = await this.callChatApi(message, controller.signal);
+      if (controller.signal.aborted) return;
 
-            // Log tool call for monitoring
-            this.logger.warn('Executing tool call', {
-                service: 'ChatService',
-                toolName: response.toolCall.name,
-                hasArgs: Object.keys(response.toolCall.args).length > 0,
-            });
+      this.currentStage.set('preparing');
+      this.stateToken = response.stateToken;
+      this.latestTurn.set(response);
+      this.renderableMessages.update((items) => [
+        ...items,
+        {
+          id: response.turnId,
+          role: 'assistant',
+          text: response.answer.summary,
+          answer: response.answer,
+          presentations: response.presentations,
+          evidence: response.evidence,
+        },
+      ]);
 
-            const toolCallMessage = this.buildMessage('model', '', { toolCall: response.toolCall });
-            this.appendToHistory(toolCallMessage);
-
-            const toolResult = await this.chatTools.executeTool(response.toolCall, userRole);
-            
-            // Log tool result for monitoring
-            this.logger.warn('Tool execution completed', {
-                service: 'ChatService',
-                toolName: toolResult.name,
-                dataSize: JSON.stringify(toolResult.data).length,
-            });
-            
-            const toolResultMessage = this.buildMessage('function', '', { toolResult });
-            this.appendToHistory(toolResultMessage);
-
-            return this.runTurn(userRole, toolHopsUsed + 1);
-        }
-
-        if (!response.answer) {
-            throw new ChatRequestError('Provider returned an empty response');
-        }
-
-        const lastToolResult = this.findLastToolResult();
-        const validation = validateChatAnswer(response.answer, lastToolResult);
-
-        // Sanitize the answer as final safety layer
-        const sanitizationResult = sanitizeResponse(response.answer);
-        
-        if (sanitizationResult.hadChanges) {
-            this.logger.warn('Answer was sanitized to remove unsafe content', {
-                service: 'ChatService',
-                changes: sanitizationResult.changesLog,
-            });
-        }
-        
-        // Additional check for unsafe content that might have been missed
-        if (containsUnsafeContent(sanitizationResult.sanitized)) {
-            this.logger.error('Answer still contains unsafe content after sanitization', {
-                service: 'ChatService',
-            });
-        }
-
-        const finalAnswer = sanitizationResult.sanitized;
-        const answerMessage = this.buildMessage('model', finalAnswer);
-        this.appendToHistory(answerMessage);
-
-        if (!validation.isValid) {
-            // Log validation failure with details for monitoring
-            this.logger.warn('Chat answer failed validation, falling back to raw data', {
-                service: 'ChatService',
-                reason: validation.reason,
-                toolName: lastToolResult?.name,
-                answerLength: finalAnswer.length,
-                hadSanitization: sanitizationResult.hadChanges,
-            });
-            
-            // Track specific types of hallucinations for analysis
-            if (validation.reason?.includes('number')) {
-                this.logger.warn('Hallucination detected: invented number', {
-                    service: 'ChatService',
-                    hallucinationType: 'invented_number',
-                });
-            } else if (validation.reason?.includes('room')) {
-                this.logger.warn('Hallucination detected: invented room name', {
-                    service: 'ChatService',
-                    hallucinationType: 'invented_room',
-                });
-            } else if (validation.reason?.includes('control')) {
-                this.logger.warn('Hallucination detected: claimed control action', {
-                    service: 'ChatService',
-                    hallucinationType: 'control_claim',
-                });
-            } else if (validation.reason?.includes('speculation')) {
-                this.logger.warn('Hallucination detected: excessive speculation', {
-                    service: 'ChatService',
-                    hallucinationType: 'speculation',
-                });
-            } else if (validation.reason?.includes('Firebase')) {
-                this.logger.warn('Security issue: Firebase path in answer', {
-                    service: 'ChatService',
-                    hallucinationType: 'path_leak',
-                });
-            }
-            
-            this.appendRenderable({
-                id: answerMessage.id,
-                role: 'assistant',
-                text: finalAnswer,
-                isFallback: true,
-                fallbackData: lastToolResult?.data,
-            });
-            return;
-        }
-
-        this.appendRenderable({
-            id: answerMessage.id,
-            role: 'assistant',
-            text: finalAnswer,
-            isFallback: false,
+      if (response.contextReset) {
+        this.logger.warn('OcuGuide conversation context expired and was reset', {
+          service: 'ChatService',
         });
-        
-        // Log successful response for quality metrics (console only, not Sentry)
-        if (!environment.production) {
-            console.log('Chat answer validated successfully:', {
-                service: 'ChatService',
-                toolUsed: lastToolResult?.name ?? 'none',
-                answerLength: finalAnswer.length,
-                hadSanitization: sanitizationResult.hadChanges,
-            });
-        }
+      }
+    } catch (error: unknown) {
+      if (controller.signal.aborted) return;
+      const requestError = this.toRequestError(error);
+      if (requestError.code === 'context_invalid') {
+        this.stateToken = undefined;
+      }
+      if (requestError.statusCode >= 500 || requestError.statusCode === 0) {
+        this.logger.error('OcuGuide turn failed', requestError, {
+          service: 'ChatService',
+          code: requestError.code,
+          statusCode: requestError.statusCode,
+        });
+      } else {
+        this.logger.warn('OcuGuide request was rejected safely', {
+          service: 'ChatService',
+          code: requestError.code,
+          statusCode: requestError.statusCode,
+        });
+      }
+      this.appendError(
+        this.friendlyErrorMessage(requestError),
+        requestError.code,
+        requestError.retryAfterSeconds,
+      );
+    } finally {
+      if (this.requestController === controller) {
+        this.requestController = undefined;
+        this.isLoading.set(false);
+        this.currentStage.set('idle');
+        this.stopStageProgression();
+      }
+    }
+  }
+
+  private async callChatApi(message: string, signal: AbortSignal): Promise<ChatTurnResponse> {
+    const firebaseUser = this.auth.currentUser;
+    if (!firebaseUser) {
+      throw new ChatRequestError('Sign in to use OcuGuide.', 'authentication_required', 401);
     }
 
-    private async callChatApi(userRole: ChatUserRole): Promise<ChatApiResponse> {
-        const requestBody: ChatApiRequest = {
-            messages: trimChatHistory(this.fullHistory),
-            userRole,
-        };
+    const idToken = await firebaseUser.getIdToken();
+    const body: ChatTurnRequest = {
+      message,
+      ...(this.stateToken ? { stateToken: this.stateToken } : {}),
+    };
 
-        let httpResponse: Response;
-        try {
-            httpResponse = await fetch(CHAT_API_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            });
-        } catch (err) {
-            throw new ChatRequestError('Network error contacting chat service', err);
-        }
-
-        if (!httpResponse.ok) {
-            const errorBody = await this.safeParseJson(httpResponse);
-            throw new ChatRequestError(
-                (errorBody as { error?: string })?.error ?? `Chat service returned ${httpResponse.status}`,
-            );
-        }
-
-        return httpResponse.json() as Promise<ChatApiResponse>;
+    let response: Response;
+    try {
+      response = await fetch(CHAT_API_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        credentials: 'omit',
+        cache: 'no-store',
+        signal,
+      });
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw new ChatRequestError(
+        'Network error contacting OcuGuide.',
+        'assistant_unavailable',
+        0,
+        undefined,
+        error,
+      );
     }
 
-
-    private findLastToolResult(): ChatToolResult | null {
-        for (let i = this.fullHistory.length - 1; i >= 0; i--) {
-            const msg = this.fullHistory[i];
-            if (msg.role === 'function' && msg.toolResult) {
-                return msg.toolResult;
-            }
-        }
-        return null;
+    if (!response.ok) {
+      const errorBody = await this.safeParseJson(response);
+      throw new ChatRequestError(
+        errorBody?.error?.message ?? `OcuGuide returned ${response.status}.`,
+        errorBody?.error?.code ?? 'assistant_unavailable',
+        response.status,
+        errorBody?.error?.retryAfterSeconds,
+      );
     }
 
-    private buildMessage(
-        role: ChatMessage['role'],
-        content: string,
-        extra?: Pick<ChatMessage, 'toolCall' | 'toolResult'>,
-    ): ChatMessage {
-        return {
-            id: this.generateId(),
-            role,
-            content,
-            createdAt: new Date().toISOString(),
-            ...extra,
-        };
+    const value = (await response.json()) as ChatTurnResponse;
+    if (!value?.turnId || !value.answer || !Array.isArray(value.presentations)) {
+      throw new ChatRequestError(
+        'OcuGuide returned an invalid response.',
+        'assistant_unavailable',
+        502,
+      );
     }
+    return value;
+  }
 
-    private appendToHistory(message: ChatMessage): void {
-        this.fullHistory = [...this.fullHistory, message];
-    }
+  private appendError(message: string, code: string, retryAfterSeconds?: number): void {
+    this.renderableMessages.update((items) => [
+      ...items,
+      {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: message,
+        presentations: [],
+        errorCode: code,
+        retryAfterSeconds,
+      },
+    ]);
+  }
 
-    private appendRenderable(message: RenderableChatMessage): void {
-        this.renderableMessages.update((current) => [...current, message]);
-    }
+  private startStageProgression(): void {
+    this.stopStageProgression();
+    const stages: ChatLoadingStage[] = ['understanding', 'retrieving', 'comparing', 'preparing'];
+    let index = 0;
+    this.currentStage.set(stages[index]);
+    this.stageTimer = setInterval(() => {
+      index = Math.min(index + 1, stages.length - 1);
+      this.currentStage.set(stages[index]);
+    }, 2_200);
+  }
 
-    private async safeParseJson(response: Response): Promise<unknown> {
-        try {
-            return await response.json();
-        } catch {
-            return null;
-        }
-    }
+  private stopStageProgression(): void {
+    if (this.stageTimer) clearInterval(this.stageTimer);
+    this.stageTimer = undefined;
+  }
 
-    private generateId(): string {
-        return crypto.randomUUID();
+  private async safeParseJson(response: Response): Promise<ChatErrorBody | null> {
+    try {
+      return (await response.json()) as ChatErrorBody;
+    } catch {
+      return null;
     }
+  }
+
+  private toRequestError(error: unknown): ChatRequestError {
+    if (error instanceof ChatRequestError) return error;
+    return new ChatRequestError(
+      'OcuGuide is temporarily unavailable.',
+      'assistant_unavailable',
+      0,
+      undefined,
+      error,
+    );
+  }
+
+  private friendlyErrorMessage(error: ChatRequestError): string {
+    switch (error.code) {
+      case 'authentication_required':
+        return 'Your sign-in session is no longer available. Sign in again to use OcuGuide.';
+      case 'account_not_authorized':
+        return 'This account is not approved to use OcuGuide.';
+      case 'rate_limited':
+        return error.retryAfterSeconds
+          ? `OcuGuide is receiving requests too quickly. Try again in ${error.retryAfterSeconds} seconds.`
+          : 'OcuGuide is receiving requests too quickly. Wait a moment and try again.';
+      case 'context_invalid':
+        return 'The saved conversation context expired or became invalid. It was cleared; send your question again.';
+      case 'facility_too_large':
+        return 'The requested facility report is larger than the safe response limit. Narrow the room scope.';
+      case 'invalid_request':
+        return error.message;
+      case 'data_unavailable':
+        return 'The requested facility data is temporarily unavailable. Try again shortly.';
+      default:
+        return 'OcuGuide is temporarily unavailable. Your request was not applied; try again shortly.';
+    }
+  }
 }

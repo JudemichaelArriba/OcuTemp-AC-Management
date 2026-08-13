@@ -1,62 +1,66 @@
-import type { ChatMessage, ChatToolName, ProviderGenerateResult } from '../types/chat.types';
+export type ChatProviderId = 'gemini' | 'groq';
 
-/**
- * Contract every LLM provider (Gemini, Groq) must implement.
- * orchestrator.ts and retry.ts depend only on this interface, never on
- * a concrete provider directly. This allows us to add new providers without changing the orchestrator
- * or retry logic, and to fail over between providers on rate limit or outage.
- */
-export interface ChatProvider {
-    readonly id: 'gemini' | 'groq';
-
-    /**
-     * Runs one generation step (planning or answering).
-     * Throws ProviderRateLimitError or ProviderUnavailableError on failure 
-     * retry.ts inspects the error type to decide whether to fail over.
-     */
-    generate(request: ProviderGenerateRequest): Promise<ProviderGenerateResult>;
-
-    /** Whether this provider's current model supports function calling. */
-    supportsTools(): boolean;
-}
-
-export interface ProviderGenerateRequest {
-    readonly messages: ChatMessage[];
+export interface StructuredGenerationRequest {
     readonly systemPrompt: string;
-    /** Only attached on the planning step see orchestrator.ts. */
-    readonly toolSchema?: readonly ProviderToolSchema[];
+    readonly prompt: string;
+    readonly schema: Record<string, unknown>;
+    readonly schemaName: string;
+    readonly schemaDescription: string;
+    readonly maxOutputTokens: number;
+    readonly temperature: number;
+    readonly timeoutMs: number;
+    readonly reasoningEffort?: 'low' | 'medium';
+    readonly abortSignal?: AbortSignal;
 }
 
-/**
- * Provider-agnostic tool schema shape. gemini.provider.ts and
- * groq.provider.ts are each responsible for translating this into
- * their own SDK's expected format (they differ slightly).
- */
-export interface ProviderToolSchema {
-    readonly name: ChatToolName;
-    readonly description: string;
-    readonly parameters: Record<string, unknown>;
+export interface ChatProvider {
+    readonly id: ChatProviderId;
+    generateStructured<T>(request: StructuredGenerationRequest): Promise<T>;
 }
 
-/**
- * Thrown by a provider when it hits a rate limit (HTTP 429 equivalent).
- * retry.ts specifically catches this type to trigger provider fail-over.
- */
-export class ProviderRateLimitError extends Error {
-    constructor(readonly providerId: 'gemini' | 'groq', override readonly cause?: unknown) {
-        super(`${providerId} rate limit exceeded`);
-        this.name = 'ProviderRateLimitError';
+export class ProviderRecoverableError extends Error {
+    constructor(
+        readonly providerId: ChatProviderId,
+        readonly category: 'rate_limit' | 'timeout' | 'unavailable',
+        override readonly cause?: unknown,
+    ) {
+        super(`${providerId} ${category}`);
+        this.name = 'ProviderRecoverableError';
     }
 }
 
-/**
- * Thrown by a provider on 5xx / network failure — distinct from rate
- * limiting so retry.ts and logging can distinguish quota exhaustion
- * from genuine outages.
- */
-export class ProviderUnavailableError extends Error {
-    constructor(readonly providerId: 'gemini' | 'groq', override readonly cause?: unknown) {
-        super(`${providerId} is unavailable`);
-        this.name = 'ProviderUnavailableError';
+export class ProviderResponseError extends Error {
+    constructor(
+        readonly providerId: ChatProviderId,
+        override readonly cause?: unknown,
+    ) {
+        super(`${providerId} returned an invalid response`);
+        this.name = 'ProviderResponseError';
     }
+}
+
+export function mapProviderError(
+    providerId: ChatProviderId,
+    error: unknown,
+): ProviderRecoverableError | ProviderResponseError {
+    const value = error as { statusCode?: number; status?: number; name?: string; message?: string };
+    const status = value?.statusCode ?? value?.status;
+    const message = `${value?.name ?? ''} ${value?.message ?? ''}`.toLowerCase();
+
+    if (message.includes('abort')) {
+        return new ProviderResponseError(providerId, error);
+    }
+    if (status === 408 || message.includes('timeout')) {
+        return new ProviderRecoverableError(providerId, 'timeout', error);
+    }
+    if (status === 429) {
+        return new ProviderRecoverableError(providerId, 'rate_limit', error);
+    }
+    if (status === 401 || status === 403 || status === 404 || (typeof status === 'number' && status >= 500)) {
+        return new ProviderRecoverableError(providerId, 'unavailable', error);
+    }
+    if (status === undefined && (message.includes('fetch') || message.includes('network'))) {
+        return new ProviderRecoverableError(providerId, 'unavailable', error);
+    }
+    return new ProviderResponseError(providerId, error);
 }

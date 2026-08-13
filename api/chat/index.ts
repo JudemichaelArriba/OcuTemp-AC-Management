@@ -1,73 +1,167 @@
-import { enforceRateLimit } from './middleware/rate-limit';
-import { validateChatRequest } from './middleware/validate-request';
+import { getChatConfig } from './config';
+import { FirebaseRestClient } from './firebase-rest';
+import { authenticateChatRequest } from './middleware/auth';
+import { acquireAuthenticatedLimits, enforcePreAuthRateLimit } from './middleware/rate-limit';
+import {
+    assertAllowedOrigin,
+    assertJsonContentType,
+    assertPostMethod,
+    readJsonBody,
+    validateChatRequest,
+} from './middleware/validate-request';
 import { runChatTurn } from './orchestrator';
-import { ChatApiError } from './types/chat.types';
 import { BothProvidersFailedError } from './retry';
+import { CHAT_STATE_LIFETIME_SECONDS, decodeChatState, encodeChatState } from './state';
+import type { ChatErrorResponse, ChatStatePayload, ChatTurnResponse } from './types/chat.types';
+import { ChatApiError } from './types/chat.types';
 
-export const config = { runtime: 'edge' };
+const MAX_PUBLIC_RESPONSE_BYTES = 256 * 1024;
+const TURN_DEADLINE_MS = 20_000;
+const textEncoder = new TextEncoder();
 
-/**
- * Single Vercel entry point for the chatbot. Kept deliberately thin
- * this file's only job is HTTP plumbing: parse, validate, rate-limit,
- * delegate to the orchestrator, map errors to status codes. All real
- * logic lives in orchestrator.ts, retry.ts, and the middleware files.
- */
-export default async function handler(req: Request): Promise<Response> {
-    if (req.method !== 'POST') {
-        return jsonResponse({ error: 'Method not allowed' }, 405);
-    }
+export default async function handler(request: Request): Promise<Response> {
+    const requestId = globalThis.crypto.randomUUID();
+    let lease: Awaited<ReturnType<typeof acquireAuthenticatedLimits>> | undefined;
+    const turnController = new AbortController();
+    const abortTurn = (): void => turnController.abort();
+    if (request.signal.aborted) turnController.abort();
+    else request.signal.addEventListener('abort', abortTurn, { once: true });
+    const turnDeadline = setTimeout(abortTurn, TURN_DEADLINE_MS);
 
     try {
-        await enforceRateLimit(req);
+        assertPostMethod(request);
+        assertAllowedOrigin(request);
+        assertJsonContentType(request);
+        await enforcePreAuthRateLimit(request, turnController.signal);
+        const rawBody = await readJsonBody(request, turnController.signal);
+        const input = validateChatRequest(rawBody);
+        const user = await authenticateChatRequest(request, turnController.signal);
+        lease = await acquireAuthenticatedLimits(user.uid, turnController.signal);
 
-        let rawBody: unknown;
-        try {
-            rawBody = await req.json();
-        } catch {
-            return jsonResponse({ error: 'Invalid JSON body' }, 400);
+        const decoded = await decodeChatState(input.stateToken, user.uid);
+        const runtimeConfig = getChatConfig();
+        const firebase = new FirebaseRestClient({
+            databaseUrl: runtimeConfig.firebaseDatabaseUrl,
+            idToken: user.idToken,
+            abortSignal: turnController.signal,
+        });
+
+        const result = await runChatTurn({
+            message: input.message,
+            user,
+            state: decoded.state,
+            firebase,
+            abortSignal: turnController.signal,
+        });
+
+        const nowSeconds = Math.floor(Date.now() / 1_000);
+        const state: ChatStatePayload = {
+            version: 1,
+            uid: user.uid,
+            conversationId: decoded.state?.conversationId ?? globalThis.crypto.randomUUID(),
+            issuedAt: nowSeconds,
+            expiresAt: nowSeconds + CHAT_STATE_LIFETIME_SECONDS,
+            turns: [
+                ...(decoded.state?.turns ?? []),
+                { user: input.message, assistant: result.stateSummary },
+            ].slice(-5),
+        };
+
+        const response: ChatTurnResponse = {
+            turnId: requestId,
+            answer: result.answer,
+            presentations: result.presentations,
+            evidence: {
+                asOf: new Date().toISOString(),
+                timeZone: 'Asia/Manila',
+                partial: result.partial,
+                notices: result.notices,
+            },
+            stateToken: await encodeChatState(state),
+            contextReset: decoded.contextReset,
+        };
+
+        const serialized = JSON.stringify(response);
+        if (textEncoder.encode(serialized).byteLength > MAX_PUBLIC_RESPONSE_BYTES) {
+            throw new ChatApiError(
+                'facility_too_large',
+                'The facility report is too large to return safely. Narrow the room scope.',
+                413,
+            );
         }
-
-        const validatedRequest = validateChatRequest(rawBody);
-        const response = await runChatTurn(validatedRequest);
-
-        return jsonResponse(response, 200);
+        return jsonResponse(serialized, 200);
     } catch (error: unknown) {
-        return handleError(error);
+        return handleError(error, requestId);
+    } finally {
+        clearTimeout(turnDeadline);
+        request.signal.removeEventListener('abort', abortTurn);
+        await lease?.release();
     }
 }
 
-function handleError(error: unknown): Response {
+export const POST = handler;
+
+function handleError(error: unknown, requestId: string): Response {
     if (error instanceof ChatApiError) {
-        return jsonResponse({ error: error.message }, error.statusCode);
+        const body: ChatErrorResponse = {
+            error: {
+                code: error.code,
+                message: publicErrorMessage(error),
+                ...(error.retryAfterSeconds
+                    ? { retryAfterSeconds: error.retryAfterSeconds }
+                    : {}),
+            },
+            requestId,
+        };
+        return jsonResponse(JSON.stringify(body), error.statusCode, error.retryAfterSeconds);
     }
 
     if (error instanceof BothProvidersFailedError) {
-        // eslint-disable-next-line no-console
-        console.error('[chat] both providers failed', {
-            primary: serializeError(error.primaryError),
-            fallback: serializeError(error.fallbackError),
-        });
+        console.error('[chat] both providers unavailable', { requestId });
         return jsonResponse(
-            { error: 'The assistant is temporarily unavailable. Please try again shortly.' },
+            JSON.stringify({
+                error: {
+                    code: 'assistant_unavailable',
+                    message: 'OcuGuide is temporarily unavailable. Please try again shortly.',
+                },
+                requestId,
+            } satisfies ChatErrorResponse),
             503,
         );
     }
 
-
-    console.error('[chat] unhandled error', serializeError(error));
-    return jsonResponse({ error: 'Something went wrong.' }, 500);
-}
-
-function serializeError(error: unknown): unknown {
-    if (error instanceof Error) {
-        return { name: error.name, message: error.message };
-    }
-    return error;
-}
-
-function jsonResponse(body: unknown, status: number): Response {
-    return new Response(JSON.stringify(body), {
-        status,
-        headers: { 'Content-Type': 'application/json' },
+    console.error('[chat] unhandled request failure', {
+        requestId,
+        category: error instanceof Error ? error.name : 'unknown',
     });
+    return jsonResponse(
+        JSON.stringify({
+            error: {
+                code: 'assistant_unavailable',
+                message: 'OcuGuide is temporarily unavailable. Please try again shortly.',
+            },
+            requestId,
+        } satisfies ChatErrorResponse),
+        500,
+    );
+}
+
+function publicErrorMessage(error: ChatApiError): string {
+    return error.message;
+}
+
+function jsonResponse(body: string, status: number, retryAfterSeconds?: number): Response {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store, max-age=0',
+        Pragma: 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+        Vary: 'Origin, Authorization',
+    };
+    if (retryAfterSeconds) headers['Retry-After'] = String(retryAfterSeconds);
+    if (status === 405) headers['Allow'] = 'POST';
+    return new Response(body, { status, headers });
 }
