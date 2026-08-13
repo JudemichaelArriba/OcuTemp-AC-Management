@@ -136,6 +136,8 @@ src/app/models/             TypeScript interfaces for rooms, users, devices, log
 src/app/pages/              Application pages such as dashboard, rooms, reports, settings, and users
 src/app/services/           Firebase data access, auth state, logging, dialogs, and domain services
 src/environments/           Generated Angular environment configuration
+server/chat/                Private Vercel chat orchestration, security, and read-only tool modules
+api/chat/index.ts           The single public Vercel chat function
 set-env.js                  Environment file generator for local and production builds
 vercel.json                 Vercel build, routing, and header configuration
 ```

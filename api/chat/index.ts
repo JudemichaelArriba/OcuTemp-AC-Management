@@ -1,19 +1,30 @@
-import { getChatConfig } from './config';
-import { FirebaseRestClient } from './firebase-rest';
-import { authenticateChatRequest } from './middleware/auth';
-import { acquireAuthenticatedLimits, enforcePreAuthRateLimit } from './middleware/rate-limit';
+import { getChatConfig } from '../../server/chat/config';
+import { FirebaseRestClient } from '../../server/chat/firebase-rest';
+import { authenticateChatRequest } from '../../server/chat/middleware/auth';
+import {
+    acquireAuthenticatedLimits,
+    enforcePreAuthRateLimit,
+} from '../../server/chat/middleware/rate-limit';
 import {
     assertAllowedOrigin,
     assertJsonContentType,
     assertPostMethod,
     readJsonBody,
     validateChatRequest,
-} from './middleware/validate-request';
-import { runChatTurn } from './orchestrator';
-import { BothProvidersFailedError } from './retry';
-import { CHAT_STATE_LIFETIME_SECONDS, decodeChatState, encodeChatState } from './state';
-import type { ChatErrorResponse, ChatStatePayload, ChatTurnResponse } from './types/chat.types';
-import { ChatApiError } from './types/chat.types';
+} from '../../server/chat/middleware/validate-request';
+import { runChatTurn } from '../../server/chat/orchestrator';
+import { BothProvidersFailedError } from '../../server/chat/retry';
+import {
+    CHAT_STATE_LIFETIME_SECONDS,
+    decodeChatState,
+    encodeChatState,
+} from '../../server/chat/state';
+import type {
+    ChatErrorResponse,
+    ChatStatePayload,
+    ChatTurnResponse,
+} from '../../server/chat/types/chat.types';
+import { ChatApiError } from '../../server/chat/types/chat.types';
 
 const MAX_PUBLIC_RESPONSE_BYTES = 256 * 1024;
 const TURN_DEADLINE_MS = 20_000;
