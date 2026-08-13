@@ -2,7 +2,7 @@
   "name": "ocutemp",
   "version": "1.2.1",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "ng": "ng",
