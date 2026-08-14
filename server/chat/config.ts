@@ -1,4 +1,4 @@
-import { ChatApiError } from './types/chat.types';
+import { ChatApiError } from './types/chat.types.js';
 
 declare const process: { env: Record<string, string | undefined> };
 
