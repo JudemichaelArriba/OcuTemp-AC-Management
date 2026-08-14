@@ -1,6 +1,7 @@
 {
   "name": "ocutemp",
   "version": "1.2.1",
+  "type": "module",
   "engines": {
     "node": "24.x"
   },
