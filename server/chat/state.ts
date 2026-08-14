@@ -1,7 +1,7 @@
 import { CompactEncrypt, compactDecrypt } from 'jose';
-import { getChatConfig } from './config';
-import type { ChatStatePayload, ChatStateTurn } from './types/chat.types';
-import { ChatApiError } from './types/chat.types';
+import { getChatConfig } from './config.js';
+import type { ChatStatePayload, ChatStateTurn } from './types/chat.types.js';
+import { ChatApiError } from './types/chat.types.js';
 
 export const CHAT_STATE_MAX_TURNS = 5;
 export const CHAT_STATE_LIFETIME_SECONDS = 2 * 60 * 60;

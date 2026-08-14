@@ -1,7 +1,7 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
-import { getUpstashConfig } from '../config';
-import { ChatApiError } from '../types/chat.types';
+import { getUpstashConfig } from '../config.js';
+import { ChatApiError } from '../types/chat.types.js';
 
 const REDIS_ADMISSION_TIMEOUT_MS = 4_000;
 const REDIS_RELEASE_TIMEOUT_MS = 600;

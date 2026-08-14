@@ -7,8 +7,8 @@ import type {
     EnergyTrendPoint,
     GroundingFact,
     PlannerToolPlan,
-} from '../types/chat.types';
-import { ChatApiError } from '../types/chat.types';
+} from '../types/chat.types.js';
+import { ChatApiError } from '../types/chat.types.js';
 
 const TIME_ZONE = 'Asia/Manila' as const;
 const MAX_RANGE_DAYS = 5 * 366;

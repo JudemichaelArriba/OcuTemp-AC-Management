@@ -1,8 +1,8 @@
 import { createRemoteJWKSet, errors, jwtVerify, type JWTPayload } from 'jose';
-import { getChatConfig } from '../config';
-import { FirebaseRestClient } from '../firebase-rest';
-import type { AuthenticatedChatUser, ChatUserRole } from '../types/chat.types';
-import { ChatApiError } from '../types/chat.types';
+import { getChatConfig } from '../config.js';
+import { FirebaseRestClient } from '../firebase-rest.js';
+import type { AuthenticatedChatUser, ChatUserRole } from '../types/chat.types.js';
+import { ChatApiError } from '../types/chat.types.js';
 
 const GOOGLE_FIREBASE_JWKS_URL = new URL(
     'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',

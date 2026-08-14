@@ -1,5 +1,4 @@
-import { ChatApiError } from './types/chat.types';
-
+import { ChatApiError } from './types/chat.types.js';
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 1_500_000;
 const PROFILE_MAX_RESPONSE_BYTES = 64 * 1024;

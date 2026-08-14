@@ -1,4 +1,4 @@
-import type { ChatToolName } from '../types/chat.types';
+import type { ChatToolName } from '../types/chat.types.js';
 
 export const CHAT_TOOL_NAMES: readonly ChatToolName[] = [
     'get_room_telemetry',

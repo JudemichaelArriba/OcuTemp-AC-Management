@@ -1,11 +1,11 @@
-import { GeminiProvider } from './providers/gemini.provider';
-import { GroqProvider } from './providers/groq.provider';
-import { generateWithFallback } from './retry';
-import { PLANNER_SYSTEM_PROMPT } from './prompts/planner.prompt';
-import { ANSWERER_SYSTEM_PROMPT } from './prompts/answerer.prompt';
-import { ANSWER_OUTPUT_SCHEMA, CHAT_TOOL_NAMES, PLANNER_OUTPUT_SCHEMA } from './tools/schema';
-import { executeToolPlans } from './tools/executor';
-import type { FirebaseRestClient } from './firebase-rest';
+import { GeminiProvider } from './providers/gemini.provider.js';
+import { GroqProvider } from './providers/groq.provider.js';
+import { generateWithFallback } from './retry.js';
+import { PLANNER_SYSTEM_PROMPT } from './prompts/planner.prompt.js';
+import { ANSWERER_SYSTEM_PROMPT } from './prompts/answerer.prompt.js';
+import { ANSWER_OUTPUT_SCHEMA, CHAT_TOOL_NAMES, PLANNER_OUTPUT_SCHEMA } from './tools/schema.js';
+import { executeToolPlans } from './tools/executor.js';
+import type { FirebaseRestClient } from './firebase-rest.js';
 import type {
     AuthenticatedChatUser,
     ChatAnswer,
@@ -18,8 +18,8 @@ import type {
     PlannerResult,
     PlannerToolPlan,
     ToolExecutionResult,
-} from './types/chat.types';
-import { ChatApiError } from './types/chat.types';
+} from './types/chat.types.js';
+import { ChatApiError } from './types/chat.types.js';
 
 const MANILA_TIME_ZONE = 'Asia/Manila';
 const MAX_TOOLS = 4;

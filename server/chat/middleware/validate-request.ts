@@ -1,6 +1,6 @@
-import { getChatConfig } from '../config';
-import type { ValidatedChatRequest } from '../types/chat.types';
-import { ChatApiError } from '../types/chat.types';
+import { getChatConfig } from '../config.js';
+import type { ValidatedChatRequest } from '../types/chat.types.js';
+import { ChatApiError } from '../types/chat.types.js';
 
 export const MAX_CHAT_MESSAGE_CHARACTERS = 500;
 export const MAX_CHAT_STATE_TOKEN_BYTES = 12 * 1024;

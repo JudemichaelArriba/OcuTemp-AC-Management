@@ -1,4 +1,4 @@
-import type { FirebaseRestClient } from '../firebase-rest';
+import type { FirebaseRestClient } from '../firebase-rest.js';
 import type {
     AuthenticatedChatUser,
     ChatPresentation,
@@ -15,13 +15,13 @@ import type {
     RoomTelemetryRow,
     SystemHelpPresentation,
     ToolExecutionResult,
-} from '../types/chat.types';
-import { ChatApiError } from '../types/chat.types';
+} from '../types/chat.types.js';
+import { ChatApiError } from '../types/chat.types.js';
 import {
     buildEnergyReport,
     resolveEnergyRange,
     type EnergyRoomInput,
-} from './energy';
+} from './energy.js';
 
 const MAX_TOOL_PLANS = 4;
 const MAX_ACTIVE_ROOMS = 200;
