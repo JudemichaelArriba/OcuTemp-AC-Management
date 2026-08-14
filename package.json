@@ -7,8 +7,8 @@
   },
   "scripts": {
     "ng": "ng",
-    "start": "node set-env.js && ng serve",
-    "build": "node set-env.js && npm run typecheck:api && ng cache clean && ng build",
+    "start": "node set-env.cjs && ng serve",
+    "build": "node set-env.cjs && npm run typecheck:api && ng cache clean && ng build",
     "typecheck:api": "tsc -p tsconfig.api.json",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
