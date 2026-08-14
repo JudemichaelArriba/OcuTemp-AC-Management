@@ -1,7 +1,7 @@
 import { createGroq } from '@ai-sdk/groq';
 import { generateText, jsonSchema, Output } from 'ai';
-import type { ChatProvider, StructuredGenerationRequest } from './provider.interface';
-import { mapProviderError, ProviderRecoverableError } from './provider.interface';
+import type { ChatProvider, StructuredGenerationRequest } from './provider.interface.js';
+import { mapProviderError, ProviderRecoverableError } from './provider.interface.js';
 
 declare const process: { env: Record<string, string | undefined> };
 

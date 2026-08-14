@@ -1,5 +1,5 @@
-import type { ChatProvider, ChatProviderId, StructuredGenerationRequest } from './providers/provider.interface';
-import { ProviderRecoverableError, ProviderResponseError } from './providers/provider.interface';
+import type { ChatProvider, ChatProviderId, StructuredGenerationRequest } from './providers/provider.interface.js';
+import { ProviderRecoverableError, ProviderResponseError } from './providers/provider.interface.js';
 
 export interface GenerateWithFallbackResult<T> {
     readonly result: T;
