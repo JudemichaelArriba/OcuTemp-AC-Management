@@ -1,93 +1,207 @@
-<header class="panel-heading">
-  <div><span class="panel-heading__index" aria-hidden="true">01</span><div><h2>Conversation</h2><p>Scope the facility question</p></div></div>
-  <span class="panel-heading__count">{{ messages().length }} messages</span>
+<header class="thread-heading">
+  <div>
+    <span class="thread-heading__signal flex items-center justify-center gap-0.5" aria-hidden="true">
+      <i class="size-1 rounded-full bg-white/90"></i><i class="size-1 rounded-full bg-white/90"></i><i class="size-1 rounded-full bg-white/90"></i>
+    </span>
+    <div>
+      <h2 class="text-sm font-black tracking-tight text-slate-900">Conversation</h2>
+      <p class="mt-0.5 text-[.65rem] text-slate-500">Answers and facility evidence stay together</p>
+    </div>
+  </div>
+  <span class="thread-heading__count rounded-lg bg-slate-100 px-2 py-1 text-[.6rem] font-extrabold text-slate-500">
+    {{ messages().length }} {{ messages().length === 1 ? 'message' : 'messages' }}
+  </span>
 </header>
 
-<div #conversationLog class="conversation-log" role="log" aria-live="polite" aria-relevant="additions"
-  aria-label="OcuGuide conversation" [attr.aria-busy]="loading()">
-  @if (messages().length === 0 && !loading()) {
-    <div class="conversation-empty">
-      <div class="conversation-empty__intro">
-        <span class="material-symbols-outlined" aria-hidden="true">search_insights</span>
-        <h3>Start with an operating question</h3>
-        <p>OcuGuide turns your question into a concise answer and a separate evidence report.</p>
-      </div>
-      <button type="button" class="featured-prompt" (click)="send(primarySuggestion)">
-        <span class="featured-prompt__label">Suggested monthly report</span><span>{{ primarySuggestion }}</span>
-        <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
-      </button>
-      <div class="prompt-list" aria-label="More suggested questions">
-        @for (suggestion of suggestions; track suggestion.prompt) {
-          <button type="button" (click)="send(suggestion.prompt)">
-            <span class="material-symbols-outlined" aria-hidden="true">{{ suggestion.icon }}</span>
-            <span><strong>{{ suggestion.label }}</strong><small>{{ suggestion.prompt }}</small></span>
-          </button>
-        }
-      </div>
-    </div>
-  }
+<div class="thread-body">
+  <div #conversationLog class="conversation-log" role="region" tabindex="0"
+    aria-label="OcuGuide conversation history" [attr.aria-busy]="loading()"
+    (scroll)="onConversationScroll()">
+    @if (messages().length === 0 && !loading()) {
+      <section class="conversation-empty" aria-labelledby="ocu-guide-empty-title">
+        <div class="conversation-empty__intro">
+          <div class="conversation-empty__instrument" aria-hidden="true">
+            <span class="material-symbols-outlined">airwave</span><i></i><i></i>
+          </div>
+          <p class="conversation-empty__eyebrow text-[.6rem] font-extrabold uppercase tracking-[.12em] text-blue-700">Read-only facility assistant</p>
+          <h3 id="ocu-guide-empty-title">What would you like to understand?</h3>
+          <p>Ask a simple question or request a room-by-room comparison. OcuGuide adds charts and tables only when the answer needs them.</p>
+        </div>
 
-  <ol class="message-list">
-    @for (message of messages(); track message.id) {
-      <li [class.message--user]="message.role === 'user'">
-        @if (message.role === 'assistant') {
-          <div class="message-avatar" aria-hidden="true"><span class="material-symbols-outlined">robot_2</span></div>
-        }
-        <article class="message-bubble" [class.message-bubble--error]="message.errorCode">
-          <p class="message-bubble__speaker">{{ message.role === 'user' ? 'You' : 'OcuGuide' }}</p>
-          @if (message.answer) { <strong class="message-bubble__headline">{{ message.answer.headline }}</strong> }
-          <p>{{ message.text }}</p>
-          @if (message.errorCode) {
-            <div class="message-error-code"><span class="material-symbols-outlined" aria-hidden="true">error</span>Request not completed</div>
-            @if (canRetry(message)) {
-              <button type="button" class="message-action" (click)="retry()" [disabled]="loading()">
-                <span class="material-symbols-outlined" aria-hidden="true">refresh</span>Retry request
-              </button>
-            }
-          } @else if (message.presentations.length > 0) {
-            <button type="button" class="message-action" (click)="reportRequested.emit()">
-              View {{ message.presentations.length }} evidence {{ message.presentations.length === 1 ? 'panel' : 'panels' }}
-              <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+        <button type="button" class="featured-prompt" (click)="send(primarySuggestion)">
+          <span class="featured-prompt__icon material-symbols-outlined" aria-hidden="true">calendar_month</span>
+          <span><small class="block text-[.65rem] font-bold uppercase tracking-wider">Suggested monthly report</small><strong class="mt-1 block text-[.8rem] leading-5">{{ primarySuggestion }}</strong></span>
+          <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+        </button>
+
+        <div class="prompt-grid" role="group" aria-label="Suggested questions">
+          @for (suggestion of suggestions(); track suggestion.prompt) {
+            <button type="button" (click)="send(suggestion.prompt)">
+              <span class="material-symbols-outlined" aria-hidden="true">{{ suggestion.icon }}</span>
+              <span><strong class="block text-xs">{{ suggestion.label }}</strong><small class="mt-1 block text-[.68rem] leading-4 text-slate-500">{{ suggestion.prompt }}</small></span>
             </button>
           }
-        </article>
-      </li>
+        </div>
+      </section>
     }
 
-    @if (loading()) {
-      <li class="loading-message">
-        <div class="message-avatar" aria-hidden="true"><span class="material-symbols-outlined">robot_2</span></div>
-        <article class="loading-card">
-          <div class="loading-card__heading"><span class="loading-orbit" aria-hidden="true"><i></i></span>
-            <div><strong>Building your report</strong><p>{{ loadingAnnouncement() }}</p></div>
-          </div>
-          <ol aria-label="Report preparation progress">
-            @for (stage of loadingStages; track stage.id) {
-              <li [attr.data-state]="stageState(stage.id)">
-                <span class="loading-stage-mark" aria-hidden="true">
-                  @if (stageState(stage.id) === 'complete') { <span class="material-symbols-outlined">check</span> } @else { <i></i> }
-                </span>
-                <div><strong>{{ stage.label }}</strong><small>{{ stage.detail }}</small></div>
-              </li>
+    <ol class="message-list">
+      @for (message of messages(); track message.id) {
+        <li class="message-turn" [class.message-turn--user]="message.role === 'user'"
+          [class.message-turn--assistant]="message.role === 'assistant'">
+          @if (message.role === 'assistant') {
+            <div class="assistant-rail" aria-hidden="true">
+              <span class="assistant-avatar"><span class="material-symbols-outlined">mode_cool</span></span>
+              <i></i>
+            </div>
+          }
+
+          <article class="message-card" [class.message-card--error]="message.errorCode">
+            <header class="message-card__meta">
+              <strong class="!text-[.625rem]">{{ message.role === 'user' ? 'You' : 'OcuGuide' }}</strong>
+              @if (message.role === 'assistant' && !message.errorCode) {
+                <span class="!text-[.625rem]"><i class="mr-1 inline-block size-1.5 rounded-full bg-emerald-500" aria-hidden="true"></i>{{ message.presentations.length > 0 ? 'Evidence-linked response' : 'Text response' }}</span>
+              }
+            </header>
+
+            @if (message.role === 'user') {
+              <p class="message-copy !text-sm">{{ message.text }}</p>
+            } @else if (message.answer; as answer) {
+              <h3 class="message-headline">{{ answer.headline }}</h3>
+              <p class="message-copy !text-sm">{{ answer.summary }}</p>
+
+              @if (answer.highlights.length > 0) {
+                <ul class="answer-highlights" aria-label="Answer highlights">
+                  @for (highlight of answer.highlights; track $index) {
+                    <li class="!text-[.8rem]"><span class="material-symbols-outlined !text-base" aria-hidden="true">arrow_right_alt</span><span>{{ highlight.text }}</span></li>
+                  }
+                </ul>
+              }
+
+              @if (answer.caveats.length > 0 || (message.evidence?.notices?.length ?? 0) > 0) {
+                <aside class="answer-notes !text-xs" aria-label="Important answer notes">
+                  <span class="material-symbols-outlined" aria-hidden="true">info</span>
+                  <div>
+                    @for (caveat of answer.caveats; track $index) { <p>{{ caveat }}</p> }
+                    @for (notice of message.evidence?.notices ?? []; track $index) { <p>{{ notice }}</p> }
+                  </div>
+                </aside>
+              }
+
+              @if (message.presentations.length > 0) {
+                <div class="inline-evidence" aria-label="Inline facility evidence">
+                  @defer (on viewport) {
+                    <app-ocu-guide-report [presentations]="message.presentations"
+                      [evidence]="message.evidence" [turnId]="message.id" />
+                  } @placeholder {
+                    <div class="evidence-placeholder" aria-hidden="true">
+                      <span></span><span></span><span></span>
+                    </div>
+                  } @loading (after 120ms; minimum 240ms) {
+                    <div class="evidence-placeholder" role="status" aria-label="Loading inline facility evidence">
+                      <span></span><span></span><span></span>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (message.evidence && message.presentations.length > 0) {
+                <footer class="evidence-time items-center !text-[.625rem]">
+                  <span class="material-symbols-outlined !text-sm" aria-hidden="true">schedule</span>
+                  Facility evidence as of {{ formatDateTime(message.evidence.asOf) }} PHT
+                  @if (message.evidence.partial) { <strong>Partial data</strong> }
+                </footer>
+              }
+            } @else {
+              <p class="message-copy !text-sm">{{ message.text }}</p>
             }
-          </ol>
-        </article>
-      </li>
-    }
-  </ol>
+
+            @if (message.errorCode) {
+              <div class="message-error-code">
+                <span class="material-symbols-outlined" aria-hidden="true">error</span>
+                Request not completed
+              </div>
+              @if (canRetry(message)) {
+                <button type="button" class="message-action" (click)="retry()" [disabled]="loading()">
+                  <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+                  Retry request
+                </button>
+              }
+            }
+          </article>
+        </li>
+      }
+
+      @if (loading()) {
+        <li class="message-turn message-turn--assistant thinking-turn">
+          <div class="assistant-rail" aria-hidden="true">
+            <span class="assistant-avatar assistant-avatar--thinking"><span class="material-symbols-outlined">mode_cool</span></span>
+            <i></i>
+          </div>
+          <article class="thinking-card">
+            <div class="thinking-card__heading">
+              <span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              <div><strong>OcuGuide is thinking</strong><p class="!text-xs">{{ activeStageDetail() }}</p></div>
+            </div>
+            <div class="sensor-sweep" aria-hidden="true"><i></i></div>
+            <ol aria-label="Response preparation progress">
+              @for (stage of loadingStages; track stage.id) {
+                <li [attr.data-state]="stageState(stage.id)"
+                  [attr.aria-current]="stageState(stage.id) === 'active' ? 'step' : null">
+                  <span class="loading-stage-mark grid size-4 shrink-0 place-items-center" aria-hidden="true">
+                    @if (stageState(stage.id) === 'complete') {
+                      <span class="material-symbols-outlined !text-[.75rem] text-emerald-600">check</span>
+                    } @else {
+                      <i class="size-1.5 rounded-full" [class.bg-blue-600]="stageState(stage.id) === 'active'"
+                        [class.bg-slate-300]="stageState(stage.id) === 'pending'"></i>
+                    }
+                  </span>
+                  <span><span class="sr-only">{{ stageState(stage.id) }}: </span><strong class="!text-[.625rem]">{{ stage.label }}</strong><small>{{ stage.detail }}</small></span>
+                </li>
+              }
+            </ol>
+          </article>
+        </li>
+      }
+    </ol>
+  </div>
+
+  @if (showJumpToLatest()) {
+    <button type="button" class="jump-latest inline-flex items-center gap-1.5 !text-[.7rem]" (click)="jumpToLatest()">
+      <span class="material-symbols-outlined !text-sm" aria-hidden="true">arrow_downward</span>
+      Latest response
+    </button>
+  }
 </div>
 
-<div class="sr-only" role="status" aria-live="assertive">@if (loading()) { {{ loadingAnnouncement() }} }</div>
+<div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  {{ loading() ? loadingAnnouncement() : responseAnnouncement() }}
+</div>
 
 <footer class="composer-wrap">
+  @if (messages().length > 0 && !loading()) {
+    <div class="follow-up-prompts" role="group" aria-label="Suggested follow-up questions">
+      @for (suggestion of followUpSuggestions(); track suggestion.prompt) {
+        <button type="button" class="inline-flex items-center gap-1.5 !text-[.7rem]" (click)="send(suggestion.prompt)">
+          <span class="material-symbols-outlined !text-sm" aria-hidden="true">{{ suggestion.icon }}</span>
+          {{ suggestion.label }}
+        </button>
+      }
+    </div>
+  }
   <label for="ocu-guide-composer" class="sr-only">Ask OcuGuide about the facility</label>
   <div class="composer">
-    <textarea #composer id="ocu-guide-composer" rows="2" maxlength="500" [value]="draft()"
+    <textarea #composer id="ocu-guide-composer" rows="1" maxlength="500" [value]="draft()"
       (input)="updateDraft($event)" (keydown)="onComposerKeydown($event)" [disabled]="loading()"
-      placeholder="Ask about rooms, energy, conditions, events, or OcuTemp tasks…"></textarea>
-    <button type="button" (click)="send()" [disabled]="loading() || !draft().trim()" aria-label="Send question to OcuGuide">
+      class="!text-sm max-sm:!text-base" aria-describedby="ocu-guide-composer-help ocu-guide-composer-count"
+      placeholder="Ask about rooms, energy, conditions, events, or OcuTemp tasks..."></textarea>
+    <button type="button" class="!size-11" (click)="send()" [disabled]="loading() || !draft().trim()"
+      aria-label="Send question to OcuGuide">
       <span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
     </button>
   </div>
-  <div class="composer-meta"><span>Enter to send · Shift + Enter for a new line</span><span [class.is-near-limit]="charactersRemaining() <= 50">{{ charactersRemaining() }} left</span></div>
+  <div class="composer-meta mt-1 !text-[.625rem]">
+    <span id="ocu-guide-composer-help">Enter to send <i aria-hidden="true">&middot;</i> Shift + Enter for a new line</span>
+    <span id="ocu-guide-composer-count" [class.is-near-limit]="charactersRemaining() <= 50">{{ charactersRemaining() }} left</span>
+  </div>
 </footer>

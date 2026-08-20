@@ -1,54 +1,33 @@
 <main class="guide-page" aria-labelledby="ocu-guide-page-title">
   <header class="guide-header">
     <div class="guide-header__identity">
-      <div class="guide-mark" aria-hidden="true"><span class="material-symbols-outlined">robot_2</span><i></i></div>
+      <div class="guide-mark" aria-hidden="true">
+        <span class="material-symbols-outlined">mode_cool</span>
+        <i></i>
+      </div>
       <div>
-        <div class="guide-header__eyebrow"><span>OcuTemp intelligence desk</span><span class="guide-header__status"><i aria-hidden="true"></i> Ready</span></div>
-        <h1 id="ocu-guide-page-title">OcuGuide</h1><p>Ask for facility facts. Review the evidence before you act.</p>
+        <div class="guide-header__eyebrow">
+          <span>Facility intelligence</span>
+          <span class="guide-header__status"><i aria-hidden="true"></i> Read-only</span>
+        </div>
+        <h1 id="ocu-guide-page-title">Ocu<span>Guide</span></h1>
+        <p>Ask naturally. Facility evidence appears with the answer when it is needed.</p>
       </div>
     </div>
-    <button type="button" class="new-report-button" (click)="startNewReport()" aria-label="Clear this conversation and start a new report">
-      <span class="material-symbols-outlined" aria-hidden="true">note_add</span>New report
+    <button type="button" class="new-conversation-button" (click)="startNewConversation()"
+      aria-label="Clear this conversation and start a new chat">
+      <span class="material-symbols-outlined" aria-hidden="true">edit_square</span>
+      <span>New chat</span>
     </button>
   </header>
 
   <aside class="read-only-strip" aria-label="OcuGuide safety notice">
-    <span class="material-symbols-outlined" aria-hidden="true">visibility</span>
-    <p><strong>Read-only assistant.</strong> OcuGuide can inspect approved facility records, but it cannot control AC units, edit rooms, or change schedules.</p>
+    <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+    <p><strong>Read-only by design.</strong> OcuGuide can inspect approved facility records, but cannot control AC units or change facility data.</p>
+    <span class="read-only-strip__mode">Evidence linked</span>
   </aside>
 
-  <div class="mobile-tabs" role="tablist" aria-label="OcuGuide workspace">
-    <button type="button" role="tab" id="ocu-guide-chat-tab" aria-controls="ocu-guide-chat-panel" [attr.aria-selected]="mobileTab() === 'chat'" [class.is-active]="mobileTab() === 'chat'" (click)="setMobileTab('chat')"><span class="material-symbols-outlined" aria-hidden="true">forum</span>Chat</button>
-    <button type="button" role="tab" id="ocu-guide-report-tab" aria-controls="ocu-guide-report-panel" [attr.aria-selected]="mobileTab() === 'report'" [class.is-active]="mobileTab() === 'report'" (click)="setMobileTab('report')"><span class="material-symbols-outlined" aria-hidden="true">analytics</span>Report @if (latestResponse()) { <i class="mobile-tabs__ready" aria-label="Report ready"></i> }</button>
-  </div>
-
-  <div class="workspace">
-    <app-ocu-guide-conversation id="ocu-guide-chat-panel" role="tabpanel" aria-labelledby="ocu-guide-chat-tab"
-      [class.mobile-panel-hidden]="mobileTab() !== 'chat'" (reportRequested)="showReport()" />
-
-    <section #reportPanel class="report-panel" id="ocu-guide-report-panel" role="tabpanel" tabindex="-1"
-      aria-labelledby="ocu-guide-report-tab" [class.mobile-panel-hidden]="mobileTab() !== 'report'">
-      <header class="panel-heading">
-        <div><span class="panel-heading__index" aria-hidden="true">02</span><div><h2>Evidence report</h2><p>Inspect the source-backed result</p></div></div>
-        @if (latestResponse(); as response) { <span class="panel-heading__count"><i aria-hidden="true"></i>{{ response.presentations.length }} panels</span> }
-      </header>
-      <div class="report-scroll" aria-live="polite" [attr.aria-busy]="loading()">
-        @if (loading()) {
-          <div class="report-progress" role="status"><span class="loading-orbit" aria-hidden="true"><i></i></span><span><strong>{{ loadingAnnouncement() }}</strong><small>The previous report stays visible until the new result is ready.</small></span></div>
-        }
-        @if (latestResponse(); as response) {
-          <app-ocu-guide-report [response]="response" />
-        } @else if (loading()) {
-          <div class="report-skeleton" aria-hidden="true"><div class="report-skeleton__answer"><i></i><i></i><i></i></div><div class="report-skeleton__metrics"><i></i><i></i><i></i><i></i></div><div class="report-skeleton__chart"><i></i></div></div>
-        } @else {
-          <div class="report-empty">
-            <div class="report-empty__blueprint" aria-hidden="true"><span class="material-symbols-outlined">analytics</span><i></i><i></i><i></i></div>
-            <p class="report-empty__eyebrow">Evidence workspace</p><h3>Your next report will assemble here</h3>
-            <p>Ask a question in Chat. OcuGuide keeps its answer separate from the data, charts, comparisons, and navigation steps that support it.</p>
-            <button type="button" (click)="setMobileTab('chat')">Ask a facility question<span class="material-symbols-outlined" aria-hidden="true">arrow_back</span></button>
-          </div>
-        }
-      </div>
-    </section>
-  </div>
+  <section class="conversation-shell" aria-label="OcuGuide chat workspace">
+    <app-ocu-guide-conversation />
+  </section>
 </main>
