@@ -4,9 +4,7 @@ import {
   Component,
   ElementRef,
   OnDestroy,
-  afterNextRender,
   afterRenderEffect,
-  inject,
   input,
   signal,
   viewChildren,
@@ -32,7 +30,10 @@ import {
   EnergyReportPresentation,
   EnergyRoomDataStatus,
   EnergyRoomRow,
+  EnergyTrendPoint,
+  RecentEventRow,
   RoomCondition,
+  RoomTelemetryRow,
 } from '../../models/chat.models';
 
 Chart.register(
@@ -97,16 +98,15 @@ export class OcuGuideReportComponent implements OnDestroy {
   readonly evidence = input<ChatEvidenceMetadata>();
   readonly turnId = input.required<string>();
 
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly reportCharts = viewChildren<ElementRef<HTMLCanvasElement>>('reportChart');
   private readonly energyStates = signal<Record<string, EnergyPanelState>>({});
-  private readonly expandedRawResults = signal<ReadonlySet<string>>(new Set());
-  private readonly isVisible = signal(false);
   private readonly charts: Chart[] = [];
   private readonly chartSeriesCache = new WeakMap<EnergyReportPresentation, EnergyChartSeries>();
   private readonly filteredRoomsCache = new WeakMap<EnergyReportPresentation, EnergyRoomsCache>();
-  private readonly rawResultCache = new WeakMap<ChatPresentation, string>();
-  private visibilityObserver?: IntersectionObserver;
+  private readonly observedChartCanvases = new Set<HTMLCanvasElement>();
+  private readonly visibleChartCanvases = new Set<HTMLCanvasElement>();
+  private chartVisibilityObserver?: IntersectionObserver;
+  private destroyed = false;
   private readonly dateTimeFormatter = new Intl.DateTimeFormat('en-PH', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -114,21 +114,19 @@ export class OcuGuideReportComponent implements OnDestroy {
   });
 
   constructor() {
-    afterNextRender(() => this.observeVisibility());
-
     afterRenderEffect(() => {
       const presentations = this.presentations();
       const canvases = this.reportCharts();
-      if (!this.isVisible()) {
-        this.destroyCharts();
-        return;
-      }
+      this.syncChartObservers(canvases);
       this.rebuildCharts(presentations, canvases);
     });
   }
 
   ngOnDestroy(): void {
-    this.visibilityObserver?.disconnect();
+    this.destroyed = true;
+    this.chartVisibilityObserver?.disconnect();
+    this.observedChartCanvases.clear();
+    this.visibleChartCanvases.clear();
     this.destroyCharts();
   }
 
@@ -172,17 +170,30 @@ export class OcuGuideReportComponent implements OnDestroy {
     const stateKey = `${query}\u0000${state.sort}\u0000${state.direction}`;
     const cached = this.filteredRoomsCache.get(report);
     if (cached?.stateKey === stateKey) return cached.rows;
-    const rows = query
+    const candidates = query
       ? report.rooms.filter((row) => row.roomName.toLocaleLowerCase().includes(query))
       : [...report.rooms];
 
-    rows.sort((left, right) => {
-      const leftMissing = this.isMissingSortValue(left, state.sort);
-      const rightMissing = this.isMissingSortValue(right, state.sort);
-      if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
-      const comparison = this.compareEnergyRows(left, right, state.sort);
-      return state.direction === 'asc' ? comparison : -comparison;
-    });
+    const rows = candidates
+      .map((row, originalIndex) => ({ row, originalIndex }))
+      .sort((leftEntry, rightEntry) => {
+        const leftMissing = this.isMissingSortValue(leftEntry.row, state.sort);
+        const rightMissing = this.isMissingSortValue(rightEntry.row, state.sort);
+        if (leftMissing !== rightMissing) return leftMissing ? 1 : -1;
+
+        const comparison = this.compareEnergyRows(leftEntry.row, rightEntry.row, state.sort);
+        if (comparison !== 0) {
+          return state.direction === 'asc' ? comparison : -comparison;
+        }
+
+        const roomComparison = leftEntry.row.roomName.localeCompare(
+          rightEntry.row.roomName,
+          undefined,
+          { numeric: true },
+        );
+        return roomComparison || leftEntry.originalIndex - rightEntry.originalIndex;
+      })
+      .map(({ row }) => row);
     this.filteredRoomsCache.set(report, { stateKey, rows });
     return rows;
   }
@@ -242,6 +253,7 @@ export class OcuGuideReportComponent implements OnDestroy {
 
   formatRuntime(seconds: number | null): string {
     if (seconds === null) return '—';
+    if (seconds > 0 && seconds < 60) return '<1m';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     if (hours === 0) return `${minutes}m`;
@@ -264,67 +276,85 @@ export class OcuGuideReportComponent implements OnDestroy {
     return labels[status];
   }
 
+  climateStatusLabel(status: ClimateSuggestionRow['status']): string {
+    const labels: Record<ClimateSuggestionRow['status'], string> = {
+      available: 'Suggestion available',
+      no_suggestion: 'No suggestion',
+      no_device: 'No device',
+      device_unavailable: 'Device unavailable',
+    };
+    return labels[status];
+  }
+
   conditionLabel(condition: RoomCondition): string {
     return condition === 'unknown'
       ? 'Unknown'
       : `${condition.charAt(0).toUpperCase()}${condition.slice(1)}`;
   }
 
+  onlineStateDotClass(state: string): string {
+    switch (state) {
+      case 'online': return 'bg-emerald-500';
+      case 'stale': return 'bg-amber-500';
+      case 'offline': return 'bg-red-500';
+      default: return 'bg-slate-400';
+    }
+  }
+
+  autoApplyLabel(value: boolean | null): string {
+    if (value === null) return 'not reported';
+    return value ? 'on' : 'off';
+  }
+
+  climateActionLabel(row: ClimateSuggestionRow): string {
+    if (row.status !== 'available') return this.climateStatusLabel(row.status);
+    if (row.applied === true) return 'Applied';
+    if (row.autoApplyEnabled === true) return 'Auto-apply on';
+    if (row.applied === false && row.autoApplyEnabled === false) return 'Review';
+    return 'Not reported';
+  }
+
+  climateActionClass(row: ClimateSuggestionRow): string {
+    if (row.status !== 'available' || row.applied === null || row.autoApplyEnabled === null) {
+      return 'bg-slate-100 text-slate-600';
+    }
+    if (row.applied) return 'bg-emerald-50 text-emerald-700';
+    if (row.autoApplyEnabled) return 'bg-blue-50 text-blue-700';
+    return 'bg-amber-50 text-amber-800';
+  }
+
+  helpTopicLabel(topic: string): string {
+    if (topic === 'ocu-guide') return 'OcuGuide';
+    const words = topic.split('-').map((word) => word.trim()).filter(Boolean);
+    if (words.length === 0) return 'OcuTemp help';
+    return words
+      .map((word) => `${word.charAt(0).toLocaleUpperCase('en-US')}${word.slice(1)}`)
+      .join(' ');
+  }
+
   presentationDomId(prefix: string, presentationId: string): string {
     return `${prefix}-${this.turnId()}-${presentationId}`.replace(/[^A-Za-z0-9_-]/g, '-');
   }
 
-  toolName(presentation: ChatPresentation): string {
-    const names: Record<ChatPresentation['kind'], string> = {
-      'room-telemetry': 'get_room_telemetry',
-      'energy-report': 'get_energy_report',
-      'climate-suggestions': 'get_climate_prediction_logs',
-      'recent-events': 'get_recent_room_events',
-      'system-help': 'get_system_help',
-    };
-    return names[presentation.kind];
+  eventTrackKey(event: RecentEventRow, index: number): string {
+    return [
+      event.updatedAt,
+      event.roomName,
+      event.eventType,
+      event.mode ?? '',
+      index,
+    ].join('\u0000');
   }
 
-  toolResultSummary(presentation: ChatPresentation): string {
-    switch (presentation.kind) {
-      case 'energy-report':
-        return presentation.metrics.roomsWithRecords === 0
-          ? `No recorded energy values across ${presentation.metrics.activeRooms} active rooms`
-          : `${presentation.metrics.roomsWithRecords} of ${presentation.metrics.activeRooms} rooms, ${presentation.metrics.totalKwh.toFixed(2)} kWh estimated`;
-      case 'room-telemetry':
-        return `${presentation.rooms.length} room snapshot${presentation.rooms.length === 1 ? '' : 's'} returned`;
-      case 'climate-suggestions':
-        return `${presentation.rooms.length} room record${presentation.rooms.length === 1 ? '' : 's'} returned`;
-      case 'recent-events':
-        return `${presentation.events.length} recent event${presentation.events.length === 1 ? '' : 's'} returned`;
-      case 'system-help':
-        return presentation.restricted
-          ? `Access to ${presentation.topic} guidance is restricted`
-          : `${presentation.steps.length} guidance step${presentation.steps.length === 1 ? '' : 's'} returned`;
-    }
+  trendTrackKey(point: EnergyTrendPoint): string {
+    return `${point.start}\u0000${point.end}\u0000${point.label}`;
   }
 
-  onRawResultToggle(presentationId: string, event: Event): void {
-    const target = event.target;
-    if (!(target instanceof HTMLDetailsElement)) return;
-    this.expandedRawResults.update((ids) => {
-      const next = new Set(ids);
-      if (target.open) next.add(presentationId);
-      else next.delete(presentationId);
-      return next;
-    });
-  }
-
-  isRawResultOpen(presentationId: string): boolean {
-    return this.expandedRawResults().has(presentationId);
-  }
-
-  rawToolResult(presentation: ChatPresentation): string {
-    const cached = this.rawResultCache.get(presentation);
-    if (cached) return cached;
-    const result = JSON.stringify(presentation, null, 2) ?? '{}';
-    this.rawResultCache.set(presentation, result);
-    return result;
+  scheduleTrackKey(
+    schedule: RoomTelemetryRow['schedules'][number],
+    index: number,
+  ): string {
+    return [schedule.day, schedule.startTime, schedule.endTime, schedule.subject, index].join('\u0000');
   }
 
   private patchEnergyState(id: string, patch: Partial<EnergyPanelState>): void {
@@ -347,18 +377,12 @@ export class OcuGuideReportComponent implements OnDestroy {
       case 'status':
         return left.status.localeCompare(right.status);
       case 'rank':
-        return this.compareNullableNumbers(left.rank, right.rank, true);
+        return this.compareNullableNumbers(left.rank, right.rank);
     }
   }
 
-  private compareNullableNumbers(
-    left: number | null,
-    right: number | null,
-    nullsLast = false,
-  ): number {
-    if (left === null && right === null) return 0;
-    if (left === null) return nullsLast ? 1 : -1;
-    if (right === null) return nullsLast ? -1 : 1;
+  private compareNullableNumbers(left: number | null, right: number | null): number {
+    if (left === null || right === null) return 0;
     return left - right;
   }
 
@@ -368,8 +392,9 @@ export class OcuGuideReportComponent implements OnDestroy {
       case 'energy': return row.estimatedKwh === null;
       case 'share': return row.sharePercent === null;
       case 'runtime': return row.runtimeSeconds === null;
+      case 'status': return row.status !== 'recorded';
       case 'room':
-      case 'status': return false;
+        return false;
     }
   }
 
@@ -380,7 +405,9 @@ export class OcuGuideReportComponent implements OnDestroy {
     this.destroyCharts();
     const reportsById = new Map(
       presentations
-        .filter((presentation): presentation is EnergyReportPresentation => presentation.kind === 'energy-report')
+        .filter((presentation): presentation is EnergyReportPresentation => (
+          presentation.kind === 'energy-report' && presentation.availability === 'available'
+        ))
         .map((report) => [report.id, report]),
     );
     const reducedMotion = typeof window !== 'undefined'
@@ -388,6 +415,7 @@ export class OcuGuideReportComponent implements OnDestroy {
 
     for (const canvasRef of canvases) {
       const canvas = canvasRef.nativeElement;
+      if (!this.visibleChartCanvases.has(canvas)) continue;
       const report = reportsById.get(canvas.dataset['presentationId'] ?? '');
       const kind = canvas.dataset['chartKind'] as EnergyChartKind | undefined;
       if (!report || !kind) continue;
@@ -504,17 +532,40 @@ export class OcuGuideReportComponent implements OnDestroy {
     for (const chart of this.charts.splice(0)) chart.destroy();
   }
 
-  private observeVisibility(): void {
+  private syncChartObservers(canvases: readonly ElementRef<HTMLCanvasElement>[]): void {
+    const currentCanvases = new Set(canvases.map((canvasRef) => canvasRef.nativeElement));
+    for (const canvas of this.observedChartCanvases) {
+      if (currentCanvases.has(canvas)) continue;
+      this.chartVisibilityObserver?.unobserve(canvas);
+      this.observedChartCanvases.delete(canvas);
+      this.visibleChartCanvases.delete(canvas);
+    }
+
     if (typeof IntersectionObserver === 'undefined') {
-      this.isVisible.set(true);
+      this.visibleChartCanvases.clear();
+      for (const canvas of currentCanvases) this.visibleChartCanvases.add(canvas);
       return;
     }
 
-    this.visibilityObserver = new IntersectionObserver(
-      (entries) => this.isVisible.set(entries.some((entry) => entry.isIntersecting)),
-      { rootMargin: '240px 0px' },
-    );
-    this.visibilityObserver.observe(this.host.nativeElement);
+    const observer = this.chartVisibilityObserver ??= new IntersectionObserver((entries) => {
+      if (this.destroyed) return;
+      const renderedCanvases = new Set(
+        this.reportCharts().map((canvasRef) => canvasRef.nativeElement),
+      );
+      for (const entry of entries) {
+        const canvas = entry.target;
+        if (!(canvas instanceof HTMLCanvasElement) || !renderedCanvases.has(canvas)) continue;
+        if (entry.isIntersecting) this.visibleChartCanvases.add(canvas);
+        else this.visibleChartCanvases.delete(canvas);
+      }
+      this.rebuildCharts(this.presentations(), this.reportCharts());
+    }, { rootMargin: '240px 0px' });
+
+    for (const canvas of currentCanvases) {
+      if (this.observedChartCanvases.has(canvas)) continue;
+      this.observedChartCanvases.add(canvas);
+      observer.observe(canvas);
+    }
   }
 
   private energyChartSeries(report: EnergyReportPresentation): EnergyChartSeries {

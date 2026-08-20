@@ -115,21 +115,23 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
         }))
         .sort(compareEnergyRows);
 
-    const trend: EnergyTrendPoint[] = buckets.map((bucket) => ({
-        label: bucket.label,
-        start: dateKey(bucket.start),
-        end: dateKey(bucket.end),
-        estimatedKwh: round(
-            sum(
-                recordedRooms.flatMap((room) =>
-                    room.records
-                        .filter((record) => isBetween(parseDateKey(record.date)!, bucket.start, bucket.end))
-                        .map((record) => record.estimatedKwh),
+    const trend: EnergyTrendPoint[] = recordedRooms.length === 0
+        ? []
+        : buckets.map((bucket) => ({
+            label: bucket.label,
+            start: dateKey(bucket.start),
+            end: dateKey(bucket.end),
+            estimatedKwh: round(
+                sum(
+                    recordedRooms.flatMap((room) =>
+                        room.records
+                            .filter((record) => isBetween(parseDateKey(record.date)!, bucket.start, bucket.end))
+                            .map((record) => record.estimatedKwh),
+                    ),
                 ),
+                3,
             ),
-            3,
-        ),
-    }));
+        }));
 
     const roomsWithRecords = recordedRooms.length;
     const coveragePercent = round(
@@ -138,14 +140,15 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
     );
     const presentation: EnergyReportPresentation = {
         kind: 'energy-report',
+        availability: 'available',
         id: options.id,
         title: `Estimated energy report — ${resolved.range.label}`,
         estimated: true,
         range: resolved.range,
         metrics: {
-            totalKwh: round(totalKwh, 3),
-            runtimeSeconds: Math.round(totalRuntimeSeconds),
-            sessionCount: Math.round(totalSessionCount),
+            totalKwh: roomsWithRecords > 0 ? round(totalKwh, 3) : null,
+            runtimeSeconds: roomsWithRecords > 0 ? Math.round(totalRuntimeSeconds) : null,
+            sessionCount: roomsWithRecords > 0 ? Math.round(totalSessionCount) : null,
             activeRooms: options.rooms.length,
             roomsWithRecords,
             coveragePercent,
@@ -382,15 +385,46 @@ function buildEnergyFacts(
     prefix: string,
     presentation: EnergyReportPresentation,
 ): GroundingFact[] {
+    const recordedTotalsAvailable =
+        presentation.metrics.roomsWithRecords > 0 &&
+        presentation.metrics.totalKwh !== null &&
+        presentation.metrics.runtimeSeconds !== null &&
+        presentation.metrics.sessionCount !== null;
+    const noRecords = presentation.rooms.filter((room) => room.status === 'no_records').length;
+    const noDevice = presentation.rooms.filter((room) => room.status === 'no_device').length;
+    const unavailable = presentation.rooms.filter((room) => room.status === 'device_unavailable').length;
+    const unavailableDetails: string[] = [];
+    if (noRecords > 0) {
+        unavailableDetails.push(
+            `${noRecords} active room${noRecords === 1 ? '' : 's'} ${noRecords === 1 ? 'was' : 'were'} read successfully and ${noRecords === 1 ? 'has' : 'have'} no energy records in the selected range.`,
+        );
+    }
+    if (noDevice > 0) {
+        unavailableDetails.push(
+            `${noDevice} active room${noDevice === 1 ? '' : 's'} ${noDevice === 1 ? 'has' : 'have'} no assigned device.`,
+        );
+    }
+    if (unavailable > 0) {
+        unavailableDetails.push(
+            `Assigned-device energy data is unavailable for ${unavailable} active room${unavailable === 1 ? '' : 's'}.`,
+        );
+    }
+    if (presentation.metrics.activeRooms === 0) {
+        unavailableDetails.push('No active rooms matched the requested energy scope.');
+    }
+    const summary = recordedTotalsAvailable
+        ? `${presentation.range.label} (${presentation.range.start} through ${presentation.range.end}): ` +
+            `${presentation.metrics.roomsWithRecords} of ${presentation.metrics.activeRooms} active rooms ` +
+            `have records (${presentation.metrics.coveragePercent}% coverage); those recorded rooms total an estimated ` +
+            `${presentation.metrics.totalKwh} kWh, ${presentation.metrics.runtimeSeconds} runtime seconds, ` +
+            `and ${presentation.metrics.sessionCount} sessions.`
+        : `${presentation.range.label} (${presentation.range.start} through ${presentation.range.end}): ` +
+            'no verified recorded energy total, runtime total, session total, or trend is available. ' +
+            (unavailableDetails.join(' ') || 'Recorded totals could not be verified.');
     const facts: GroundingFact[] = [
         {
             id: `${prefix}.summary`,
-            statement:
-                `${presentation.range.label} (${presentation.range.start} through ${presentation.range.end}): ` +
-                `${presentation.metrics.roomsWithRecords} of ${presentation.metrics.activeRooms} active rooms ` +
-                `have records (${presentation.metrics.coveragePercent}% coverage); those recorded rooms total an estimated ` +
-                `${presentation.metrics.totalKwh} kWh, ${presentation.metrics.runtimeSeconds} runtime seconds, ` +
-                `and ${presentation.metrics.sessionCount} sessions.`,
+            statement: summary.trim(),
         },
     ];
 

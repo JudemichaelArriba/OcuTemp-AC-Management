@@ -38,6 +38,7 @@ export class FirebaseRestClient {
     private readonly requestAbortSignal: AbortSignal | undefined;
     private roomsSnapshotPromise: Promise<Record<string, unknown>> | undefined;
     private devicesSnapshotPromise: Promise<Record<string, unknown>> | undefined;
+    private deviceKeysSnapshotPromise: Promise<Record<string, unknown>> | undefined;
     private readonly energyPromises = new Map<string, Promise<Record<string, unknown> | null>>();
     private readonly decisionLogPromises = new Map<number, Promise<Record<string, unknown>>>();
 
@@ -54,7 +55,7 @@ export class FirebaseRestClient {
         this.requestAbortSignal = options.abortSignal;
     }
 
-    async read<T = unknown>(
+    private async read<T = unknown>(
         path: string,
         query: FirebaseRestQuery = {},
         options: FirebaseReadOptions = {},
@@ -138,6 +139,11 @@ export class FirebaseRestClient {
     getDevices(): Promise<Record<string, unknown>> {
         this.devicesSnapshotPromise ??= this.readRecordSnapshot('devices');
         return this.devicesSnapshotPromise;
+    }
+
+    getDeviceKeys(): Promise<Record<string, unknown>> {
+        this.deviceKeysSnapshotPromise ??= this.readRecordSnapshot('devices', { shallow: true });
+        return this.deviceKeysSnapshotPromise;
     }
 
     getEnergyForDevice(
@@ -358,6 +364,7 @@ function validateDatabaseUrl(rawUrl: string): string {
     }
     if (
         url.protocol !== 'https:' ||
+        !isFirebaseDatabaseHostname(url.hostname) ||
         url.username ||
         url.password ||
         (url.pathname !== '/' && url.pathname !== '') ||
@@ -367,6 +374,12 @@ function validateDatabaseUrl(rawUrl: string): string {
         throw new ChatApiError('configuration_error', 'Firebase is not configured safely.', 500);
     }
     return url.toString().replace(/\/$/, '');
+}
+
+function isFirebaseDatabaseHostname(hostname: string): boolean {
+    const normalized = hostname.toLocaleLowerCase('en-US');
+    return normalized.endsWith('.firebaseio.com') ||
+        normalized.endsWith('.firebasedatabase.app');
 }
 
 function boundedInteger(
@@ -387,9 +400,9 @@ function boundedInteger(
 function firebaseResponseError(status: number): ChatApiError {
     if (status === 401) {
         return new ChatApiError(
-            'authentication_required',
-            'Your Firebase session is no longer valid.',
-            401,
+            'account_not_authorized',
+            'Your account is not allowed to read assistant data.',
+            403,
         );
     }
     if (status === 403) {

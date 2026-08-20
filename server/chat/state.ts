@@ -20,9 +20,14 @@ export interface DecodedChatState {
 }
 
 /** Encrypts compact, bounded state with a key derived specifically for its UID. */
-export async function encodeChatState(payload: ChatStatePayload): Promise<string> {
+export async function encodeChatState(
+    payload: ChatStatePayload,
+    abortSignal?: AbortSignal,
+): Promise<string> {
+    assertNotAborted(abortSignal);
     const normalized = validateAndNormalizeState(payload, false);
     const key = await deriveUidStateKey(normalized.uid);
+    assertNotAborted(abortSignal);
     let turns = normalized.turns;
 
     while (true) {
@@ -36,6 +41,7 @@ export async function encodeChatState(payload: ChatStatePayload): Promise<string
                 v: 1,
             })
             .encrypt(key);
+        assertNotAborted(abortSignal);
 
         if (textEncoder.encode(token).byteLength <= CHAT_STATE_MAX_TOKEN_BYTES) {
             return token;
@@ -54,7 +60,9 @@ export async function encodeChatState(payload: ChatStatePayload): Promise<string
 export async function decodeChatState(
     token: string | undefined,
     uid: string,
+    abortSignal?: AbortSignal,
 ): Promise<DecodedChatState> {
+    assertNotAborted(abortSignal);
     if (token === undefined) {
         return { state: null, contextReset: false };
     }
@@ -68,10 +76,12 @@ export async function decodeChatState(
 
     try {
         const key = await deriveUidStateKey(uid);
+        assertNotAborted(abortSignal);
         const { plaintext, protectedHeader } = await compactDecrypt(token, key, {
             keyManagementAlgorithms: ['dir'],
             contentEncryptionAlgorithms: ['A256GCM'],
         });
+        assertNotAborted(abortSignal);
 
         if (
             protectedHeader.alg !== 'dir' ||
@@ -94,6 +104,9 @@ export async function decodeChatState(
         }
         return { state, contextReset: false };
     } catch (error: unknown) {
+        if (abortSignal?.aborted) {
+            throw stateUnavailable(error);
+        }
         if (error instanceof ChatApiError) {
             throw error;
         }
@@ -170,8 +183,8 @@ function normalizeTurn(value: unknown): ChatStateTurn {
     }
 
     return {
-        user: truncateCharacters(user, MAX_USER_TURN_CHARACTERS),
-        assistant: truncateCharacters(assistant, MAX_ASSISTANT_TURN_CHARACTERS),
+        user: sanitizeStateText(user, MAX_USER_TURN_CHARACTERS),
+        assistant: sanitizeStateText(assistant, MAX_ASSISTANT_TURN_CHARACTERS),
     };
 }
 
@@ -215,6 +228,37 @@ async function deriveUidStateKey(uid: string): Promise<Uint8Array> {
 function truncateCharacters(value: string, maximum: number): string {
     const characters = Array.from(value);
     return characters.length <= maximum ? value : characters.slice(0, maximum).join('');
+}
+
+function sanitizeStateText(value: string, maximum: number): string {
+    const redacted = value
+        .normalize('NFKC')
+        .replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/gu, ' ')
+        .replace(/https:\/\/[^\s/]+\.(?:firebaseio\.com|firebasedatabase\.app)(?:\/[^\s]*)?/giu, '[redacted Firebase reference]')
+        .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/gu, '[redacted token]')
+        .replace(/\bbearer\s+[A-Za-z0-9._~+\/-]{8,}={0,2}/giu, 'Bearer [redacted]')
+        .replace(/\b(?:api[_ -]?key|access[_ -]?token|id[_ -]?token|state[_ -]?token|secret|password)\s*[:=]\s*[^\s,;]+/giu, '$1=[redacted]')
+        .replace(/\b(?:users|devices|rooms|decisionLogs|energy|logs)\/[A-Za-z0-9_.~%/-]+/giu, '[redacted internal reference]')
+        .replace(/\b(?=[A-Za-z0-9_+/-]{32,}={0,2}(?=$|[\s,;:.!?"'<>]))(?=[A-Za-z0-9_+/-]*[A-Za-z])(?=[A-Za-z0-9_+/-]*\d)[A-Za-z0-9_+/-]{32,}={0,2}/gu, '[redacted opaque value]')
+        .replace(/\s+/gu, ' ')
+        .trim();
+    return truncateCharacters(redacted, maximum);
+}
+
+function assertNotAborted(abortSignal?: AbortSignal): void {
+    if (abortSignal?.aborted) {
+        throw stateUnavailable(abortSignal.reason);
+    }
+}
+
+function stateUnavailable(cause?: unknown): ChatApiError {
+    return new ChatApiError(
+        'assistant_unavailable',
+        'Chat state processing timed out.',
+        503,
+        undefined,
+        cause,
+    );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -33,6 +33,7 @@ const textEncoder = new TextEncoder();
 
 async function handler(request: Request): Promise<Response> {
     const requestId = globalThis.crypto.randomUUID();
+    let stage = 'request_headers';
     let lease: Awaited<ReturnType<typeof acquireAuthenticatedLimits>> | undefined;
     const turnController = new AbortController();
     const abortTurn = (): void => turnController.abort();
@@ -44,13 +45,18 @@ async function handler(request: Request): Promise<Response> {
         assertPostMethod(request);
         assertAllowedOrigin(request);
         assertJsonContentType(request);
+        stage = 'pre_auth_limit';
         await enforcePreAuthRateLimit(request, turnController.signal);
+        stage = 'request_body';
         const rawBody = await readJsonBody(request, turnController.signal);
         const input = validateChatRequest(rawBody);
+        stage = 'authentication';
         const user = await authenticateChatRequest(request, turnController.signal);
+        stage = 'authenticated_limits';
         lease = await acquireAuthenticatedLimits(user.uid, turnController.signal);
 
-        const decoded = await decodeChatState(input.stateToken, user.uid);
+        stage = 'state_decode';
+        const decoded = await decodeChatState(input.stateToken, user.uid, turnController.signal);
         const runtimeConfig = getChatConfig();
         const firebase = new FirebaseRestClient({
             databaseUrl: runtimeConfig.firebaseDatabaseUrl,
@@ -58,7 +64,9 @@ async function handler(request: Request): Promise<Response> {
             abortSignal: turnController.signal,
         });
 
+        stage = 'orchestration';
         const result = await runChatTurn({
+            requestId,
             message: input.message,
             user,
             state: decoded.state,
@@ -79,6 +87,7 @@ async function handler(request: Request): Promise<Response> {
             ].slice(-5),
         };
 
+        stage = 'state_encode';
         const response: ChatTurnResponse = {
             turnId: requestId,
             answer: result.answer,
@@ -89,7 +98,7 @@ async function handler(request: Request): Promise<Response> {
                 partial: result.partial,
                 notices: result.notices,
             },
-            stateToken: await encodeChatState(state),
+            stateToken: await encodeChatState(state, turnController.signal),
             contextReset: decoded.contextReset,
         };
 
@@ -103,7 +112,16 @@ async function handler(request: Request): Promise<Response> {
         }
         return jsonResponse(serialized, 200);
     } catch (error: unknown) {
-        return handleError(error, requestId);
+        const mappedError = turnController.signal.aborted && !isExpectedClientError(error)
+            ? new ChatApiError(
+                'assistant_unavailable',
+                'The assistant request exceeded its safe processing deadline.',
+                503,
+                undefined,
+                error,
+            )
+            : error;
+        return handleError(mappedError, requestId, stage);
     } finally {
         clearTimeout(turnDeadline);
         request.signal.removeEventListener('abort', abortTurn);
@@ -113,8 +131,16 @@ async function handler(request: Request): Promise<Response> {
 
 export default { fetch: handler };
 
-function handleError(error: unknown, requestId: string): Response {
+function handleError(error: unknown, requestId: string, stage: string): Response {
     if (error instanceof ChatApiError) {
+        if (error.statusCode >= 500) {
+            console.error('[chat] request failed', {
+                requestId,
+                stage,
+                code: error.code,
+                status: error.statusCode,
+            });
+        }
         const body: ChatErrorResponse = {
             error: {
                 code: error.code,
@@ -129,7 +155,7 @@ function handleError(error: unknown, requestId: string): Response {
     }
 
     if (error instanceof BothProvidersFailedError) {
-        console.error('[chat] both providers unavailable', { requestId });
+        console.error('[chat] both providers unavailable', { requestId, stage });
         return jsonResponse(
             JSON.stringify({
                 error: {
@@ -144,6 +170,7 @@ function handleError(error: unknown, requestId: string): Response {
 
     console.error('[chat] unhandled request failure', {
         requestId,
+        stage,
         category: error instanceof Error ? error.name : 'unknown',
     });
     return jsonResponse(
@@ -156,6 +183,10 @@ function handleError(error: unknown, requestId: string): Response {
         } satisfies ChatErrorResponse),
         500,
     );
+}
+
+function isExpectedClientError(error: unknown): boolean {
+    return error instanceof ChatApiError && error.statusCode < 500;
 }
 
 function publicErrorMessage(error: ChatApiError): string {

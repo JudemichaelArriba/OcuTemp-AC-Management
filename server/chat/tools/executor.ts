@@ -65,6 +65,7 @@ export interface ToolExecutionContext {
     readonly firebase: FirebaseRestClient;
     readonly user: AuthenticatedChatUser;
     readonly now?: Date;
+    readonly abortSignal?: AbortSignal;
 }
 
 interface FacilityRoom {
@@ -231,12 +232,13 @@ const SYSTEM_HELP: readonly HelpEntry[] = [
         steps: [
             'Open OcuGuide from the sidebar.',
             'Ask about active-room telemetry, estimated energy, climate suggestions, recent events, or OcuTemp navigation.',
-            'Review the evidence report separately from the concise answer.',
+            'Review any supporting table, metric, or chart directly beneath the answer.',
         ],
         route: '/app/ocu-guide',
         adminOnly: false,
     },
 ] as const;
+const SYSTEM_HELP_TOPICS: ReadonlySet<string> = new Set(SYSTEM_HELP.map((entry) => entry.topic));
 
 /**
  * Executes at most four independent, unique, read-only plans. Shared Firebase
@@ -248,6 +250,7 @@ export async function executeToolPlans(
     plans: readonly PlannerToolPlan[],
     context: ToolExecutionContext,
 ): Promise<ToolExecutionResult[]> {
+    assertToolNotAborted(context.abortSignal);
     const validatedPlans = validatePlans(plans);
     const snapshots = new RequestSnapshots(context.firebase);
     const now = context.now ?? new Date();
@@ -257,9 +260,10 @@ export async function executeToolPlans(
 
     const settled = await Promise.allSettled(
         validatedPlans.map((plan, index) =>
-            executeOne(plan, index + 1, snapshots, context.user, now),
+            executeOne(plan, index + 1, snapshots, context.user, now, context.abortSignal),
         ),
     );
+    assertToolNotAborted(context.abortSignal);
 
     for (const outcome of settled) {
         if (outcome.status === 'rejected' && shouldPropagate(outcome.reason)) {
@@ -280,7 +284,9 @@ async function executeOne(
     snapshots: RequestSnapshots,
     user: AuthenticatedChatUser,
     now: Date,
+    abortSignal?: AbortSignal,
 ): Promise<ToolExecutionResult> {
+    assertToolNotAborted(abortSignal);
     switch (plan.name) {
         case 'get_room_telemetry':
             return executeTelemetry(plan, ordinal, snapshots, now);
@@ -292,6 +298,18 @@ async function executeOne(
             return executeRecentEvents(plan, ordinal, snapshots);
         case 'get_system_help':
             return executeSystemHelp(plan, ordinal, user);
+    }
+}
+
+function assertToolNotAborted(abortSignal?: AbortSignal): void {
+    if (abortSignal?.aborted) {
+        throw new ChatApiError(
+            'assistant_unavailable',
+            'Facility tool execution timed out.',
+            503,
+            undefined,
+            abortSignal.reason,
+        );
     }
 }
 
@@ -322,11 +340,15 @@ async function executeTelemetry(
         const temperature = boundedNumber(device?.['temperature'], -50, 100);
         const humidity = boundedNumber(device?.['humidity'], 0, 100);
         const lastSeen = normalizedTimestamp(nestedValue(device, 'status', 'lastSeen'));
-        const onlineState = onlineStateFor(lastSeen, now);
+        const onlineState: DeviceOnlineState = device
+            ? onlineStateFor(lastSeen, now)
+            : 'unknown';
         const condition = roomCondition(temperature, humidity);
         const occupancy = strictBoolean(device?.['occupancy']);
         const acPower = strictBoolean(nestedValue(device, 'acState', 'power'));
-        const aiAutoApply = nestedValue(device, 'control', 'aiAutoApply') === true;
+        const aiAutoApply = device
+            ? strictBoolean(nestedValue(device, 'control', 'aiAutoApply'))
+            : null;
         const schedules = parseSchedules(room.raw['schedules']);
         const row: RoomTelemetryRow = {
             roomName: room.roomName,
@@ -362,6 +384,7 @@ async function executeTelemetry(
 
     const presentation: RoomTelemetryPresentation = {
         kind: 'room-telemetry',
+        availability: 'available',
         id: `tool-${ordinal}`,
         title: plan.roomNames.length === 0
             ? 'Current telemetry for active rooms'
@@ -414,17 +437,30 @@ async function executeEnergy(
     const range = resolveEnergyRange(plan, now);
     const [facility, deviceKeyOutcome] = await Promise.all([
         snapshots.rooms(),
-        settlePromise(snapshots.firebase.read<Record<string, unknown>>('devices', { shallow: true })),
+        settlePromise(snapshots.firebase.getDeviceKeys()),
     ]);
     if (deviceKeyOutcome.status === 'rejected' && shouldPropagate(deviceKeyOutcome.reason)) {
         throw deviceKeyOutcome.reason;
     }
     const selection = selectRooms(facility, plan.roomNames);
-    const deviceDirectoryFailed = deviceKeyOutcome.status === 'rejected';
-    const availableDeviceKeys =
-        deviceKeyOutcome.status === 'fulfilled' && isRecord(deviceKeyOutcome.value)
-            ? deviceKeyOutcome.value
-            : {};
+    if (deviceKeyOutcome.status === 'rejected') {
+        const unavailable = buildUnavailableResult(plan, ordinal, now);
+        return {
+            ...unavailable,
+            facts: [
+                ...selectionFacts(selection, `t${ordinal}.scope`),
+                ...unavailable.facts,
+            ],
+            notices: uniqueStrings([
+                ...facility.notices,
+                ...selection.notices,
+                'The device directory could not be read; the requested energy report is unavailable.',
+                ...unavailable.notices,
+            ]),
+            partial: true,
+        };
+    }
+    const availableDeviceKeys = isRecord(deviceKeyOutcome.value) ? deviceKeyOutcome.value : {};
     const energyReads = await allSettledBounded(
         selection.rooms,
         MAX_CONCURRENT_ENERGY_READS,
@@ -437,7 +473,6 @@ async function executeEnergy(
                     deviceAssigned: room.deviceAssigned,
                     deviceAvailable: available,
                     daily: null,
-                    readFailed: deviceDirectoryFailed && room.deviceAssigned,
                 };
             }
             return {
@@ -492,11 +527,8 @@ async function executeEnergy(
             ...facility.notices,
             ...selection.notices,
             ...built.notices,
-            ...(deviceDirectoryFailed
-                ? ['The device directory could not be read; assigned devices are marked unavailable.']
-                : []),
         ]),
-        partial: facility.partial || selection.partial || built.partial || deviceDirectoryFailed,
+        partial: facility.partial || selection.partial || built.partial,
     };
 }
 
@@ -532,6 +564,9 @@ async function executeClimateSuggestions(
             if (!suggestion || suggestedTemp === null) {
                 row = emptyClimateRow(room.roomName, 'no_suggestion');
             } else {
+                const controlAutoApply = strictBoolean(
+                    nestedValue(device, 'control', 'aiAutoApply'),
+                );
                 row = {
                     roomName: room.roomName,
                     status: 'available',
@@ -551,10 +586,9 @@ async function executeClimateSuggestions(
                     ),
                     suggestedTemp: round(suggestedTemp, 1),
                     reason: cleanStoredText(suggestion['reason'], 300),
-                    applied: suggestion['applied'] === true,
+                    applied: strictBoolean(suggestion['applied']),
                     autoApplyEnabled:
-                        nestedValue(device, 'control', 'aiAutoApply') === true ||
-                        suggestion['autoApplyEnabled'] === true,
+                        controlAutoApply ?? strictBoolean(suggestion['autoApplyEnabled']),
                     updatedAt: normalizedTimestamp(suggestion['updatedAt']),
                 };
             }
@@ -568,13 +602,13 @@ async function executeClimateSuggestions(
 
     const presentation: ClimateSuggestionsPresentation = {
         kind: 'climate-suggestions',
+        availability: 'available',
         id: `tool-${ordinal}`,
         title: plan.roomNames.length === 0
             ? 'Latest climate suggestions for active rooms'
             : 'Latest climate suggestions for selected active rooms',
         rooms,
     };
-    const available = rooms.filter((room) => room.status === 'available').length;
     const notices = uniqueStrings([
         ...facility.notices,
         ...selection.notices,
@@ -594,9 +628,7 @@ async function executeClimateSuggestions(
         facts: [
             {
                 id: `t${ordinal}.climate.summary`,
-                statement: deviceSnapshotFailed
-                    ? `Stored climate suggestions could not be read for ${rooms.length} selected active rooms.`
-                    : `${available} of ${rooms.length} selected active rooms have a stored climate suggestion.`,
+                statement: climateSummary(rooms),
             },
             ...selectionFacts(selection, `t${ordinal}.scope`),
             ...facts,
@@ -659,6 +691,7 @@ async function executeRecentEvents(
 
     const presentation: RecentEventsPresentation = {
         kind: 'recent-events',
+        availability: logSnapshotFailed ? 'unavailable' : 'available',
         id: `tool-${ordinal}`,
         title: plan.roomNames.length === 0
             ? 'Recent events for active rooms'
@@ -702,6 +735,7 @@ function executeSystemHelp(
     if (!entry) {
         const presentation: SystemHelpPresentation = {
             kind: 'system-help',
+            availability: 'available',
             id: `tool-${ordinal}`,
             title: 'Help topic not found',
             topic,
@@ -724,6 +758,7 @@ function executeSystemHelp(
     const restricted = entry.adminOnly && user.role !== 'admin';
     const presentation: SystemHelpPresentation = {
         kind: 'system-help',
+        availability: 'available',
         id: `tool-${ordinal}`,
         title: restricted ? 'Administrator help topic' : entry.title,
         topic: entry.topic,
@@ -781,16 +816,38 @@ async function loadActiveRooms(firebase: FirebaseRestClient): Promise<FacilityRo
             raw: rawValue,
         });
     }
-    rooms.sort((left, right) => left.roomName.localeCompare(right.roomName));
-    return {
-        rooms,
-        notices: invalidRooms > 0
+    rooms.sort((left, right) =>
+        left.roomName.localeCompare(right.roomName) || left.uid.localeCompare(right.uid));
+    const uniqueRooms: FacilityRoom[] = [];
+    const seenRoomNames = new Set<string>();
+    let duplicateRoomNames = 0;
+    for (const room of rooms) {
+        const normalizedName = roomKey(room.roomName);
+        if (seenRoomNames.has(normalizedName)) {
+            duplicateRoomNames += 1;
+            continue;
+        }
+        seenRoomNames.add(normalizedName);
+        uniqueRooms.push(room);
+    }
+    const notices = [
+        ...(invalidRooms > 0
             ? [
                 `${invalidRooms} active room record${invalidRooms === 1 ? '' : 's'} ` +
                     `${invalidRooms === 1 ? 'was' : 'were'} omitted because required identifiers were invalid.`,
             ]
-            : [],
-        partial: invalidRooms > 0,
+            : []),
+        ...(duplicateRoomNames > 0
+            ? [
+                `${duplicateRoomNames} duplicate active room name${duplicateRoomNames === 1 ? '' : 's'} ` +
+                    `${duplicateRoomNames === 1 ? 'was' : 'were'} omitted from this response.`,
+            ]
+            : []),
+    ];
+    return {
+        rooms: uniqueRooms,
+        notices,
+        partial: invalidRooms > 0 || duplicateRoomNames > 0,
     };
 }
 
@@ -877,7 +934,9 @@ function telemetryFact(row: RoomTelemetryRow, room: FacilityRoom): string {
         row.humidity === null ? 'humidity unavailable' : `${row.humidity}% humidity`,
         row.occupancy === null ? 'occupancy unavailable' : row.occupancy ? 'occupied' : 'unoccupied',
         row.acPower === null ? 'AC state unavailable' : row.acPower ? 'AC on' : 'AC off',
-        `AI auto-apply ${row.aiAutoApply ? 'enabled' : 'disabled'}`,
+        row.aiAutoApply === null
+            ? 'AI auto-apply state unavailable'
+            : `AI auto-apply ${row.aiAutoApply ? 'enabled' : 'disabled'}`,
         `${row.schedules.length} schedules`,
     ];
     if (row.lastSeen) parts.push(`last seen ${row.lastSeen}`);
@@ -885,9 +944,41 @@ function telemetryFact(row: RoomTelemetryRow, room: FacilityRoom): string {
 }
 
 function telemetrySummary(rooms: readonly RoomTelemetryRow[]): string {
-    const online = rooms.filter((room) => room.onlineState === 'online').length;
-    const hot = rooms.filter((room) => room.condition === 'hot' || room.condition === 'critical').length;
-    return `${online} of ${rooms.length} selected active rooms are online; ${hot} have a hot or critical heat condition.`;
+    const reportedStatuses = rooms.filter((room) => room.onlineState !== 'unknown');
+    const online = reportedStatuses.filter((room) => room.onlineState === 'online').length;
+    const reportedConditions = rooms.filter((room) => room.condition !== 'unknown');
+    const hot = reportedConditions.filter(
+        (room) => room.condition === 'hot' || room.condition === 'critical',
+    ).length;
+    const unavailable = rooms.filter((room) => room.onlineState === 'unknown').length;
+    const heatSummary = reportedConditions.length > 0
+        ? `${hot} of ${reportedConditions.length} rooms with reported conditions have a hot or critical heat condition`
+        : 'no room has a reported condition available for heat assessment';
+    const onlineSummary = reportedStatuses.length > 0
+        ? `${online} of ${reportedStatuses.length} rooms with reported device status are online`
+        : 'no room has reported device status available';
+    return `${onlineSummary}; ${heatSummary}; ${unavailable} have unavailable device status.`;
+}
+
+function climateSummary(rooms: readonly ClimateSuggestionRow[]): string {
+    const available = rooms.filter((room) => room.status === 'available').length;
+    const noSuggestion = rooms.filter((room) => room.status === 'no_suggestion').length;
+    const noDevice = rooms.filter((room) => room.status === 'no_device').length;
+    const unavailable = rooms.filter((room) => room.status === 'device_unavailable').length;
+    const parts: string[] = [];
+    if (available > 0) {
+        parts.push(`${available} selected active room${available === 1 ? '' : 's'} ${available === 1 ? 'has' : 'have'} a valid stored climate suggestion.`);
+    }
+    if (noSuggestion > 0) {
+        parts.push(`${noSuggestion} selected active room${noSuggestion === 1 ? '' : 's'} ${noSuggestion === 1 ? 'was' : 'were'} read successfully and ${noSuggestion === 1 ? 'has' : 'have'} no valid stored climate suggestion.`);
+    }
+    if (unavailable > 0) {
+        parts.push(`Assigned-device climate data is unavailable for ${unavailable} selected active room${unavailable === 1 ? '' : 's'}.`);
+    }
+    if (noDevice > 0) {
+        parts.push(`${noDevice} selected active room${noDevice === 1 ? '' : 's'} ${noDevice === 1 ? 'has' : 'have'} no assigned device.`);
+    }
+    return parts.join(' ') || 'No active rooms matched the requested climate-suggestion scope.';
 }
 
 function climateFact(row: ClimateSuggestionRow): string {
@@ -903,8 +994,10 @@ function climateFact(row: ClimateSuggestionRow): string {
                 `${row.roomName} has a stored suggestion of ${row.suggestedTemp} °C`,
                 row.currentRoomTemp === null ? null : `current room temperature ${row.currentRoomTemp} °C`,
                 row.humidity === null ? null : `humidity ${row.humidity}%`,
-                `applied ${row.applied ? 'yes' : 'no'}`,
-                `auto-apply ${row.autoApplyEnabled ? 'enabled' : 'disabled'}`,
+                row.applied === null ? 'applied state unavailable' : `applied ${row.applied ? 'yes' : 'no'}`,
+                row.autoApplyEnabled === null
+                    ? 'auto-apply state unavailable'
+                    : `auto-apply ${row.autoApplyEnabled ? 'enabled' : 'disabled'}`,
                 row.updatedAt ? `updated ${row.updatedAt}` : null,
                 row.reason ? `stored reason: "${row.reason}"` : 'no stored reason',
             ].filter((value): value is string => value !== null);
@@ -934,8 +1027,8 @@ function emptyClimateRow(
         humidity: null,
         suggestedTemp: null,
         reason: null,
-        applied: false,
-        autoApplyEnabled: false,
+        applied: null,
+        autoApplyEnabled: null,
         updatedAt: null,
     };
 }
@@ -953,7 +1046,8 @@ function parseSchedules(value: unknown): RoomTelemetryRow['schedules'] {
             const startTime = safeClockTime(schedule['startTime']);
             const endTime = safeClockTime(schedule['endTime']);
             const subject = cleanStoredText(schedule['subject'], 100);
-            if (!day || !WEEK_DAYS.has(day) || !startTime || !endTime || !subject) return null;
+            if (!day || !WEEK_DAYS.has(day) || !startTime || !endTime ||
+                startTime >= endTime || !subject) return null;
             return { day, startTime, endTime, subject };
         })
         .filter((schedule): schedule is NonNullable<typeof schedule> => schedule !== null)
@@ -1004,19 +1098,20 @@ function buildUnavailableResult(
     let presentation: ChatPresentation;
     switch (plan.name) {
         case 'get_room_telemetry':
-            presentation = { kind: 'room-telemetry', id, title: 'Room telemetry unavailable', rooms: [] };
+            presentation = { kind: 'room-telemetry', availability: 'unavailable', id, title: 'Room telemetry unavailable', rooms: [] };
             break;
         case 'get_energy_report':
             presentation = {
                 kind: 'energy-report',
+                availability: 'unavailable',
                 id,
                 title: 'Estimated energy report unavailable',
                 estimated: true,
                 range: resolveEnergyRange(plan, now),
                 metrics: {
-                    totalKwh: 0,
-                    runtimeSeconds: 0,
-                    sessionCount: 0,
+                    totalKwh: null,
+                    runtimeSeconds: null,
+                    sessionCount: null,
                     activeRooms: 0,
                     roomsWithRecords: 0,
                     coveragePercent: 0,
@@ -1026,14 +1121,15 @@ function buildUnavailableResult(
             };
             break;
         case 'get_climate_prediction_logs':
-            presentation = { kind: 'climate-suggestions', id, title: 'Climate suggestions unavailable', rooms: [] };
+            presentation = { kind: 'climate-suggestions', availability: 'unavailable', id, title: 'Climate suggestions unavailable', rooms: [] };
             break;
         case 'get_recent_room_events':
-            presentation = { kind: 'recent-events', id, title: 'Recent room events unavailable', events: [] };
+            presentation = { kind: 'recent-events', availability: 'unavailable', id, title: 'Recent room events unavailable', events: [] };
             break;
         case 'get_system_help':
             presentation = {
                 kind: 'system-help',
+                availability: 'unavailable',
                 id,
                 title: 'System help unavailable',
                 topic: normalizeTopic(plan.topic),
@@ -1084,10 +1180,14 @@ function validatePlans(plans: readonly PlannerToolPlan[]): PlannerToolPlan[] {
         if (typeof plan.topic !== 'string' || plan.topic.length > 64 || hasUnsafeControls(plan.topic)) {
             throw new ChatApiError('invalid_request', 'The requested help topic is invalid.', 400);
         }
+        const topic = normalizeTopic(plan.topic);
+        if (plan.name === 'get_system_help' && !SYSTEM_HELP_TOPICS.has(topic)) {
+            throw new ChatApiError('invalid_request', 'The requested help topic is unknown.', 400);
+        }
         if (!Number.isInteger(plan.limit) || plan.limit < 1 || plan.limit > MAX_EVENTS_RETURNED) {
             throw new ChatApiError('invalid_request', 'The requested result limit is invalid.', 400);
         }
-        return { ...plan, roomNames, topic: plan.topic.trim() };
+        return { ...plan, roomNames, topic };
     });
 }
 
@@ -1123,7 +1223,9 @@ function cleanStoredText(value: unknown, maximumLength: number): string | null {
         .replace(/\bBearer\s+[^\s,;]+/giu, '[redacted credential]')
         .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/gu, '[redacted credential]')
         .replace(/\bAIza[A-Za-z0-9_-]{20,}\b/gu, '[redacted credential]')
-        .replace(/\b(?:api[_-]?key|access[_-]?token|id[_-]?token)\s*[:=]\s*[^\s,;]+/giu, '[redacted credential]')
+        .replace(/\b(?:api[ _-]?key|access[ _-]?token|id[ _-]?token|state[ _-]?token|secret|password)\s*[:=]\s*[^\s,;]+/giu, '[redacted credential]')
+        .replace(/\b(?:gsk_|sk-|gh[pousr]_)[A-Za-z0-9_-]{16,}\b/gu, '[redacted credential]')
+        .replace(/\b(?=[A-Za-z0-9_+/-]{32,}={0,2}(?=$|[\s,;:.!?"'<>]))(?=[A-Za-z0-9_+/-]*[A-Za-z])(?=[A-Za-z0-9_+/-]*\d)[A-Za-z0-9_+/-]{32,}={0,2}/gu, '[redacted opaque value]')
         .replace(/[<>]/g, ' ')
         .replace(/`{3,}/g, '')
         .replace(/\s+/gu, ' ')

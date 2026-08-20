@@ -54,13 +54,99 @@ export const PLANNER_OUTPUT_SCHEMA: Record<string, unknown> = {
     type: 'object',
     additionalProperties: false,
     properties: {
-        intent: { type: 'string', enum: ['data', 'help', 'greeting', 'control', 'unsupported'] },
+        intent: {
+            type: 'string',
+            enum: ['data', 'help', 'general', 'greeting', 'control', 'unsupported'],
+        },
         needsClarification: { type: 'boolean' },
         clarification: { type: 'string', maxLength: 240 },
         resolvedSummary: { type: 'string', maxLength: 300 },
         tools: { type: 'array', maxItems: 4, items: TOOL_PLAN_SCHEMA },
     },
     required: ['intent', 'needsClarification', 'clarification', 'resolvedSummary', 'tools'],
+};
+
+export const MAX_CHAT_ANSWER_BLOCKS = 5;
+export const MAX_CHAT_BLOCK_TEXT_LENGTH = 600;
+export const MAX_CHAT_BLOCK_ITEMS = 8;
+export const MAX_CHAT_BLOCK_ITEM_LENGTH = 240;
+export const MAX_CHAT_BLOCK_ENTRIES = 8;
+export const MAX_CHAT_BLOCK_ENTRY_LABEL_LENGTH = 80;
+export const MAX_CHAT_BLOCK_ENTRY_VALUE_LENGTH = 240;
+export const MAX_CHAT_ANSWER_CAVEATS = 3;
+export const MAX_CHAT_ANSWER_CAVEAT_LENGTH = 240;
+
+const ANSWER_BLOCK_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+        kind: {
+            type: 'string',
+            enum: ['paragraph', 'bullet-list', 'numbered-list', 'callout', 'key-value'],
+        },
+        text: { type: 'string', maxLength: MAX_CHAT_BLOCK_TEXT_LENGTH },
+        items: {
+            type: 'array',
+            maxItems: MAX_CHAT_BLOCK_ITEMS,
+            items: {
+                type: 'string',
+                minLength: 1,
+                maxLength: MAX_CHAT_BLOCK_ITEM_LENGTH,
+            },
+        },
+        entries: {
+            type: 'array',
+            maxItems: MAX_CHAT_BLOCK_ENTRIES,
+            items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                    label: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: MAX_CHAT_BLOCK_ENTRY_LABEL_LENGTH,
+                    },
+                    value: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: MAX_CHAT_BLOCK_ENTRY_VALUE_LENGTH,
+                    },
+                },
+                required: ['label', 'value'],
+            },
+        },
+        tone: { type: 'string', enum: ['neutral', 'info', 'warning'] },
+    },
+    required: ['kind', 'text', 'items', 'entries', 'tone'],
+} as const;
+
+/**
+ * General guidance has no evidence-reference fields because it must never
+ * masquerade as facility data. Its shape remains closed and tightly bounded.
+ */
+export const GENERAL_ANSWER_OUTPUT_SCHEMA: Record<string, unknown> = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+        headline: { type: 'string', minLength: 1, maxLength: 160 },
+        summary: { type: 'string', minLength: 1, maxLength: 800 },
+        blocks: {
+            type: 'array',
+            minItems: 1,
+            maxItems: MAX_CHAT_ANSWER_BLOCKS,
+            items: ANSWER_BLOCK_SCHEMA,
+        },
+        caveats: {
+            type: 'array',
+            maxItems: MAX_CHAT_ANSWER_CAVEATS,
+            items: {
+                type: 'string',
+                minLength: 1,
+                maxLength: MAX_CHAT_ANSWER_CAVEAT_LENGTH,
+            },
+        },
+    },
+    required: ['headline', 'summary', 'blocks', 'caveats'],
 };
 
 const EVIDENCE_REFS_SCHEMA = {

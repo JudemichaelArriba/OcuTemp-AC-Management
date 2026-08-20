@@ -7,7 +7,13 @@ export type ChatToolName =
     | 'get_recent_room_events'
     | 'get_system_help';
 
-export type ChatIntent = 'data' | 'help' | 'greeting' | 'control' | 'unsupported';
+export type ChatIntent =
+    | 'data'
+    | 'help'
+    | 'general'
+    | 'greeting'
+    | 'control'
+    | 'unsupported';
 export type EnergyBucket = 'auto' | 'day' | 'week' | 'month' | 'year';
 export type EnergyRangePreset =
     | 'today'
@@ -32,13 +38,47 @@ export interface ValidatedChatRequest {
 
 export interface ChatAnswerHighlight {
     readonly text: string;
-    readonly evidenceRefs: string[];
+}
+
+export type ChatAnswerBlockKind =
+    | 'paragraph'
+    | 'bullet-list'
+    | 'numbered-list'
+    | 'callout'
+    | 'key-value';
+
+export type ChatAnswerBlockTone = 'neutral' | 'info' | 'warning';
+
+export interface ChatAnswerBlockEntry {
+    readonly label: string;
+    readonly value: string;
+}
+
+/**
+ * A deliberately small, renderer-safe content contract. Every field is
+ * required so both configured providers can use one strict JSON schema;
+ * fields that do not apply to a block are returned as empty strings/arrays.
+ */
+export interface ChatAnswerBlock {
+    readonly kind: ChatAnswerBlockKind;
+    readonly text: string;
+    readonly items: string[];
+    readonly entries: ChatAnswerBlockEntry[];
+    readonly tone: ChatAnswerBlockTone;
 }
 
 export interface ChatAnswer {
     readonly headline: string;
     readonly summary: string;
+    readonly blocks: ChatAnswerBlock[];
     readonly highlights: ChatAnswerHighlight[];
+    readonly caveats: string[];
+}
+
+export interface GeneralAnswerDraft {
+    readonly headline: string;
+    readonly summary: string;
+    readonly blocks: ChatAnswerBlock[];
     readonly caveats: string[];
 }
 
@@ -82,14 +122,15 @@ export interface EnergyTrendPoint {
 
 export interface EnergyReportPresentation {
     readonly kind: 'energy-report';
+    readonly availability: 'available' | 'unavailable';
     readonly id: string;
     readonly title: string;
     readonly estimated: true;
     readonly range: EnergyRange;
     readonly metrics: {
-        readonly totalKwh: number;
-        readonly runtimeSeconds: number;
-        readonly sessionCount: number;
+        readonly totalKwh: number | null;
+        readonly runtimeSeconds: number | null;
+        readonly sessionCount: number | null;
         readonly activeRooms: number;
         readonly roomsWithRecords: number;
         readonly coveragePercent: number;
@@ -98,7 +139,7 @@ export interface EnergyReportPresentation {
     readonly rooms: EnergyRoomRow[];
 }
 
-export type DeviceOnlineState = 'online' | 'stale' | 'offline';
+export type DeviceOnlineState = 'online' | 'stale' | 'offline' | 'unknown';
 export type RoomCondition = 'comfortable' | 'warm' | 'hot' | 'critical' | 'unknown';
 
 export interface RoomTelemetryRow {
@@ -109,7 +150,7 @@ export interface RoomTelemetryRow {
     readonly humidity: number | null;
     readonly occupancy: boolean | null;
     readonly acPower: boolean | null;
-    readonly aiAutoApply: boolean;
+    readonly aiAutoApply: boolean | null;
     readonly schedules: Array<{
         readonly day: string;
         readonly startTime: string;
@@ -121,6 +162,7 @@ export interface RoomTelemetryRow {
 
 export interface RoomTelemetryPresentation {
     readonly kind: 'room-telemetry';
+    readonly availability: 'available' | 'unavailable';
     readonly id: string;
     readonly title: string;
     readonly rooms: RoomTelemetryRow[];
@@ -133,13 +175,14 @@ export interface ClimateSuggestionRow {
     readonly humidity: number | null;
     readonly suggestedTemp: number | null;
     readonly reason: string | null;
-    readonly applied: boolean;
-    readonly autoApplyEnabled: boolean;
+    readonly applied: boolean | null;
+    readonly autoApplyEnabled: boolean | null;
     readonly updatedAt: string | null;
 }
 
 export interface ClimateSuggestionsPresentation {
     readonly kind: 'climate-suggestions';
+    readonly availability: 'available' | 'unavailable';
     readonly id: string;
     readonly title: string;
     readonly rooms: ClimateSuggestionRow[];
@@ -156,6 +199,7 @@ export interface RecentEventRow {
 
 export interface RecentEventsPresentation {
     readonly kind: 'recent-events';
+    readonly availability: 'available' | 'unavailable';
     readonly id: string;
     readonly title: string;
     readonly events: RecentEventRow[];
@@ -163,6 +207,7 @@ export interface RecentEventsPresentation {
 
 export interface SystemHelpPresentation {
     readonly kind: 'system-help';
+    readonly availability: 'available' | 'unavailable';
     readonly id: string;
     readonly title: string;
     readonly topic: string;

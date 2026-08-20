@@ -9,6 +9,7 @@ const GOOGLE_FIREBASE_JWKS_URL = new URL(
 );
 const MAX_AUTHORIZATION_HEADER_BYTES = 16 * 1024;
 const CLOCK_TOLERANCE_SECONDS = 5;
+const MINIMUM_TOKEN_VALIDITY_SECONDS = 30;
 
 const firebaseSigningKeys = createRemoteJWKSet(GOOGLE_FIREBASE_JWKS_URL, {
     timeoutDuration: 5_000,
@@ -48,10 +49,15 @@ export async function authenticateChatRequest(
         }
         if (
             error instanceof ChatApiError &&
-            (error.code === 'authentication_required' ||
-                error.code === 'account_not_authorized')
+            error.code === 'account_not_authorized'
         ) {
             throw error;
+        }
+        // The JWT was verified immediately before this profile read. Firebase
+        // REST may also use 401 for a Security Rules denial, so do not tell the
+        // browser to refresh and replay a request the account cannot authorize.
+        if (error instanceof ChatApiError && error.code === 'authentication_required') {
+            throw accountNotAuthorized();
         }
         throw new ChatApiError(
             'data_unavailable',
@@ -72,7 +78,7 @@ export async function authenticateChatRequest(
         throw accountNotAuthorized();
     }
 
-    const emailVerified = claims['email_verified'] as boolean;
+    const emailVerified = claims['email_verified'] === true;
     if (role !== 'admin' && !emailVerified) {
         throw new ChatApiError(
             'account_not_authorized',
@@ -205,13 +211,13 @@ function assertRequiredFirebaseClaims(
         payload.iat > now + CLOCK_TOLERANCE_SECONDS ||
         typeof payload.exp !== 'number' ||
         !Number.isSafeInteger(payload.exp) ||
-        payload.exp <= now - CLOCK_TOLERANCE_SECONDS ||
+        payload.exp <= now + MINIMUM_TOKEN_VALIDITY_SECONDS ||
         typeof authTime !== 'number' ||
         !Number.isSafeInteger(authTime) ||
         authTime <= 0 ||
         authTime > now + CLOCK_TOLERANCE_SECONDS ||
         authTime > payload.iat + CLOCK_TOLERANCE_SECONDS ||
-        typeof emailVerified !== 'boolean' ||
+        (emailVerified !== undefined && typeof emailVerified !== 'boolean') ||
         (userId !== undefined && userId !== payload.sub)
     ) {
         throw authenticationRequired();

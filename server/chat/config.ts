@@ -105,6 +105,7 @@ function normalizeDatabaseUrl(rawValue: string): string {
 
     if (
         url.protocol !== 'https:' ||
+        !isFirebaseDatabaseHostname(url.hostname) ||
         url.username ||
         url.password ||
         (url.pathname !== '/' && url.pathname !== '') ||
@@ -115,6 +116,12 @@ function normalizeDatabaseUrl(rawValue: string): string {
     }
 
     return url.toString().replace(/\/$/, '');
+}
+
+function isFirebaseDatabaseHostname(hostname: string): boolean {
+    const normalized = hostname.toLocaleLowerCase('en-US');
+    return normalized.endsWith('.firebaseio.com') ||
+        normalized.endsWith('.firebasedatabase.app');
 }
 
 function parseAllowedOrigins(rawValue: string): ReadonlySet<string> {

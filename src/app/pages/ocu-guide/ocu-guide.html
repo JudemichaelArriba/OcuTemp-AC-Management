@@ -1,33 +1,28 @@
-<main class="guide-page" aria-labelledby="ocu-guide-page-title">
-  <header class="guide-header">
-    <div class="guide-header__identity">
-      <div class="guide-mark" aria-hidden="true">
-        <span class="material-symbols-outlined">mode_cool</span>
-        <i></i>
-      </div>
-      <div>
-        <div class="guide-header__eyebrow">
-          <span>Facility intelligence</span>
-          <span class="guide-header__status"><i aria-hidden="true"></i> Read-only</span>
-        </div>
-        <h1 id="ocu-guide-page-title">Ocu<span>Guide</span></h1>
-        <p>Ask naturally. Facility evidence appears with the answer when it is needed.</p>
+<main class="mx-auto flex h-[calc(100dvh-6.5rem)] min-h-0 w-full max-w-6xl flex-col overflow-hidden text-slate-900 md:h-[calc(100dvh-3rem)]"
+  aria-labelledby="ocu-guide-page-title">
+  <header class="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200/80 px-3 sm:px-5">
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white" aria-hidden="true">
+        <span class="material-symbols-outlined text-xl">mode_cool</span>
+      </span>
+      <div class="min-w-0">
+        <h1 id="ocu-guide-page-title" class="truncate text-base font-bold tracking-tight text-slate-950">OcuGuide</h1>
+        <p class="flex items-center gap-1.5 text-xs text-slate-500">
+          <span class="size-1.5 rounded-full bg-blue-500" aria-hidden="true"></span>
+          Read-only assistant
+        </p>
       </div>
     </div>
-    <button type="button" class="new-conversation-button" (click)="startNewConversation()"
-      aria-label="Clear this conversation and start a new chat">
-      <span class="material-symbols-outlined" aria-hidden="true">edit_square</span>
-      <span>New chat</span>
+
+    <button type="button"
+      class="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      (click)="startNewConversation()" aria-label="Clear this conversation and start a new chat">
+      <span class="material-symbols-outlined text-lg" aria-hidden="true">edit_square</span>
+      <span class="max-sm:hidden">New chat</span>
     </button>
   </header>
 
-  <aside class="read-only-strip" aria-label="OcuGuide safety notice">
-    <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
-    <p><strong>Read-only by design.</strong> OcuGuide can inspect approved facility records, but cannot control AC units or change facility data.</p>
-    <span class="read-only-strip__mode">Evidence linked</span>
-  </aside>
-
-  <section class="conversation-shell" aria-label="OcuGuide chat workspace">
+  <section class="min-h-0 flex-1" aria-label="OcuGuide chat workspace">
     <app-ocu-guide-conversation />
   </section>
 </main>
