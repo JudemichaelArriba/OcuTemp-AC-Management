@@ -1,7 +1,12 @@
 {
-  "buildCommand": "node set-env.js && ng build",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist/Ocutemp/browser",
   "framework": null,
+  "functions": {
+    "api/chat/index.ts": {
+      "maxDuration": 25
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

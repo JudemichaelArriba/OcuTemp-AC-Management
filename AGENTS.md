@@ -83,6 +83,8 @@ energy/{deviceId}/daily/{YYYY-MM-DD} - kwh
 - `DeviceOfflineMonitorService` - Background monitoring for offline devices and hot rooms
 - `DialogService` / `SnackBarService` - UI notifications
 - `PdfExportService` - Generate PDF energy reports
+- `ChatService` - Chat state, turn orchestration, message validation
+- `ChatToolsService` - Read-only tool execution (telemetry, energy, help)
 
 ---
 
@@ -136,6 +138,42 @@ External ML service writes suggestions to `devices/{deviceId}/mlSuggestion`. If 
 ## Energy Reporting
 
 Data at `energy/{deviceId}/daily/{YYYY-MM-DD}/kwh`. `EnergyReportService` aggregates into daily (7 days), weekly (8 weeks), monthly (12 months), yearly (5 years) totals. `PdfExportService` generates PDF with charts and breakdowns.
+
+---
+
+## AI Chatbot
+
+**Architecture:** Vercel Edge Function (`/api/chat`) + two-phase planner-answerer orchestration + tool execution + response validation.
+
+**Flow:** User message → context check → planner (decide tool or direct answer) → tool executor (read-only) → answerer (natural language) → validation → UI.
+
+**Providers:** Gemini (primary), Groq (fallback). Auto-fallback on provider failure.
+
+**Tools (read-only):**
+- `get_room_telemetry` - Current temp, humidity, occupancy, AC state, schedules
+- `get_energy_rankings` - Top consumers by AC status
+- `get_energy_usage` - Facility or room energy series (daily/weekly/monthly/yearly)
+- `get_climate_prediction_logs` - ML suggestions for a room
+- `get_system_help` - Static help topics (admin/staff filtered)
+
+**Validation Pipeline:**
+- Context relevance (`chat-context-checker.ts`) - rejects off-topic before API call
+- Response validation (`chat-response-validator.ts`) - detects hallucinations, number invention, control claims
+- Response sanitization (`chat-response-sanitizer.ts`) - removes Firebase paths, sensitive data
+- Fallback to raw data table if validation fails
+
+**Helpers:**
+- `chat-history-trimmer.ts` - Window trimming for API (preserves full history for UI)
+- `chat-response-cleaner.ts` - Round numbers, format timestamps
+- `system-help-content.ts` - Static help entries (route paths must match `app.routes.ts`)
+
+**Safety:**
+- Tool validation prevents write operations
+- Admin-only help entries filtered by role
+- Rate limiting via edge middleware
+- All tool operations are snapshots (no live streams exposed to LLM)
+
+**UI:** `ChatSidebarComponent` with role-aware suggestions, loading states, fallback tables. Messages rendered via `ChatMessageComponent`.
 
 ---
 

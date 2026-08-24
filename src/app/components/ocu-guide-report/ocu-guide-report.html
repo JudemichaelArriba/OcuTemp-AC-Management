@@ -1,0 +1,176 @@
+@let item = presentation();
+@let mode = displayDirective().mode;
+
+<div class="min-w-0">
+  @switch (item.kind) {
+    @case ('energy-report') {
+      <section class="min-w-0 border-l-2 border-blue-200 pl-4 sm:pl-5"
+        [attr.aria-labelledby]="presentationDomId('energy-title', item.id)">
+        <header class="mb-4 flex items-start gap-3">
+          <span class="material-symbols-outlined mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-xl text-blue-700" aria-hidden="true">bolt</span>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-blue-700">Estimated energy</p>
+            <h3 class="untrusted-prose mt-0.5 text-base font-semibold tracking-tight text-slate-950"
+              [id]="presentationDomId('energy-title', item.id)">{{ item.title }}</h3>
+            <p class="mt-1 text-sm leading-5 text-slate-500">{{ item.range.label }} <span aria-hidden="true">&middot;</span> {{ item.range.start }} to {{ item.range.end }}</p>
+          </div>
+        </header>
+
+        @if (mode === 'full_report') {
+          <div class="mb-5 flex min-w-0 gap-1 overflow-x-auto border-b border-slate-200" role="group" aria-label="Energy report view">
+            <button type="button" class="energy-tab" [class.energy-tab--active]="energyState(item.id).view === 'summary'"
+              [attr.aria-pressed]="energyState(item.id).view === 'summary'" (click)="setEnergyView(item.id, 'summary')">Summary</button>
+            <button type="button" class="energy-tab" [class.energy-tab--active]="energyState(item.id).view === 'rooms'"
+              [attr.aria-pressed]="energyState(item.id).view === 'rooms'" (click)="setEnergyView(item.id, 'rooms')">By room</button>
+            <button type="button" class="energy-tab" [class.energy-tab--active]="energyState(item.id).view === 'trend'"
+              [attr.aria-pressed]="energyState(item.id).view === 'trend'" (click)="setEnergyView(item.id, 'trend')">Trend</button>
+            <button type="button" class="energy-tab" [class.energy-tab--active]="energyState(item.id).view === 'source'"
+              [attr.aria-pressed]="energyState(item.id).view === 'source'" (click)="setEnergyView(item.id, 'source')">Coverage</button>
+          </div>
+        }
+
+        @if (mode === 'compact_metrics' || (mode === 'full_report' && energyState(item.id).view === 'summary')) {
+          <dl class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
+            <div class="min-w-0 bg-blue-50 p-3 sm:p-4">
+              <dt class="text-xs font-medium text-blue-700">Estimated use</dt>
+              <dd class="mt-2 text-xl font-semibold tabular-nums tracking-tight text-slate-950">{{ item.metrics.totalKwh | number:'1.2-2' }} <small class="text-sm font-medium text-slate-600">kWh</small></dd>
+              <p class="mt-2 text-xs leading-4 text-slate-500">Calculated, not utility-metered</p>
+            </div>
+            <div class="min-w-0 bg-white p-3 sm:p-4">
+              <dt class="text-xs font-medium text-slate-500">AC runtime</dt>
+              <dd class="mt-2 text-xl font-semibold tabular-nums tracking-tight text-slate-950">{{ formatRuntime(item.metrics.runtimeSeconds) }}</dd>
+              <p class="mt-2 text-xs leading-4 text-slate-500">Across rooms with complete runtime data</p>
+            </div>
+            <div class="min-w-0 bg-white p-3 sm:p-4">
+              <dt class="text-xs font-medium text-slate-500">Room coverage</dt>
+              <dd class="mt-2 text-xl font-semibold tabular-nums tracking-tight text-slate-950">{{ item.metrics.roomsWithRecords }}<small class="text-sm font-medium text-slate-600">/{{ item.metrics.activeRooms }}</small></dd>
+              <p class="mt-2 text-xs leading-4 text-slate-500">{{ coveragePercent(item) | number:'1.0-1' }}% of active rooms</p>
+            </div>
+            <div class="min-w-0 bg-white p-3 sm:p-4">
+              <dt class="text-xs font-medium text-slate-500">Calendar coverage</dt>
+              <dd class="mt-2 text-xl font-semibold tabular-nums tracking-tight text-slate-950">{{ item.metrics.recordedDays }}<small class="text-sm font-medium text-slate-600">/{{ item.metrics.expectedDays }} days</small></dd>
+              <p class="mt-2 text-xs leading-4 text-slate-500">{{ temporalCoveragePercent(item) | number:'1.0-1' }}%; gaps are not zero usage</p>
+            </div>
+          </dl>
+        }
+
+        @if (mode === 'ranking_chart' || (mode === 'full_report' && energyState(item.id).view === 'summary')) {
+          <div class="mt-5">
+            <h4 class="mb-3 text-sm font-semibold text-slate-900">Rooms by estimated energy</h4>
+            <div class="max-h-[32rem] overflow-auto rounded-xl" tabindex="0" role="region" aria-label="Scrollable room energy ranking chart">
+              <div class="chart-frame chart-frame--ranking" [style.height.px]="rankingChartHeight(item)">
+                <canvas #reportChart role="img" [attr.data-presentation-id]="item.id" data-chart-kind="ranking"
+                  [attr.aria-label]="'Horizontal bar chart of all recorded rooms by estimated energy for ' + item.range.label"
+                  [attr.aria-describedby]="presentationDomId('ranking-fallback', item.id)">Room rankings are listed in the accessible fallback table.</canvas>
+              </div>
+            </div>
+            <div class="sr-only" [id]="presentationDomId('ranking-fallback', item.id)">
+              <table><caption>Room energy ranking for {{ item.range.label }}</caption><thead><tr><th scope="col">Rank</th><th scope="col">Room</th><th scope="col">Estimated kWh</th></tr></thead>
+                <tbody>@for (room of topEnergyRooms(item); track room.roomName) { <tr><td>{{ room.rank }}</td><th scope="row">{{ room.roomName }}</th><td>{{ room.estimatedKwh | number:'1.2-2' }}</td></tr> }</tbody>
+              </table>
+            </div>
+          </div>
+        }
+
+        @if (mode === 'table' && questionFocus() === 'energy_trend') {
+          <div class="max-h-[32rem] overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Scrollable energy trend table"><table class="w-full min-w-[38rem] border-collapse text-left text-sm"><caption class="px-3 py-3 text-left font-semibold text-slate-900">Energy trend for {{ item.range.label }}</caption><thead class="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr><th class="border-y px-3 py-3" scope="col">Interval</th><th class="border-y px-3 py-3" scope="col">Est. kWh</th><th class="border-y px-3 py-3" scope="col">Recorded days</th><th class="border-y px-3 py-3" scope="col">Range</th></tr></thead><tbody class="divide-y divide-slate-100">@for (point of item.trend; track trendTrackKey(point)) { <tr><th class="px-3 py-3 font-semibold" scope="row">{{ point.label }}</th><td class="px-3 py-3 tabular-nums">{{ point.estimatedKwh === null ? 'Gap' : (point.estimatedKwh | number:'1.2-2') }}</td><td class="px-3 py-3 tabular-nums">{{ point.recordedDays }}/{{ point.expectedDays }}</td><td class="px-3 py-3 text-slate-500">{{ point.start }}&ndash;{{ point.end }}</td></tr> }</tbody></table></div>
+        } @else if (mode === 'table' || (mode === 'full_report' && energyState(item.id).view === 'rooms')) {
+          <div>
+            @if (mode === 'full_report') {
+              <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label class="flex min-h-11 w-full max-w-sm items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100">
+                  <span class="material-symbols-outlined text-lg text-slate-400" aria-hidden="true">search</span><span class="sr-only">Search rooms</span>
+                  <input type="search" class="min-w-0 flex-1 border-0 bg-transparent py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                    [value]="energyState(item.id).query" (input)="updateEnergyQuery(item.id, $event)" placeholder="Search active rooms" />
+                </label>
+                <p class="text-sm text-slate-500">{{ filteredEnergyRooms(item).length }} of {{ item.rooms.length }} rooms</p>
+              </div>
+            }
+            <div class="max-h-[32rem] max-w-full overflow-auto rounded-xl border border-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              tabindex="0" role="region" aria-label="Scrollable estimated energy by room table">
+              <table class="w-full min-w-[50rem] border-collapse text-left text-sm">
+                <caption class="px-3 py-3 text-left font-semibold text-slate-900">Estimated energy by room</caption>
+                <thead class="sticky top-0 z-10 bg-slate-50 text-xs font-semibold text-slate-600"><tr>
+                  <th class="border-y border-slate-200 px-3 py-3" scope="col">Rank</th><th class="border-y border-slate-200 px-3 py-3" scope="col">Room</th><th class="border-y border-slate-200 px-3 py-3" scope="col">Est. kWh</th><th class="border-y border-slate-200 px-3 py-3" scope="col">Share</th><th class="border-y border-slate-200 px-3 py-3" scope="col">Runtime</th><th class="border-y border-slate-200 px-3 py-3" scope="col">Sessions</th><th class="border-y border-slate-200 px-3 py-3" scope="col">Data</th>
+                </tr></thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                  @for (room of (mode === 'full_report' ? pagedEnergyRooms(item) : filteredEnergyRooms(item)); track room.roomName) {
+                    <tr><td class="px-3 py-3 tabular-nums text-slate-500">{{ room.rank ?? '—' }}</td><th class="untrusted-prose px-3 py-3 font-semibold text-slate-900" scope="row">{{ room.roomName }}</th><td class="px-3 py-3 font-semibold tabular-nums text-blue-700">{{ room.estimatedKwh === null ? '—' : (room.estimatedKwh | number:'1.2-2') }}</td><td class="px-3 py-3 tabular-nums text-slate-700">{{ room.sharePercent === null ? '—' : ((room.sharePercent | number:'1.0-1') + '%') }}</td><td class="px-3 py-3 tabular-nums text-slate-700">{{ formatRuntime(room.runtimeSeconds) }}</td><td class="px-3 py-3 tabular-nums text-slate-700">{{ room.sessionCount ?? '—' }}</td><td class="px-3 py-3 text-slate-600">{{ energyStatusLabel(room.status) }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (mode === 'full_report') {
+              <nav class="mt-3 flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between" aria-label="Energy room pages">
+                <p>Showing {{ energyShowingStart(item) }}&ndash;{{ energyShowingEnd(item) }} of {{ filteredEnergyRooms(item).length }}</p>
+                <div class="flex items-center gap-2"><button type="button" class="page-button" (click)="setEnergyPage(item, energyPage(item) - 1)" [disabled]="energyPage(item) === 1" aria-label="Previous page"><span class="material-symbols-outlined" aria-hidden="true">chevron_left</span></button><span>Page {{ energyPage(item) }} of {{ energyTotalPages(item) }}</span><button type="button" class="page-button" (click)="setEnergyPage(item, energyPage(item) + 1)" [disabled]="energyPage(item) === energyTotalPages(item)" aria-label="Next page"><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span></button></div>
+              </nav>
+            }
+          </div>
+        }
+
+        @if (mode === 'trend_chart' || (mode === 'full_report' && energyState(item.id).view === 'trend')) {
+          <div>
+            <div class="mb-3 flex items-center justify-between gap-3"><h4 class="text-sm font-semibold text-slate-900">Estimated energy over time</h4><span class="text-xs font-medium text-slate-500">{{ recordedTrendPoints(item).length }} recorded intervals</span></div>
+            <div class="chart-frame chart-frame--trend"><canvas #reportChart role="img" [attr.data-presentation-id]="item.id" data-chart-kind="trend"
+              [attr.aria-label]="'Line chart of estimated energy over ' + item.range.label" [attr.aria-describedby]="presentationDomId('trend-fallback', item.id)">Energy trend values are listed in the accessible fallback table.</canvas></div>
+            <div class="sr-only" [id]="presentationDomId('trend-fallback', item.id)"><table><caption>Estimated energy trend for {{ item.range.label }}</caption><thead><tr><th scope="col">Interval</th><th scope="col">Estimated energy</th><th scope="col">Coverage</th></tr></thead><tbody>
+              @for (point of item.trend; track trendTrackKey(point)) { <tr><th scope="row">{{ point.label }}</th><td>{{ point.estimatedKwh === null ? 'No record' : ((point.estimatedKwh | number:'1.2-2') + ' kWh') }}</td><td>{{ point.recordedDays }} of {{ point.expectedDays }} days</td></tr> }
+            </tbody></table></div>
+          </div>
+        }
+
+        @if (mode === 'full_report' && energyState(item.id).view === 'source') {
+          <div class="grid gap-4">
+            <dl class="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-slate-200 py-4 text-sm sm:grid-cols-4"><div><dt class="text-xs text-slate-500">Range</dt><dd class="mt-1 font-semibold text-slate-900">{{ item.range.start }}&ndash;{{ item.range.end }}</dd></div><div><dt class="text-xs text-slate-500">Aggregation</dt><dd class="mt-1 font-semibold text-slate-900">{{ item.range.bucket | titlecase }}</dd></div><div><dt class="text-xs text-slate-500">Recorded days</dt><dd class="mt-1 font-semibold text-slate-900">{{ item.metrics.recordedDays }}/{{ item.metrics.expectedDays }}</dd></div><div><dt class="text-xs text-slate-500">Sessions</dt><dd class="mt-1 font-semibold text-slate-900">{{ item.metrics.sessionCount ?? '—' }}</dd></div></dl>
+            <div class="max-h-80 overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Scrollable energy interval coverage table"><table class="w-full min-w-[34rem] border-collapse text-left text-sm"><caption class="px-3 py-3 text-left font-semibold text-slate-900">Interval coverage</caption><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="border-y px-3 py-3" scope="col">Interval</th><th class="border-y px-3 py-3" scope="col">Est. kWh</th><th class="border-y px-3 py-3" scope="col">Recorded days</th></tr></thead><tbody class="divide-y divide-slate-100">@for (point of item.trend; track trendTrackKey(point)) { <tr><th class="px-3 py-3 font-semibold" scope="row">{{ point.label }}</th><td class="px-3 py-3">{{ point.estimatedKwh === null ? 'Gap' : (point.estimatedKwh | number:'1.2-2') }}</td><td class="px-3 py-3">{{ point.recordedDays }}/{{ point.expectedDays }}</td></tr> }</tbody></table></div>
+          </div>
+        }
+      </section>
+    }
+
+    @case ('room-telemetry') {
+      <section class="min-w-0 border-l-2 border-blue-200 pl-4 sm:pl-5" [attr.aria-labelledby]="presentationDomId('telemetry-title', item.id)">
+        <header class="mb-4 flex items-start gap-3"><span class="material-symbols-outlined mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-xl text-blue-700" aria-hidden="true">sensors</span><div class="min-w-0"><p class="text-xs font-semibold text-blue-700">OcuTemp room data</p><h3 class="untrusted-prose mt-0.5 text-base font-semibold tracking-tight text-slate-950" [id]="presentationDomId('telemetry-title', item.id)">{{ item.title }}</h3></div></header>
+
+        @if (mode === 'bullet_list') {
+          @for (room of item.rooms; track room.roomName) {
+            <section><h4 class="untrusted-prose text-sm font-semibold text-slate-900">{{ room.roomName }}</h4><ul class="mt-2 grid list-disc gap-2 pl-5 marker:text-blue-500">@for (schedule of room.schedules; track scheduleTrackKey(schedule, $index)) { <li class="untrusted-prose pl-1 text-sm leading-6"><strong>{{ schedule.day }}</strong>, <span class="tabular-nums">{{ schedule.startTime }}&ndash;{{ schedule.endTime }}</span> &mdash; {{ schedule.subject }}</li> }</ul></section>
+          }
+        } @else if (mode === 'table' && questionFocus() === 'schedule_list') {
+          <div class="max-h-[32rem] overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Scrollable configured schedules table"><table class="w-full min-w-[42rem] border-collapse text-left text-sm"><caption class="px-3 py-3 text-left font-semibold text-slate-900">Configured schedules by room</caption><thead class="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr><th class="border-y px-3 py-3" scope="col">Room</th><th class="border-y px-3 py-3" scope="col">Day</th><th class="border-y px-3 py-3" scope="col">Time</th><th class="border-y px-3 py-3" scope="col">Subject</th></tr></thead><tbody class="divide-y divide-slate-100">@for (row of scheduleRows(item); track scheduleDisplayTrackKey(row, $index)) { <tr><th class="untrusted-prose px-3 py-3 font-semibold" scope="row">{{ row.roomName }}</th><td class="px-3 py-3">{{ row.day ?? 'None configured' }}</td><td class="px-3 py-3 tabular-nums">{{ row.startTime && row.endTime ? row.startTime + '–' + row.endTime : '—' }}</td><td class="untrusted-prose px-3 py-3">{{ row.subject ?? '—' }}</td></tr> }</tbody></table></div>
+        } @else if (mode === 'table') {
+          <div class="max-h-[32rem] overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" [attr.aria-label]="'Scrollable ' + telemetryMetricLabel().toLowerCase() + ' table'"><table class="w-full min-w-[36rem] border-collapse text-left text-sm"><caption class="px-3 py-3 text-left font-semibold text-slate-900">{{ telemetryMetricLabel() }} by room</caption><thead class="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr><th class="border-y px-3 py-3" scope="col">Room</th><th class="border-y px-3 py-3" scope="col">{{ telemetryMetricLabel() }}</th><th class="border-y px-3 py-3" scope="col">{{ telemetryContextLabel() }}</th><th class="border-y px-3 py-3" scope="col">Last seen</th></tr></thead><tbody class="divide-y divide-slate-100">@for (room of telemetryRowsForDisplay(item); track room.roomName) { <tr><th class="untrusted-prose px-3 py-3 font-semibold" scope="row">{{ room.roomName }}</th><td class="px-3 py-3 font-semibold text-blue-700">{{ telemetryMetricValue(room) }}</td><td class="px-3 py-3 text-slate-600">{{ telemetryContextValue(room) }}</td><td class="px-3 py-3 text-slate-500">{{ formatDateTime(room.lastSeen) }}</td></tr> }</tbody></table></div>
+        } @else if (mode === 'key_value') {
+          <dl class="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2">@for (room of telemetryRowsForDisplay(item); track room.roomName) { <div class="min-w-0 bg-white px-3 py-3"><dt class="untrusted-prose text-xs font-medium text-slate-500">{{ room.roomName }}</dt><dd class="mt-1 break-words font-semibold text-slate-900">{{ telemetryMetricValue(room) }}</dd><p class="mt-1 text-xs text-slate-500">{{ telemetryContextValue(room) }}</p></div> }</dl>
+        } @else {
+          <div class="max-h-[32rem] overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Scrollable room data table"><table class="w-full min-w-[66rem] border-collapse text-left text-sm"><caption class="sr-only">OcuTemp room readings and stored configuration</caption><thead class="sticky top-0 bg-slate-50 text-xs text-slate-600"><tr><th class="border-b px-3 py-3" scope="col">Room</th><th class="border-b px-3 py-3" scope="col">Reading</th><th class="border-b px-3 py-3" scope="col">Temperature</th><th class="border-b px-3 py-3" scope="col">Humidity</th><th class="border-b px-3 py-3" scope="col">Condition</th><th class="border-b px-3 py-3" scope="col">AC</th><th class="border-b px-3 py-3" scope="col">AI auto-apply</th><th class="border-b px-3 py-3" scope="col">Schedules</th></tr></thead><tbody class="divide-y divide-slate-100">@for (room of item.rooms; track room.roomName) { <tr><th class="untrusted-prose px-3 py-3 font-semibold" scope="row">{{ room.roomName }}</th><td class="px-3 py-3">{{ measurementStatusLabel(room) }}</td><td class="px-3 py-3 tabular-nums">{{ room.temperature === null ? '—' : ((room.temperature | number:'1.1-1') + ' °C') }}</td><td class="px-3 py-3 tabular-nums">{{ room.humidity === null ? '—' : ((room.humidity | number:'1.0-1') + '%') }}</td><td class="px-3 py-3">{{ conditionLabel(room.condition) }}</td><td class="px-3 py-3">{{ room.acPower === null ? 'Not reported' : (room.acPower ? 'On' : 'Off') }}</td><td class="px-3 py-3">{{ room.aiAutoApply === null ? 'Not reported' : (room.aiAutoApply ? 'Enabled' : 'Disabled') }}</td><td class="px-3 py-3">{{ room.schedules.length }}</td></tr> }</tbody></table></div>
+        }
+      </section>
+    }
+
+    @case ('climate-suggestions') {
+      <section class="min-w-0 border-l-2 border-blue-200 pl-4 sm:pl-5" [attr.aria-labelledby]="presentationDomId('climate-title', item.id)"><header class="mb-4"><p class="text-xs font-semibold text-blue-700">Stored climate suggestions</p><h3 class="untrusted-prose mt-1 text-base font-semibold text-slate-950" [id]="presentationDomId('climate-title', item.id)">{{ item.title }}</h3></header>
+        @if (mode === 'table') {
+          <div class="overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Scrollable climate suggestions table"><table class="w-full min-w-[42rem] text-left text-sm"><caption class="sr-only">Stored climate suggestions by room</caption><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="border-b px-3 py-3" scope="col">Room</th><th class="border-b px-3 py-3" scope="col">Suggested</th><th class="border-b px-3 py-3" scope="col">State</th><th class="border-b px-3 py-3" scope="col">Updated</th></tr></thead><tbody class="divide-y divide-slate-100">@for (room of item.rooms; track room.roomName) { <tr><th class="untrusted-prose px-3 py-3" scope="row">{{ room.roomName }}</th><td class="px-3 py-3">{{ room.suggestedTemp === null ? '—' : ((room.suggestedTemp | number:'1.1-1') + ' °C') }}</td><td class="px-3 py-3">{{ climateActionLabel(room) }}</td><td class="px-3 py-3">{{ formatDateTime(room.updatedAt) }}</td></tr> }</tbody></table></div>
+        } @else {
+          <div class="divide-y divide-slate-200 border-y border-slate-200">@for (room of item.rooms; track room.roomName) { <article class="py-4"><header class="flex flex-wrap justify-between gap-2"><h4 class="untrusted-prose text-sm font-semibold text-slate-900">{{ room.roomName }}</h4><span class="rounded-full px-2 py-1 text-xs font-semibold" [ngClass]="climateActionClass(room)">{{ climateActionLabel(room) }}</span></header>@if (room.status === 'available') { <p class="mt-2 text-sm text-slate-700">Suggested <strong>{{ room.suggestedTemp | number:'1.1-1' }} °C</strong>@if (room.reason) { <span class="untrusted-prose"> &mdash; {{ room.reason }}</span> }</p> } @else { <p class="mt-2 text-sm text-slate-500">{{ climateStatusLabel(room.status) }}</p> }</article> }</div>
+        }
+      </section>
+    }
+
+    @case ('recent-events') {
+      <section class="min-w-0 border-l-2 border-blue-200 pl-4 sm:pl-5" [attr.aria-labelledby]="presentationDomId('events-title', item.id)"><header class="mb-4"><p class="text-xs font-semibold text-blue-700">Recent OcuTemp activity</p><h3 class="untrusted-prose mt-1 text-base font-semibold text-slate-950" [id]="presentationDomId('events-title', item.id)">{{ item.title }}</h3></header>
+        @if (mode === 'table') {
+          <div class="overflow-auto rounded-xl border border-slate-200" tabindex="0" role="region" aria-label="Scrollable recent events table"><table class="w-full min-w-[44rem] text-left text-sm"><caption class="sr-only">Recent room events</caption><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="border-b px-3 py-3" scope="col">Time</th><th class="border-b px-3 py-3" scope="col">Room</th><th class="border-b px-3 py-3" scope="col">Event</th><th class="border-b px-3 py-3" scope="col">Detail</th></tr></thead><tbody class="divide-y divide-slate-100">@for (event of item.events; track eventTrackKey(event, $index)) { <tr><td class="px-3 py-3 text-slate-500">{{ formatDateTime(event.updatedAt) }}</td><th class="untrusted-prose px-3 py-3" scope="row">{{ event.roomName }}</th><td class="untrusted-prose px-3 py-3">{{ event.eventType }}</td><td class="untrusted-prose px-3 py-3">{{ event.detail }}</td></tr> }</tbody></table></div>
+        } @else {
+          <ol class="grid list-none gap-4 border-y border-slate-200 py-4">@for (event of item.events; track eventTrackKey(event, $index)) { <li><div class="flex flex-wrap justify-between gap-2"><strong class="untrusted-prose text-sm text-slate-900">{{ event.roomName }} &middot; {{ event.eventType }}</strong><time class="text-xs text-slate-500" [attr.datetime]="event.updatedAt">{{ formatDateTime(event.updatedAt) }}</time></div><p class="untrusted-prose mt-1 text-sm leading-6 text-slate-700">{{ event.detail }}</p></li> }</ol>
+        }
+      </section>
+    }
+
+    @case ('system-help') {
+      <section class="min-w-0 border-l-2 border-blue-200 pl-4 sm:pl-5" [attr.aria-labelledby]="presentationDomId('help-title', item.id)"><header class="mb-4"><p class="text-xs font-semibold text-blue-700">Verified OcuTemp help</p><h3 class="mt-1 text-base font-semibold text-slate-950" [id]="presentationDomId('help-title', item.id)">{{ item.title }}</h3><p class="mt-1 text-sm text-slate-500">{{ helpTopicLabel(item.topic) }}</p></header><ol class="grid list-decimal gap-2 border-y border-slate-200 py-4 pl-6 text-sm leading-6 text-slate-700 marker:font-semibold marker:text-blue-700">@for (step of item.steps; track step + ':' + $index) { <li class="pl-1">{{ step }}</li> }</ol>@if (item.route) { <a class="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" [routerLink]="item.route">Open this OcuTemp page<span class="material-symbols-outlined text-lg" aria-hidden="true">arrow_forward</span></a> }</section>
+    }
+  }
+</div>

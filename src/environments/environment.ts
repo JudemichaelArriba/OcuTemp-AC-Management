@@ -1,5 +1,6 @@
 export const environment = {
   production: false,
+
   firebase: {
     apiKey: 'AIzaSyBf94Xs0iZTAG-kbNvNSGUKO-pTyIXPcpw',
     authDomain: 'ocutemp.firebaseapp.com',
@@ -9,5 +10,6 @@ export const environment = {
     messagingSenderId: '700435856134',
     appId: '1:700435856134:web:f4e893c1d80cab9bc4bc87'
   },
-      sentryDsn: ''
+
+  sentryDsn: ''
 };

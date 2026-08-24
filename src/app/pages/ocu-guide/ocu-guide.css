@@ -1,0 +1,8 @@
+:host {
+  display: block;
+  min-height: 0;
+}
+
+app-ocu-guide-conversation {
+  height: 100%;
+}

@@ -1,13 +1,15 @@
 {
   "name": "ocutemp",
   "version": "1.2.1",
+  "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "ng": "ng",
-    "start": "node set-env.js && ng serve",
-    "build": "node set-env.js && ng cache clean && ng build",
+    "start": "node set-env.cjs && ng serve",
+    "build": "node set-env.cjs && npm run typecheck:api && ng cache clean && ng build",
+    "typecheck:api": "tsc -p tsconfig.api.json",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
   },
@@ -27,6 +29,7 @@
   "packageManager": "npm@11.6.2",
   "dependencies": {
     "@ai-sdk/google": "^3.0.80",
+    "@ai-sdk/groq": "^3.0.39",
     "@angular/common": "^21.1.0",
     "@angular/compiler": "^21.1.0",
     "@angular/core": "^21.1.0",
@@ -41,6 +44,7 @@
     "ai": "^6.0.197",
     "chart.js": "^4.5.1",
     "firebase": "^12.8.0",
+    "jose": "^6.2.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "postcss": "^8.5.6",
