@@ -24,8 +24,10 @@ import {
   Tooltip,
 } from 'chart.js';
 import {
+  ChatDisplayDirective,
   ChatEvidenceMetadata,
   ChatPresentation,
+  ChatQuestionFocus,
   ClimateSuggestionRow,
   EnergyReportPresentation,
   EnergyRoomDataStatus,
@@ -66,12 +68,20 @@ interface EnergyChartSeries {
   readonly rankingLabels: string[];
   readonly rankingValues: number[];
   readonly trendLabels: string[];
-  readonly trendValues: number[];
+  readonly trendValues: Array<number | null>;
 }
 
 interface EnergyRoomsCache {
   readonly stateKey: string;
   readonly rows: EnergyRoomRow[];
+}
+
+interface ScheduleDisplayRow {
+  readonly roomName: string;
+  readonly day: string | null;
+  readonly startTime: string | null;
+  readonly endTime: string | null;
+  readonly subject: string | null;
 }
 
 type EnergyChartKind = 'ranking' | 'trend';
@@ -94,7 +104,9 @@ const DEFAULT_ENERGY_STATE: EnergyPanelState = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OcuGuideReportComponent implements OnDestroy {
-  readonly presentations = input.required<readonly ChatPresentation[]>();
+  readonly presentation = input.required<ChatPresentation>();
+  readonly displayDirective = input.required<ChatDisplayDirective>();
+  readonly questionFocus = input.required<ChatQuestionFocus>();
   readonly evidence = input<ChatEvidenceMetadata>();
   readonly turnId = input.required<string>();
 
@@ -115,10 +127,10 @@ export class OcuGuideReportComponent implements OnDestroy {
 
   constructor() {
     afterRenderEffect(() => {
-      const presentations = this.presentations();
+      const presentation = this.presentation();
       const canvases = this.reportCharts();
       this.syncChartObservers(canvases);
-      this.rebuildCharts(presentations, canvases);
+      this.rebuildCharts(presentation, canvases);
     });
   }
 
@@ -142,26 +154,6 @@ export class OcuGuideReportComponent implements OnDestroy {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
     this.patchEnergyState(id, { query: target.value, page: 1 });
-  }
-
-  toggleEnergySort(id: string, sort: EnergySort): void {
-    const current = this.energyState(id);
-    const direction: SortDirection = current.sort === sort
-      ? (current.direction === 'asc' ? 'desc' : 'asc')
-      : (sort === 'room' || sort === 'status' ? 'asc' : 'desc');
-    this.patchEnergyState(id, { sort, direction, page: 1 });
-  }
-
-  sortLabel(id: string, sort: EnergySort): string {
-    const current = this.energyState(id);
-    if (current.sort !== sort) return 'Not sorted';
-    return current.direction === 'asc' ? 'Sorted ascending' : 'Sorted descending';
-  }
-
-  sortIcon(id: string, sort: EnergySort): string {
-    const current = this.energyState(id);
-    if (current.sort !== sort) return 'unfold_more';
-    return current.direction === 'asc' ? 'arrow_upward' : 'arrow_downward';
   }
 
   filteredEnergyRooms(report: EnergyReportPresentation): EnergyRoomRow[] {
@@ -230,8 +222,114 @@ export class OcuGuideReportComponent implements OnDestroy {
     return report.rooms.filter((row) => row.status === 'recorded' && row.estimatedKwh !== null);
   }
 
+  recordedTrendPoints(report: EnergyReportPresentation): EnergyTrendPoint[] {
+    return report.trend.filter((point) => point.estimatedKwh !== null);
+  }
+
+  scheduleRows(presentation: Extract<ChatPresentation, { readonly kind: 'room-telemetry' }>): ScheduleDisplayRow[] {
+    return presentation.rooms.flatMap<ScheduleDisplayRow>((room) => (
+      room.schedules.length > 0
+        ? room.schedules.map((schedule) => ({ roomName: room.roomName, ...schedule }))
+        : [{
+            roomName: room.roomName,
+            day: null,
+            startTime: null,
+            endTime: null,
+            subject: null,
+          }]
+    ));
+  }
+
+  telemetryRowsForDisplay(
+    presentation: Extract<ChatPresentation, { readonly kind: 'room-telemetry' }>,
+  ): RoomTelemetryRow[] {
+    switch (this.questionFocus()) {
+      case 'current_temperature':
+        return presentation.rooms.filter((room) => (
+          room.measurementStatus === 'current' && room.temperature !== null
+        ));
+      case 'last_known_temperature':
+        return presentation.rooms.filter((room) => room.temperature !== null);
+      case 'current_humidity':
+        return presentation.rooms.filter((room) => (
+          room.measurementStatus === 'current' && room.humidity !== null
+        ));
+      case 'current_condition':
+        return presentation.rooms.filter((room) => (
+          room.measurementStatus === 'current' && room.condition !== 'unknown'
+        ));
+      case 'ac_power_status':
+        return presentation.rooms.filter((room) => (
+          room.measurementStatus === 'current' && room.acPower !== null
+        ));
+      case 'ai_auto_apply_status':
+        return [...presentation.rooms].sort((left, right) => (
+          Number(left.aiAutoApply === null) - Number(right.aiAutoApply === null)
+        ));
+      default:
+        return presentation.rooms;
+    }
+  }
+
+  telemetryMetricLabel(): string {
+    switch (this.questionFocus()) {
+      case 'current_temperature': return 'Current temperature';
+      case 'last_known_temperature': return 'Latest / last-known temperature';
+      case 'current_humidity': return 'Current humidity';
+      case 'current_condition': return 'Current condition';
+      case 'device_status': return 'Device status';
+      case 'ac_power_status': return 'AC power';
+      case 'ai_auto_apply_status': return 'AI auto-apply';
+      default: return 'Verified state';
+    }
+  }
+
+  telemetryMetricValue(row: RoomTelemetryRow): string {
+    switch (this.questionFocus()) {
+      case 'current_temperature':
+      case 'last_known_temperature':
+        return row.temperature === null ? 'Not reported' : `${row.temperature.toFixed(1)} °C`;
+      case 'current_humidity':
+        return row.humidity === null ? 'Not reported' : `${row.humidity.toFixed(1)}%`;
+      case 'current_condition':
+        return this.conditionLabel(row.condition);
+      case 'device_status':
+        if (row.deviceAssignmentStatus === 'not_assigned') return 'No assigned device';
+        if (row.deviceAssignmentStatus === 'unavailable') return 'Device data unavailable';
+        return `${row.onlineState.charAt(0).toUpperCase()}${row.onlineState.slice(1)}`;
+      case 'ac_power_status':
+        return row.acPower === null ? 'Not reported' : (row.acPower ? 'On' : 'Off');
+      case 'ai_auto_apply_status':
+        return row.aiAutoApply === null ? 'Not reported' : (row.aiAutoApply ? 'Enabled' : 'Disabled');
+      default:
+        return this.measurementStatusLabel(row);
+    }
+  }
+
+  telemetryContextLabel(): string {
+    if (this.questionFocus() === 'ai_auto_apply_status') return 'Device connection';
+    return this.questionFocus() === 'last_known_temperature' ? 'Reading freshness' : 'Reading status';
+  }
+
+  telemetryContextValue(row: RoomTelemetryRow): string {
+    if (this.questionFocus() !== 'ai_auto_apply_status') return this.measurementStatusLabel(row);
+    if (row.deviceAssignmentStatus === 'not_assigned') return 'No assigned device';
+    if (row.deviceAssignmentStatus === 'unavailable') return 'Device data unavailable';
+    return row.onlineState === 'unknown'
+      ? 'Not available'
+      : `${row.onlineState.charAt(0).toUpperCase()}${row.onlineState.slice(1)}`;
+  }
+
+  scheduleDisplayTrackKey(row: ScheduleDisplayRow, index: number): string {
+    return [row.roomName, row.day ?? '', row.startTime ?? '', row.endTime ?? '', row.subject ?? '', index].join('\u0000');
+  }
+
   topEnergyRooms(report: EnergyReportPresentation): EnergyRoomRow[] {
     return this.energyChartSeries(report).rankingRows;
+  }
+
+  rankingChartHeight(report: EnergyReportPresentation): number {
+    return Math.max(240, Math.min(4_800, this.recordedEnergyRooms(report).length * 28 + 56));
   }
 
   coveragePercent(report: EnergyReportPresentation): number {
@@ -239,16 +337,8 @@ export class OcuGuideReportComponent implements OnDestroy {
     return (report.metrics.roomsWithRecords / report.metrics.activeRooms) * 100;
   }
 
-  climateDelta(row: ClimateSuggestionRow): number | null {
-    if (row.currentRoomTemp === null || row.suggestedTemp === null) return null;
-    return row.suggestedTemp - row.currentRoomTemp;
-  }
-
-  formatDelta(row: ClimateSuggestionRow): string {
-    const delta = this.climateDelta(row);
-    if (delta === null) return 'Not available';
-    if (delta === 0) return 'No change';
-    return `${delta > 0 ? '+' : ''}${delta.toFixed(1)} °C`;
+  temporalCoveragePercent(report: EnergyReportPresentation): number {
+    return report.metrics.dataCoveragePercent;
   }
 
   formatRuntime(seconds: number | null): string {
@@ -292,18 +382,13 @@ export class OcuGuideReportComponent implements OnDestroy {
       : `${condition.charAt(0).toUpperCase()}${condition.slice(1)}`;
   }
 
-  onlineStateDotClass(state: string): string {
-    switch (state) {
-      case 'online': return 'bg-emerald-500';
-      case 'stale': return 'bg-amber-500';
-      case 'offline': return 'bg-red-500';
-      default: return 'bg-slate-400';
+  measurementStatusLabel(row: RoomTelemetryRow): string {
+    switch (row.measurementStatus) {
+      case 'current': return 'Current';
+      case 'stale': return 'Last known (stale)';
+      case 'offline': return 'Last known (offline)';
+      case 'unavailable': return 'Unavailable';
     }
-  }
-
-  autoApplyLabel(value: boolean | null): string {
-    if (value === null) return 'not reported';
-    return value ? 'on' : 'off';
   }
 
   climateActionLabel(row: ClimateSuggestionRow): string {
@@ -399,24 +484,21 @@ export class OcuGuideReportComponent implements OnDestroy {
   }
 
   private rebuildCharts(
-    presentations: readonly ChatPresentation[],
+    presentation: ChatPresentation,
     canvases: readonly ElementRef<HTMLCanvasElement>[],
   ): void {
     this.destroyCharts();
-    const reportsById = new Map(
-      presentations
-        .filter((presentation): presentation is EnergyReportPresentation => (
-          presentation.kind === 'energy-report' && presentation.availability === 'available'
-        ))
-        .map((report) => [report.id, report]),
-    );
+    const report = presentation.kind === 'energy-report'
+      && presentation.availability === 'available'
+      ? presentation
+      : null;
     const reducedMotion = typeof window !== 'undefined'
       && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     for (const canvasRef of canvases) {
       const canvas = canvasRef.nativeElement;
       if (!this.visibleChartCanvases.has(canvas)) continue;
-      const report = reportsById.get(canvas.dataset['presentationId'] ?? '');
+      if (canvas.dataset['presentationId'] !== report?.id) continue;
       const kind = canvas.dataset['chartKind'] as EnergyChartKind | undefined;
       if (!report || !kind) continue;
       this.charts.push(kind === 'ranking'
@@ -437,7 +519,7 @@ export class OcuGuideReportComponent implements OnDestroy {
         labels: series.rankingLabels,
         datasets: [{
           data: series.rankingValues,
-          backgroundColor: series.rankingValues.map((_, index) => index === 0 ? '#1d4ed8' : '#93c5fd'),
+          backgroundColor: series.rankingRows.map((row) => row.rank === 1 ? '#1d4ed8' : '#93c5fd'),
           borderRadius: 7,
           borderSkipped: false,
           barThickness: 14,
@@ -495,6 +577,7 @@ export class OcuGuideReportComponent implements OnDestroy {
           pointHoverRadius: 5,
           borderWidth: 2,
           fill: true,
+          spanGaps: false,
           tension: 0.28,
         }],
       },
@@ -508,7 +591,11 @@ export class OcuGuideReportComponent implements OnDestroy {
             displayColors: false,
             backgroundColor: '#0f172a',
             padding: 10,
-            callbacks: { label: (context) => `${Number(context.parsed.y).toFixed(2)} kWh estimated` },
+            callbacks: {
+              label: (context) => context.parsed.y === null
+                ? 'No recorded data'
+                : `${Number(context.parsed.y).toFixed(2)} kWh estimated`,
+            },
           },
         },
         scales: {
@@ -558,7 +645,7 @@ export class OcuGuideReportComponent implements OnDestroy {
         if (entry.isIntersecting) this.visibleChartCanvases.add(canvas);
         else this.visibleChartCanvases.delete(canvas);
       }
-      this.rebuildCharts(this.presentations(), this.reportCharts());
+      this.rebuildCharts(this.presentation(), this.reportCharts());
     }, { rootMargin: '240px 0px' });
 
     for (const canvas of currentCanvases) {
@@ -573,8 +660,8 @@ export class OcuGuideReportComponent implements OnDestroy {
     if (cached) return cached;
 
     const rankingRows = this.recordedEnergyRooms(report)
-      .sort((left, right) => (right.estimatedKwh ?? 0) - (left.estimatedKwh ?? 0))
-      .slice(0, 10);
+      .sort((left, right) => (left.rank ?? Number.MAX_SAFE_INTEGER) -
+        (right.rank ?? Number.MAX_SAFE_INTEGER) || left.roomName.localeCompare(right.roomName));
     const series: EnergyChartSeries = {
       rankingRows,
       rankingLabels: rankingRows.map((row) => row.roomName),

@@ -10,10 +10,64 @@ export type ChatToolName =
 export type ChatIntent =
     | 'data'
     | 'help'
-    | 'general'
     | 'greeting'
     | 'control'
     | 'unsupported';
+
+export type ChatQuestionFocus =
+    | 'room_existence'
+    | 'current_temperature'
+    | 'last_known_temperature'
+    | 'current_humidity'
+    | 'current_condition'
+    | 'device_status'
+    | 'ac_power_status'
+    | 'ai_auto_apply_status'
+    | 'schedule_count'
+    | 'schedule_list'
+    | 'energy_total'
+    | 'energy_rank_winner'
+    | 'energy_ranking'
+    | 'energy_trend'
+    | 'energy_report'
+    | 'facility_efficiency_analysis'
+    | 'climate_suggestion'
+    | 'recent_events'
+    | 'system_help'
+    | 'greeting'
+    | 'control_request'
+    | 'unsupported';
+
+export type ChatOutputPreference = 'auto' | 'text' | 'table' | 'graph';
+
+export type ChatDisplayMode =
+    | 'compact_metrics'
+    | 'key_value'
+    | 'bullet_list'
+    | 'table'
+    | 'ranking_chart'
+    | 'trend_chart'
+    | 'full_report';
+
+export interface ChatDisplayDirective {
+    readonly presentationId: string;
+    readonly mode: ChatDisplayMode;
+}
+
+export type ChatMetric =
+    | 'none'
+    | 'temperature'
+    | 'humidity'
+    | 'condition'
+    | 'device_status'
+    | 'ac_power'
+    | 'ai_auto_apply'
+    | 'schedule_count'
+    | 'estimated_kwh'
+    | 'runtime_seconds'
+    | 'session_count';
+
+export type ChatComparisonTarget = 'none' | 'rooms' | 'winner' | 'trend';
 export type EnergyBucket = 'auto' | 'day' | 'week' | 'month' | 'year';
 export type EnergyRangePreset =
     | 'today'
@@ -117,7 +171,9 @@ export interface EnergyTrendPoint {
     readonly label: string;
     readonly start: string;
     readonly end: string;
-    readonly estimatedKwh: number;
+    readonly estimatedKwh: number | null;
+    readonly recordedDays: number;
+    readonly expectedDays: number;
 }
 
 export interface EnergyReportPresentation {
@@ -134,17 +190,24 @@ export interface EnergyReportPresentation {
         readonly activeRooms: number;
         readonly roomsWithRecords: number;
         readonly coveragePercent: number;
+        readonly recordedDays: number;
+        readonly expectedDays: number;
+        readonly dataCoveragePercent: number;
     };
     readonly trend: EnergyTrendPoint[];
     readonly rooms: EnergyRoomRow[];
 }
 
 export type DeviceOnlineState = 'online' | 'stale' | 'offline' | 'unknown';
+export type DeviceAssignmentStatus = 'assigned' | 'not_assigned' | 'unavailable';
+export type MeasurementStatus = 'current' | 'stale' | 'offline' | 'unavailable';
 export type RoomCondition = 'comfortable' | 'warm' | 'hot' | 'critical' | 'unknown';
 
 export interface RoomTelemetryRow {
     readonly roomName: string;
+    readonly deviceAssignmentStatus: DeviceAssignmentStatus;
     readonly onlineState: DeviceOnlineState;
+    readonly measurementStatus: MeasurementStatus;
     readonly condition: RoomCondition;
     readonly temperature: number | null;
     readonly humidity: number | null;
@@ -225,8 +288,10 @@ export type ChatPresentation =
 
 export interface ChatTurnResponse {
     readonly turnId: string;
+    readonly questionFocus: ChatQuestionFocus;
     readonly answer: ChatAnswer;
     readonly presentations: ChatPresentation[];
+    readonly displayPlan: ChatDisplayDirective[];
     readonly evidence: ChatEvidenceMetadata;
     readonly stateToken: string;
     readonly contextReset: boolean;
@@ -250,10 +315,18 @@ export interface PlannerToolPlan {
     readonly bucket: EnergyBucket;
     readonly topic: string;
     readonly limit: number;
+    readonly includeLastKnown: boolean;
 }
 
 export interface PlannerResult {
     readonly intent: ChatIntent;
+    readonly questionFocus: ChatQuestionFocus;
+    readonly outputPreference: ChatOutputPreference;
+    readonly requestedRoomNames: string[];
+    readonly allRooms: boolean;
+    readonly metric: ChatMetric;
+    readonly comparisonTarget: ChatComparisonTarget;
+    readonly isFollowUp: boolean;
     readonly needsClarification: boolean;
     readonly clarification: string;
     readonly resolvedSummary: string;
@@ -271,6 +344,73 @@ export interface ToolExecutionResult {
     readonly facts: GroundingFact[];
     readonly notices: string[];
     readonly partial: boolean;
+    readonly scope: RoomScopeResolution;
+    readonly outcome: ToolOutcome;
+}
+
+export interface RoomScopeResolution {
+    readonly requestedNames: string[];
+    readonly matchedRoomNames: string[];
+    readonly inactiveRoomNames: string[];
+    readonly missingRoomNames: string[];
+    readonly ambiguousRoomNames: string[];
+    readonly activeRoomNames: string[];
+}
+
+export type ToolOutcome =
+    | 'ok'
+    | 'room_not_found'
+    | 'room_inactive'
+    | 'room_ambiguous'
+    | 'no_online_reading'
+    | 'no_energy_records'
+    | 'source_unavailable'
+    | 'insufficient_evidence';
+
+export type ChatAnswerabilityOutcome =
+    | 'answerable'
+    | 'partial'
+    | 'room_not_found'
+    | 'room_inactive'
+    | 'room_ambiguous'
+    | 'no_online_reading'
+    | 'no_energy_records'
+    | 'source_unavailable'
+    | 'insufficient_evidence'
+    | 'clarification_required'
+    | 'not_applicable';
+
+export type ChatFreshnessOutcome =
+    | 'current'
+    | 'mixed'
+    | 'stale'
+    | 'offline'
+    | 'unavailable'
+    | 'not_applicable';
+
+export type RecommendationCategory =
+    | 'review_schedule'
+    | 'inspect_high_runtime_room'
+    | 'investigate_offline_device'
+    | 'review_ai_auto_apply_configuration'
+    | 'collect_missing_energy_data';
+
+export interface EvidenceBackedRecommendation {
+    readonly category: RecommendationCategory;
+    readonly text: string;
+    readonly evidenceRefs: string[];
+}
+
+export interface AnswerPacket {
+    readonly questionFocus: ChatQuestionFocus;
+    readonly scope: RoomScopeResolution;
+    readonly range: EnergyRange | null;
+    readonly answerability: ChatAnswerabilityOutcome;
+    readonly freshness: ChatFreshnessOutcome;
+    readonly facts: GroundingFact[];
+    readonly recommendations: EvidenceBackedRecommendation[];
+    readonly notices: string[];
+    readonly displayPlan: ChatDisplayDirective[];
 }
 
 export interface GroundedAnswerDraft {
@@ -279,6 +419,11 @@ export interface GroundedAnswerDraft {
     readonly summary: string;
     readonly summaryEvidenceRefs: string[];
     readonly highlights: Array<{
+        readonly text: string;
+        readonly evidenceRefs: string[];
+    }>;
+    readonly recommendations: Array<{
+        readonly category: RecommendationCategory;
         readonly text: string;
         readonly evidenceRefs: string[];
     }>;
@@ -295,10 +440,25 @@ export interface AuthenticatedChatUser {
 export interface ChatStateTurn {
     readonly user: string;
     readonly assistant: string;
+    readonly context: ChatStateContext;
+}
+
+export interface ChatStateContext {
+    readonly questionFocus: ChatQuestionFocus;
+    readonly metric: ChatMetric;
+    readonly roomNames: string[];
+    readonly allRooms: boolean;
+    readonly rangePreset: EnergyRangePreset;
+    readonly startDate: string;
+    readonly endDate: string;
+    readonly bucket: EnergyBucket;
+    readonly toolNames: ChatToolName[];
+    readonly answerability: ChatAnswerabilityOutcome;
+    readonly hadVisual: boolean;
 }
 
 export interface ChatStatePayload {
-    readonly version: 1;
+    readonly version: 2;
     readonly uid: string;
     readonly conversationId: string;
     readonly issuedAt: number;

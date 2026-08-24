@@ -1,388 +1,631 @@
-# TODO: Production OcuGuide Assistant Upgrade
+# TODO: OcuGuide System-Grounded Agent Remediation
 
-## Goal
+## Status of this document
 
-Turn OcuGuide into a natural, production-ready facility assistant that:
+This remediation is implemented on the feature branch and validated by the permitted production build. An [x] marks code-complete or statically verified work; authenticated Preview and other manual acceptance items remain unchecked until they are performed.
 
-- answers basic in-scope questions without requiring a tool;
-- uses read-only facility tools only when live, stored, room-specific, or report data is needed;
-- presents answers as clear paragraphs, lists, tables, metrics, and charts as appropriate;
-- keeps technical tool names and safe tool-result details hidden until the user opens the disclosure control;
-- feels as focused and easy to read as ChatGPT or Claude while retaining OcuTemp's identity;
-- preserves the existing authentication, authorization, rate limits, encrypted chat state, and read-only data boundary.
+- Implementation changed only the bounded OcuGuide client/server files listed below; no main-branch, environment, database, rules, package, test, or extra-endpoint change is included.
+- The attached RTDB export is untrusted reference data used only to understand the existing shape and define manual acceptance examples.
+- Do not copy, commit, seed, or hardcode values from the export.
+- Environment files were excluded from remediation; the normal build script generated only the existing ignored Angular environment outputs.
+- The optional one-pass refinement capability remains intentionally unchecked: the shipped pipeline uses one bounded plan and no autonomous/refinement loop.
 
-## Implementation status
+## Product outcome
 
-- [x] Feature-branch code implementation and static review are complete.
-- [x] `npm run build` passes, including strict API TypeScript compilation and the Angular production build.
-- [x] No automated tests were run and no test/spec files were added or modified.
-- [ ] Confirm the configured Gemini and Groq models are enabled for the deployed provider accounts.
-- [ ] Verify the required Vercel Preview environment variables, redeploy this feature branch, and complete the authenticated browser smoke checks in Section 10.
+OcuGuide must behave as a constrained facility-data agent, not a general-purpose HVAC chatbot and not a report template.
+
+It must:
+
+- answer the exact question first;
+- use only verified OcuTemp data or verified static OcuTemp help;
+- say clearly when a room does not exist, a device is offline, or evidence is insufficient;
+- preserve the subject, room scope, metric, and time range across short follow-ups;
+- retrieve data independently from deciding whether the user needs text, a list, a table, or a chart;
+- show no table or chart when a direct sentence answers the question better;
+- use a table or chart only when it materially improves understanding;
+- remain read-only, bounded, authenticated, and production-safe.
+
+## Verified diagnosis of the current behavior
+
+The implementation must address these specific causes rather than only changing prompt wording:
+
+1. The current general intent deliberately allows broad AC and efficiency guidance without facility tools. That permits an answer such as generic energy-saving advice even when the user expects analysis based only on OcuTemp.
+2. A requested room that does not exactly match an active room becomes a notice/fact, but it is not a first-class terminal outcome. The answer writer or generic fallback can bury or ignore the fact that the room is absent.
+3. Current condition values can be calculated from stored temperature and humidity even when lastSeen makes the device stale or offline. An old hot value can therefore be described alongside an offline status as though it were current.
+4. Tool retrieval and visual rendering are coupled. If a tool returns a presentation, the conversation renders the presentation, so a simple yes/no, count, winner, or unavailable answer can still show a full table or graph.
+5. Encrypted conversation state stores only user text and a generic assistant summary. It does not preserve a typed prior query focus, room scope, energy period, or reusable tool plan. A follow-up such as “Who ranked first?” can therefore repeat the previous full report.
+6. The deterministic fallback loops over presentation types and emits report summaries. It does not have a question-specific fallback for existence, current temperature, AI toggle, schedule count, schedule list, or ranking winner.
+7. The answer writer receives a broad fact registry but no strict answer target requiring it to answer only the requested fact. It can restate the whole report instead of answering the follow-up naturally.
+
+## RTDB shape that the implementation must support
+
+The attached export confirms the existing production-shaped fields below. These are examples, not seed data and not constants.
+
+- rooms/{roomUid}
+  - roomName
+  - status
+  - device
+  - schedules[] with day, startTime, endTime, and subject
+- devices/{deviceId}
+  - temperature, humidity, and occupancy
+  - status/lastSeen
+  - acState/power and related state
+  - control/aiAutoApply
+  - control/overrideActive and related control fields
+  - mlSuggestion
+  - energyDaily/{YYYY-MM-DD} with estimatedKwh, runtimeSeconds, sessionCount, and updatedAt
+- decisionLogs/{logId}
+  - roomUid, deviceId, eventType, mode, reason, applied, aiAutoApply, power, targetTemp, and updatedAt
+- users/{uid}
+  - must not be read for chat analysis except the already-required authenticated user's own authorization profile
+
+The supplied snapshot currently demonstrates:
+
+- only Room 1, Room 2, and Room 3 are configured and active;
+- Room 101 is not configured;
+- each configured room has schedules;
+- control/aiAutoApply is available independently from current sensor freshness;
+- all shown device lastSeen timestamps are old relative to the current date;
+- historical estimated energy is nested under each device's energyDaily records;
+- the sample 2026 coverage is temporally incomplete, with records in April, May, and July rather than continuous data for every month.
+
+Never bake those current values into code. The application must compute every answer from the authenticated request's live bounded snapshot.
 
 ---
 
-## Non-negotiable scope and safety constraints
+## 1. Replace the loose chatbot flow with a bounded facility agent
 
-- [x] Keep the existing `POST /api/chat` endpoint; do not add another API endpoint.
+### 1.1 Use a production-safe agent pipeline
+
+- [x] Implement one explicit bounded pipeline:
+
+      user request
+        -> semantic query planner
+        -> exact entity resolution
+        -> minimum read-only tool execution
+        -> deterministic evidence and freshness assessment
+        -> question-specific fact selection
+        -> deterministic visual policy
+        -> grounded natural-language writer
+        -> semantic response validation
+        -> typed client response
+
+- [x] Do not implement an open-ended autonomous loop.
+- [ ] Permit at most one initial plan and, only if essential evidence is missing and time remains, one bounded read-only refinement using the remaining tool budget.
+- [x] Keep the existing maximum of four unique tools for the entire turn, including any refinement.
+- [x] Never repeat the same tool in one turn.
+- [x] Keep all writes and control actions impossible.
+- [x] Stop early on terminal outcomes such as room_not_found, room_inactive, no_online_reading, no_energy_records, and source_unavailable.
+- [x] Do not call the answer model when a short deterministic terminal answer is safer and more useful.
+
+### 1.2 Give the two models distinct, narrow responsibilities
+
+- [x] Keep Gemini as the primary semantic planner and Groq as its fallback.
+- [x] Keep Groq as the primary natural-language writer and Gemini as its fallback.
+- [x] Do not let either model decide whether a room exists, whether a timestamp is current, whether a rank is first, or whether records are missing; compute those facts on the server.
+- [x] Require schema and semantic validation inside each provider attempt so an invalid primary response invokes the fallback.
+- [x] Give the writer only the question target and a minimal curated evidence packet, not the full presentation or unrelated facts.
+- [x] Use low temperature and bounded output tokens.
+- [x] Preserve a targeted deterministic fallback for each question focus rather than one generic report fallback.
+- [x] If both writers fail, return the targeted deterministic answer from verified facts.
+- [x] If planning fails for both providers, return a safe 503 or a narrow deterministic clarification; never guess a tool plan.
+
+---
+
+## 2. Introduce a typed semantic query plan
+
+### 2.1 Replace broad intent-only planning with an answer target
+
+- [x] Add a bounded questionFocus enum covering at least:
+  - room_existence
+  - current_temperature
+  - current_humidity
+  - current_condition
+  - device_status
+  - ac_power_status
+  - ai_auto_apply_status
+  - schedule_count
+  - schedule_list
+  - energy_total
+  - energy_rank_winner
+  - energy_ranking
+  - energy_trend
+  - energy_report
+  - facility_efficiency_analysis
+  - climate_suggestion
+  - recent_events
+  - system_help
+  - greeting
+  - control_request
+  - unsupported
+- [x] Add structured fields for requested room names, all-rooms scope, metric, exact energy range, comparison target, requested output form, and whether the request is a follow-up.
+- [x] Make the latest explicit user text override inherited context.
+- [x] Reject internally contradictory plans, such as energy_rank_winner without an energy range or current_temperature with a help tool.
+- [x] Require one direct answer target per turn; secondary details may support it but must not replace it.
+- [x] Distinguish “give me the whole report” from “what is the total?”, “who ranked first?”, “show the ranking”, and “show the trend.”
+
+### 2.2 Remove the outside-system advice path
+
+- [x] Remove general as a free-world-knowledge response path.
+- [x] Route generic facility questions into one of:
+  - system-grounded analysis using the minimum relevant tools;
+  - verified static OcuTemp help;
+  - a concise scope limitation when OcuTemp has insufficient evidence.
+- [x] For “How can we reduce AC energy waste?”, inspect only relevant verified system evidence such as recorded energy, runtime, schedules, occupancy, AI auto-apply configuration, device availability, and recent operational events.
+- [x] Do not provide generic tips about filters, insulation, servicing, setpoints, or maintenance unless a trusted server-owned OcuTemp rule explicitly connects that advice to verified system evidence.
+- [x] Do not use web search, external reference content, or unrestricted provider knowledge as a substantive answer source.
+- [x] Require each recommendation to cite an internal evidence fact and an approved recommendation category.
+- [x] Allow only bounded recommendation categories such as review_schedule, inspect_high_runtime_room, investigate_offline_device, review_ai_auto_apply_configuration, and collect_missing_energy_data.
+- [x] Strip internal evidence IDs before returning the public response.
+- [x] When evidence is insufficient, say so directly instead of filling the answer with general advice.
+- [x] Keep medical, legal, dangerous electrical, refrigerant, and repair guidance outside scope.
+
+---
+
+## 3. Make room existence and scope resolution authoritative
+
+### 3.1 Resolve entities before reading device or energy data
+
+- [x] Load a bounded room catalog first and preserve active, inactive, and absent distinctions.
+- [x] Normalize requested names with NFKC, trimmed whitespace, and case-insensitive exact matching.
+- [x] Do not silently fuzzy-match Room 101 to Room 1 or another room.
+- [x] Treat duplicate normalized room names as ambiguous and fail safely; never silently select one record.
+- [x] Do not expose room UIDs or device IDs in the public answer.
+- [x] Return a typed scope resolution containing requested names, matched rooms, inactive matches, and missing names.
+- [x] If a single requested room is absent, stop and answer that it is not configured in OcuTemp.
+- [x] If a room exists but is inactive, say that it exists but is inactive and do not describe it as missing.
+- [x] If multiple requested rooms contain both matches and misses, identify the missing names briefly and answer only for verified matches.
+- [x] If no requested room matches, do not read devices, energy, suggestions, or logs for that request.
+- [x] For a bounded facility, optionally mention the valid active room names in a short sentence after a not-found answer; never show a table for this outcome.
+- [x] Preserve the existing facility-size failure instead of returning an unbounded catalog.
+
+### 3.2 Required Room 101 behavior
+
+- [x] “Why is Room 101 hot?” must first resolve Room 101.
+- [x] With the supplied snapshot shape, answer substantially: “Room 101 is not configured in OcuTemp. The active rooms are Room 1, Room 2, and Room 3.”
+- [x] Do not discuss heat, temperature, causes, tables, charts, or suggestions after the entity-not-found outcome.
+- [x] Do not hardcode that sentence or those room names; derive them from the current bounded room catalog.
+
+---
+
+## 4. Separate current readings from stored or stale values
+
+### 4.1 Enforce freshness before temperature or heat-condition reasoning
+
+- [x] Reuse the application's established device freshness thresholds consistently:
+  - online: lastSeen less than 2 minutes ago;
+  - stale: 2 to 5 minutes ago;
+  - offline: more than 5 minutes ago or missing.
+- [x] Add an explicit measurement status such as current, stale, offline, or unavailable.
+- [x] Treat temperature, humidity, occupancy, AC power, and derived heat condition as current only when the device is online.
+- [x] Do not compute or expose a current warm, hot, or critical condition from a stale/offline reading.
+- [x] Preserve old values only as clearly labeled last-known values with their timestamp when the user explicitly asks for last-known data.
+- [x] Do not mix last-known sensor values into a “current” answer or current comparison table.
+- [x] Keep stored room configuration, schedules, and control/aiAutoApply separately answerable even when the device is offline.
+- [x] When control/aiAutoApply is stored as enabled but the device is offline, say it is configured as enabled in OcuTemp and that current device application cannot be confirmed.
+
+### 4.2 Required all-room current-temperature behavior
+
+- [x] For “What is the current temperature in every room?”, include only online rooms as current readings.
+- [x] If no active room has an online device, answer directly that no current temperature can be reported because no room is online.
+- [x] Do not say “0 of N are online” followed by a stale heat-condition count.
+- [x] Do not show a telemetry table or graph when every selected room lacks a current reading.
+- [x] Offer last-known readings only as a short follow-up option, not automatically.
+- [x] If some rooms are online and some are not, answer for online rooms, briefly name the unavailable count, and never display stale temperatures as current.
+
+### 4.3 “Why is this room hot?” behavior
+
+- [x] Apply outcome precedence in this order: room absent -> room inactive -> device not online -> current condition not hot -> current hot observation -> supported contributing evidence.
+- [x] If the room is offline, say OcuGuide cannot determine whether it is currently hot.
+- [x] If the room is online and hot, report the verified temperature/humidity observation first.
+- [x] Never invent a cause from temperature alone.
+- [x] Use schedules or recent decision events only when they provide directly relevant evidence.
+- [x] Phrase unproven causes as unknown and, where useful, state what additional system evidence is missing.
+
+---
+
+## 5. Make tool retrieval independent from visible output
+
+### 5.1 Add a server-validated display plan
+
+- [x] Keep all safe typed tool results available for grounding and the existing hidden tool disclosure.
+- [x] Add a separate bounded display plan to the public response rather than rendering every returned presentation.
+- [x] Let the semantic planner identify the question focus, but derive and validate display mode deterministically on the server.
+- [x] Support only allowlisted display modes such as:
+  - none
+  - compact_metrics
+  - key_value
+  - bullet_list
+  - table
+  - ranking_chart
+  - trend_chart
+  - full_report
+- [x] Associate each visible display directive with an existing sanitized presentation ID and an allowlisted view.
+- [x] Reject unknown modes, extra fields, duplicate IDs, incompatible views, and more visuals than allowed.
+- [x] Default to no visual for a direct fact, yes/no state, existence result, count, winner, clarification, unavailable result, or evidence-insufficient answer.
+- [x] Never render a chart with zero recorded points.
+- [x] Never render an empty table merely because a tool ran.
+- [x] Keep technical tool names and safe inspection data hidden behind “Show tools used,” even when the main answer has no visual.
+- [x] Do not add another API endpoint to lazily fetch tool results.
+
+### 5.2 Deterministic visual-selection matrix
+
+| User's actual question | Default main response | Visual rule |
+|---|---|---|
+| Does this room exist? | One direct sentence | None |
+| Is the device online? | One direct sentence | None |
+| What is Room 1's temperature? | One value plus freshness | None |
+| Is AI auto-apply on for Room 1? | Yes/no configuration sentence | None |
+| How many schedules does Room 2 have? | Count sentence | None |
+| List Room 2's schedules | Short bullets | No table |
+| List schedules for every room | Summary plus compact schedule table | Table |
+| What is the yearly total? | Total, coverage, and period | Compact metrics; no chart by default |
+| Who ranked first? | Winner, estimated value, period | None |
+| Show the room ranking | Ranked comparison | Table or ranking chart when multiple recorded rooms |
+| Show the trend over the year | Trend conclusion | Trend chart when recorded points exist |
+| Give me the full yearly energy report | Summary and useful report view | One default chart; detailed table available when useful |
+| Compare current temperatures in every room | Brief comparison | Table only when at least two current online readings exist |
+| No room is online / no records / room missing | Honest unavailable/not-found sentence | None |
+| Analyze system energy waste | Evidence-backed findings and actions | Visual only when a comparison/trend materially supports a finding |
+
+- [x] Honor an explicit “text only,” “no table,” “show table,” or “show graph” request when the requested view is compatible with available data.
+- [x] Cap the default answer to one main visual; do not automatically show both ranking and trend charts.
+- [x] Keep accessible tabular fallback data for a chart without duplicating a large visible table.
+
+---
+
+## 6. Answer the requested fact instead of restating a report
+
+### 6.1 Build a minimal question-specific evidence packet
+
+- [x] After tool execution, create a typed AnswerPacket containing:
+  - questionFocus;
+  - resolved room scope;
+  - resolved time range;
+  - answerability outcome;
+  - freshness outcome;
+  - only the facts needed for the requested answer;
+  - partial/unavailable notices;
+  - the validated display plan.
+- [x] Do not send unrelated room rows, schedules, events, or report facts to the writer.
+- [x] For energy_rank_winner, select only the rank-one fact, relevant tie facts, range, coverage, and estimation caveat.
+- [x] For ai_auto_apply_status, select only matched room configuration state and device freshness qualifier.
+- [x] For schedule_count, select only counts and matched scope.
+- [x] For schedule_list, select only the requested schedules.
+- [x] For current_temperature, select only current online readings and unavailable-room count.
+- [x] For facility_efficiency_analysis, select only evidence that supports a finding or explains why no recommendation is possible.
+
+### 6.2 Require focus-specific answer validation
+
+- [x] Validate that the direct answer satisfies the question focus before accepting it.
+- [x] Require a room-not-found answer to explicitly say the requested room is not configured or not found.
+- [x] Require a current-temperature answer to avoid stale values and state when no current readings exist.
+- [x] Require a ranking-winner answer to identify rank one, handle ties, include the inherited period, and avoid summarizing the whole report.
+- [x] Require schedule counts to match parsed valid schedules.
+- [x] Require AI auto-apply answers to distinguish configured state from confirmed device behavior.
+- [x] Require every facility recommendation and comparison claim to be entailed by cited evidence.
+- [x] Reject generic filler, repeated report summaries, unsupported causes, irrelevant caveats, and references to a table/chart that is not displayed.
+- [x] Normalize prose without forcing every answer into the same headline/summary template.
+- [x] Keep answers concise by default, expanding only when the question asks for a report, explanation, list, or comparison.
+
+### 6.3 Use targeted deterministic fallbacks
+
+- [x] Replace the presentation-loop fallback with focus-specific safe formatters.
+- [x] Provide dedicated fallback formatters for not found, inactive room, no online readings, one current value, toggle state, schedule count, schedule list, energy total, ranking winner/tie, ranking list, trend, no records, and insufficient evidence.
+- [x] Ensure a fallback for “Who ranked first?” cannot return the same full-report summary.
+- [x] Preserve natural grammar, singular/plural forms, dates, units, and Manila time.
+
+---
+
+## 7. Preserve structured context for natural follow-ups
+
+### 7.1 Upgrade bounded encrypted conversation state
+
+- [x] Keep the state JWE encrypted, UID-bound, capped at 12 KiB, limited to five turns, and limited to two hours.
+- [x] Store a compact sanitized structured context instead of relying only on the assistant summary.
+- [x] Include only these structured context fields (in addition to the bounded sanitized turn text):
+  - prior questionFocus;
+  - resolved room names or all-room scope;
+  - prior metric;
+  - resolved energy preset/custom dates and bucket;
+  - prior tool names;
+  - answerability outcome;
+  - whether a visual was shown.
+- [x] Do not store full tool results, room/device IDs, database paths, raw logs, full presentations, provider output, or credentials.
+- [x] Version the state contract and handle old/expired state safely.
+- [x] Re-run the necessary read-only tool for fresh truth rather than trusting an old result value.
+- [x] Resolve pronouns and ellipsis only when the stored typed context is unambiguous.
+- [x] Ask one concise clarification when multiple prior scopes could match.
+
+### 7.2 Required ranking follow-up behavior
+
+- [x] After “Give me the whole-year energy report,” store the resolved year, bucket, and room scope.
+- [x] For the follow-up “Who ranked first?”, inherit that exact energy scope and change questionFocus to energy_rank_winner.
+- [x] Re-run one bounded energy report for that inherited scope.
+- [x] Answer only the winner/tie, estimated kWh, and period.
+- [x] Do not repeat the previous graph, table, total summary, or generic report wording.
+- [x] If the inherited report has no recorded rooms, say no ranking can be determined.
+- [x] If context has expired or there are multiple possible reports, ask which period rather than guessing.
+
+---
+
+## 8. Fully support AI toggle and schedule questions
+
+### 8.1 AI auto-apply state
+
+- [x] Route “Is the AI toggle on?”, “Which rooms have AI enabled?”, and equivalent wording to get_room_telemetry.
+- [x] Read only devices/{deviceId}/control/aiAutoApply through the existing bounded device snapshot.
+- [x] Treat control/aiAutoApply as the authoritative toggle value; never replace it with the older mlSuggestion/autoApplyEnabled field.
+- [x] For one room, answer in one sentence with no table.
+- [x] For all rooms when every state is the same, summarize that shared state in text.
+- [x] Use a compact table only when the user asks for a per-room list or when states differ and comparison is useful.
+- [x] Return unknown when the field is missing; never coerce missing to false.
+- [x] If the device is offline, label the value as OcuTemp's stored configuration and do not claim the device is currently applying it.
+
+### 8.2 Schedule count and schedule list
+
+- [x] Route schedule count/list questions to get_room_telemetry; do not add a duplicate schedule tool.
+- [x] Parse only valid schedules with recognized day, HH:mm times, start before end, and bounded sanitized subject.
+- [x] “How many schedules does Room 2 have?” returns only the verified count unless details were requested.
+- [x] “What schedules does Room 2 have?” returns a readable ordered bullet list with day, time range, and subject.
+- [x] “List every room's schedules” may use one compact table grouped by room.
+- [x] Sort schedules by weekday, start time, end time, and then sanitized subject for deterministic human-readable output.
+- [x] Distinguish no configured schedules from unavailable room data.
+- [x] Never call configured schedules “currently active” unless current Manila day/time is evaluated and the device state confirms applicability.
+- [x] Treat schedule subjects as untrusted text and never as model instructions.
+- [x] Keep the existing maximum schedule and room caps.
+
+---
+
+## 9. System-bound energy analysis
+
+### 9.1 Evidence requirements
+
+- [x] Never infer consumption from AC power, temperature, schedules, or device uptime when energy records are absent.
+- [x] Never display a zero total or zero chart when the selected device/range has no energyDaily records.
+- [x] Use recorded energy totals, runtime, sessions, coverage, and valid decision events only for the requested exact range.
+- [x] Do not correlate a current occupancy reading, a weekly schedule, or an old decision event with historical energy unless their time ranges actually overlap and the relationship is explicitly supported.
+- [x] Separate recorded zero, no records, no assigned device, offline device, and read failure.
+- [x] Require meaningful coverage before making a facility-wide comparison or recommendation and state partial coverage plainly.
+- [x] Handle equal top values as a tie rather than arbitrarily naming one winner.
+- [x] Do not calculate cost unless a trusted bounded tariff exists in the current server contract; none should be assumed.
+- [x] Keep energy values labeled estimated and not billing-grade.
+- [x] Track per-bucket record availability so a month/day/week with no records is a gap, not a measured zero.
+- [x] Render chart gaps for missing intervals and keep recorded zero as a separate explicit state.
+- [x] Report temporal coverage for a long range instead of implying that sparse records cover the full period continuously.
+
+### 9.2 Advice behavior with partial or insufficient evidence
+
+- [x] With the supplied snapshot shape, “How can we reduce AC energy waste?” must use the partial stored 2026 energyDaily evidence and must not generate generic outside-system recommendations.
+- [x] A valid focused answer may identify Room 1 as the first place to review because it has the largest recorded share, while clearly stating that the devices are currently offline and the year has incomplete temporal coverage.
+- [x] It may correlate verified energy, runtime, schedules, AI auto-apply configuration, and decision events only when the time/scope relationship is supported; it must not claim those configurations caused waste without evidence.
+- [x] If the requested range has no usable records, say that OcuGuide lacks recorded evidence for a facility-specific waste analysis.
+- [x] It may offer to summarize verified schedules or AI auto-apply configuration as configuration facts, but must not claim those configurations are wasting energy.
+- [x] Do not show a chart or table for an evidence-insufficient answer.
+- [x] Do not hardcode this outcome; recompute it from the live authenticated snapshot.
+
+---
+
+## 10. Client response and presentation behavior
+
+### 10.1 Keep text primary
+
+- [x] Render the direct answer before any supporting visual.
+- [x] Render only presentations selected by the validated display plan.
+- [x] Keep all technical tool names and safe result inspection behind the existing per-turn disclosure.
+- [x] Preserve a tool-disclosure control even for a text-only answer that used a tool.
+- [x] Do not render a report placeholder, chart canvas, table header, pagination, or evidence skeleton when display mode is none.
+- [x] Do not show “Facility data” wording on a pure help/scope response.
+- [x] Keep unavailable/not-found messages visually simple and prominent.
+- [x] Avoid duplicate answer text in summary, block, highlight, metric, and report title.
+- [x] Keep follow-up suggestions tied to the actual answerability outcome and question focus.
+- [x] Do not suggest comparing, ranking, or graphing unavailable data.
+- [x] Replace general-knowledge starter prompts with system-grounded examples for room status, energy, AI auto-apply, schedules, and verified OcuTemp help.
+
+### 10.2 Keep visuals accessible and efficient
+
+- [x] Preserve semantic tables, captions, keyboard scrolling, chart fallback data, and turn-scoped DOM IDs.
+- [x] Create Chart.js instances only for display-plan-selected charts near the viewport.
+- [x] Destroy charts when deselected, out of view, or the component is destroyed.
+- [x] Keep null/unavailable rows last when sorting.
+- [x] Keep text wrapping safe for untrusted room names, subjects, event details, and stored reasons.
+- [x] Preserve OnPush, signals, stable tracking keys, scroll pinning, focus restoration, reduced motion, and component style budgets.
+- [x] Do not add a markdown, table, chart, or agent framework dependency.
+
+---
+
+## 11. Security, reliability, and production bounds
+
+- [x] Keep the single POST /api/chat endpoint and one Vercel Serverless Function.
+- [x] Do not add Firebase Functions, another API, database writes, database fields, database migrations, or Security Rule changes.
+- [x] Keep Firebase identity, approval, and role derived on the server.
+- [x] Keep exact origin validation, JSON-only requests, 500-code-point input cap, body cap, response cap, state cap, room cap, range cap, and read cap.
+- [x] Keep pre-auth IP, UID, facility, and concurrency limits on every path.
+- [x] Keep the shared abort signal and 20-second internal deadline across state, planning, reads, writing, and any bounded refinement.
+- [x] Because optional refinement is not implemented, no refinement path can consume the remaining deadline.
+- [x] Keep Firebase REST GET-only with root/path/query allowlists.
+- [x] Never send or expose the users root, credentials, provider keys, bearer tokens, Firebase URLs/paths, internal IDs, prompts, stack traces, or raw snapshots.
+- [x] Redact user/stored text before provider transmission and sanitize it again before rendering.
+- [x] Treat user content, state content, room names, schedules, decision logs, and model output as untrusted.
+- [x] Keep public errors generic while logging only sanitized request ID, stage, focus, provider category, and failure category.
+- [x] Bound the AnswerPacket, display plan, structured state, model facts, output blocks, tool disclosure, and response bytes.
+- [x] Preserve provider fallback and deadline failures as safe 503 responses.
+- [x] Do not add new packages.
+
+---
+
+## 12. Exact implementation file map
+
+### 12.1 Server files expected to change
+
+- [x] server/chat/types/chat.types.ts
+  - Add question focus, scope resolution, answerability, freshness, display plan, AnswerPacket, and structured-state types.
+  - Keep internal grounding types separate from the public response.
+- [x] server/chat/tools/schema.ts
+  - Replace broad intent-only output with the bounded semantic query plan.
+  - Add closed schemas for display-compatible answer targets and system-grounded recommendations.
+- [x] server/chat/prompts/planner.prompt.ts
+  - Teach exact question focuses, entity-first behavior, inherited range/scope, system-only advice, and visual-request semantics.
+- [x] server/chat/prompts/answerer.prompt.ts
+  - Require direct focus-specific answers from the minimal AnswerPacket.
+  - Prohibit generic advice, report repetition, unsupported causes, and irrelevant visuals.
+- [x] server/chat/prompts/general-answer.prompt.ts
+  - Remove it from the free-world-knowledge path or retire it entirely; do not leave a bypass that can generate outside-system advice.
+- [x] server/chat/orchestrator.ts
+  - Implement the bounded agent pipeline, outcome precedence, fact selection, display policy, targeted writer validation, and targeted fallbacks.
+- [x] server/chat/tools/executor.ts
+  - Preserve full room catalog status for entity resolution.
+  - Separate current sensor fields from stored configuration.
+  - Return typed matched/missing scope, freshness, toggle, and valid schedule facts.
+  - Stop unnecessary reads after a terminal scope outcome.
+- [x] server/chat/tools/energy.ts
+  - Preserve exact ranges, ties, rank-one selection, no-record semantics, and question-focused energy facts.
+- [x] server/chat/state.ts
+  - Version and validate compact structured follow-up context within the existing JWE bounds.
+- [x] api/chat/index.ts
+  - Store the new compact context and return the validated display plan without adding an endpoint.
+
+### 12.2 Client files expected to change
+
+- [x] src/app/models/chat.models.ts
+  - Mirror the new public answer, display-plan, freshness, and state-independent presentation contract.
+- [x] src/app/services/chat.service.ts
+  - Deeply validate the closed response, compatible display modes, presentation references, and question-specific null semantics.
+- [x] src/app/pages/ocu-guide/ocu-guide-conversation.ts
+  - Add display-plan helpers and focus-aware follow-up suggestions while preserving abort, scroll, focus, and disclosure state.
+- [x] src/app/pages/ocu-guide/ocu-guide-conversation.html
+  - Render only selected visuals and preserve text-only tool-backed turns.
+- [x] src/app/components/ocu-guide-report/ocu-guide-report.ts
+  - Accept the validated selected view instead of exposing every report view automatically.
+- [x] src/app/components/ocu-guide-report/ocu-guide-report.html
+  - Add compact AI-toggle and schedule-specific views where needed and suppress irrelevant columns/views.
+- [x] src/app/pages/ocu-guide/ocu-guide-conversation.css and src/app/components/ocu-guide-report/ocu-guide-report.css
+  - Change only if required for the selective views; keep Tailwind primary and each component below 8 kB.
+
+### 12.3 Existing files to review and change only if required
+
+- [x] server/chat/firebase-rest.ts
+  - Verify existing bounded reads can support entity-first room catalog resolution; do not broaden allowed roots.
+- [x] server/chat/retry.ts and server/chat/providers/provider.interface.ts
+  - Verify semantic validation still occurs inside each provider attempt.
+- [x] server/chat/providers/gemini.provider.ts and server/chat/providers/groq.provider.ts
+  - Reuse the configured models and bounded options; no model/provider expansion.
+- [x] src/app/services/device.service.ts
+  - Reuse its online/stale/offline thresholds as the client behavior reference; avoid divergent semantics.
+- [x] src/app/helpers/room-validation.ts and src/app/models/room.model.ts
+  - Reuse schedule validation and shape semantics; do not create a conflicting format.
+- [x] server/chat/config.ts, server/chat/middleware/auth.ts, server/chat/middleware/rate-limit.ts, and server/chat/middleware/validate-request.ts
+  - Regression-review only; preserve the current security boundary.
+- [x] vercel.json, tsconfig.api.json, package.json, app routes, and sidebar navigation
+  - Verify no change is necessary.
+
+### 12.4 Files explicitly outside this remediation
+
+- [x] Do not change any environment file or .env file.
+- [x] Do not add or modify Firebase rules.
+- [x] Do not add or modify database data.
 - [x] Do not add Firebase Functions.
-- [x] Do not change the Firebase database structure or write data for this feature.
-- [x] Do not change Firebase Security Rules as part of this work.
-- [x] Keep every chat facility tool read-only; the assistant must never claim that it changed an AC, schedule, user, or database value.
-- [x] Derive the authenticated user, approval state, and role on the server; never accept them from the browser.
-- [x] Keep facility facts grounded in server-computed tool results and distinguish missing data from a recorded zero.
-- [x] Never expose Firebase paths, internal IDs, bearer tokens, provider keys, prompts, stack traces, or raw database snapshots.
-- [x] Treat room names, event details, schedule subjects, and stored AI reasons as untrusted text.
-- [x] Preserve the current request, response, state-token, provider-timeout, response-size, facility-size, and rate-limit bounds unless a reviewed requirement explicitly changes one.
-- [x] Use no new UI or markdown dependency unless the existing typed rendering approach is proven insufficient.
-- [x] Use Tailwind CSS utilities as the primary styling approach; add native component CSS only when the requirement cannot be implemented reasonably with Tailwind.
-- [x] Never create, add, modify, or generate test/spec files for this work.
-- [x] Never run `npm test`, `ng test`, Vitest, or any other automated test runner.
-- [x] Validate changes through careful code review, strict compilation performed by the existing build, `npm run build`, and optional manual checking with `ng serve` only.
+- [x] Do not create another API route.
+- [x] Do not add dependencies.
+- [x] Do not commit the attached RTDB export.
 
 ---
 
-## 1. Conversation behavior: tools are optional
+## 13. Implementation sequence
 
-### 1.1 Add a safe general-answer path
-
-- [x] Add a planner intent for in-scope general guidance, such as `general`, separate from live `data`, static OcuTemp `help`, `greeting`, forbidden `control`, and `unsupported` requests.
-- [x] Classify questions such as “What is humidity?”, “How can I improve AC efficiency?”, and “What temperature is generally comfortable?” as general questions with zero tools.
-- [x] Keep requests about current rooms, current telemetry, stored energy, latest suggestions, recent events, rankings, or facility comparisons on the data-tool path.
-- [x] Keep OcuTemp navigation and role-aware workflow questions on the static help-tool path when verified application steps are required.
-- [x] Keep greetings short and tool-free.
-- [x] Keep unrelated topics outside OcuGuide's scope and tool-free.
-- [x] Keep requested control/write actions tool-free and return a clear read-only limitation plus safe navigation guidance when available.
-- [x] Ask a clarification question only when the missing room, date range, or intended meaning materially changes the answer.
-- [x] Do not ask for a room when the user clearly requests all/every active room.
-
-### 1.2 Assign distinct jobs to the two models
-
-- [x] Keep Gemini as the primary planner: classify intent, resolve follow-up context, decide whether tools are necessary, and return a bounded structured plan.
-- [x] Keep Groq as the primary answer writer: turn either safe general knowledge or verified tool facts into a concise, human-readable answer.
-- [x] Keep the opposite provider as fallback for each phase so planner and answer generation are not dependent on one provider.
-- [x] Validate each provider's structured output before accepting it; an invalid primary response must trigger the fallback provider.
-- [x] Keep provider temperature low and output-token limits bounded.
-- [x] Never send Firebase credentials, user tokens, internal database paths, or full raw snapshots to either model.
-- [x] Continue using deterministic server formatting as the safe fallback for tool-backed facility answers.
-
-### 1.3 Define when tools are necessary
-
-- [x] Use `get_room_telemetry` for current room temperature, humidity, occupancy, AC state, schedules, condition, or device freshness.
-- [x] Use `get_energy_report` for energy totals, trends, periods, comparisons, coverage, rankings, runtime, or sessions.
-- [x] Use `get_climate_prediction_logs` for stored climate recommendations, suggested temperatures, applied state, and stored reasons.
-- [x] Use `get_recent_room_events` for recent operational or decision history.
-- [x] Use `get_system_help` for verified OcuTemp navigation and role-filtered procedures.
-- [x] Permit zero tools for general AC concepts, energy-efficiency guidance, explanations, greetings, clarifications, safety limitations, and unsupported requests.
-- [x] Keep the existing maximum of four unique tool plans per turn; never call one tool separately for every room.
-- [x] Request only the minimum tools needed to answer the question.
-- [x] Reuse one all-active-rooms tool request when the user asks about every room.
-- [x] Preserve exact date handling, Manila time, room/result caps, energy range caps, and bounded concurrent reads.
-
-### 1.4 Conversation context and follow-ups
-
-- [x] Let short follow-ups resolve against the encrypted recent conversation state, for example “What about last month?” or “Show those rooms now.”
-- [x] Keep the server-side state window bounded to the current encrypted-state limits.
-- [x] Store only compact, sanitized answer summaries in the state token.
-- [x] When context expires or cannot safely resolve a reference, reset safely and ask for the missing detail.
-- [x] Never treat prior user text, model text, or database text as system instructions.
+- [x] Phase 1: Lock the semantic query, scope resolution, freshness, AnswerPacket, display-plan, and compact-state contracts.
+- [x] Phase 2: Implement entity-first resolution and terminal outcomes.
+- [x] Phase 3: Enforce current-versus-stale telemetry and configuration-versus-device behavior.
+- [x] Phase 4: Replace outside-system general advice with evidence-bound facility analysis.
+- [x] Phase 5: Add focus-specific evidence selection, writer validation, and deterministic fallbacks.
+- [x] Phase 6: Add structured follow-up inheritance for range, room scope, metric, and answer focus.
+- [x] Phase 7: Decouple tool results from visible tables/charts and implement deterministic display policy.
+- [x] Phase 8: Add concise AI-toggle and schedule answers/views.
+- [x] Phase 9: Deeply align client validation, rendering, disclosure, accessibility, and chart lifecycle.
+- [x] Phase 10: Perform full static review and the permitted production build without tests.
 
 ---
 
-## 2. Human-readable answer contract
+## 14. Manual acceptance checklist
 
-### 2.1 Use typed content instead of unsafe HTML
+The attached snapshot is a reference fixture for these expectations only. Do not install it, seed it, or hardcode it.
 
-- [x] Extend the shared answer contract so an answer can contain a concise headline plus typed content blocks.
-- [x] Support only a small safe set of blocks: paragraph, bullet list, numbered steps, callout, and compact key-value summary.
-- [x] Keep facility tables, metrics, and charts in the existing typed `ChatPresentation` union.
-- [x] Do not render model-provided HTML with `innerHTML`.
-- [x] Do not add unrestricted markdown rendering; if markdown is retained anywhere, parse only an explicit allowlist and sanitize it before rendering.
-- [x] Bound the number and length of answer blocks, list items, headings, highlights, and caveats on the server.
-- [x] Normalize whitespace and preserve intentional paragraph breaks.
-- [x] Use plain language, short sections, descriptive labels, correct units, and clear dates.
+### 14.1 Entity and freshness cases
 
-### 2.2 General answers without facility claims
+- [ ] “Why is Room 101 hot?” says Room 101 is not configured, optionally names the bounded valid rooms, and shows no visual.
+- [ ] “Why is Room 3 hot?” while Room 3 is offline says its current condition cannot be determined; an old stored value is not called current.
+- [ ] “What is the current temperature in every room?” with all three devices offline says no current readings are available and shows no table/chart.
+- [ ] The same all-room question with two online rooms and one offline room shows only the two current readings and identifies one unavailable room.
+- [ ] “Show last-known temperatures” clearly labels every value and timestamp as last known.
 
-- [x] Create a dedicated general-answer prompt and structured schema that does not require facility evidence IDs.
-- [x] Limit general answers to AC operation, indoor comfort, humidity, ventilation, energy efficiency, equipment care, and OcuTemp-relevant facility practices.
-- [x] Make general recommendations cautious and non-diagnostic; avoid pretending generic guidance is a reading from the user's facility.
-- [x] Clearly say when current facility data would be needed, then offer an appropriate follow-up instead of automatically running an unnecessary tool.
-- [x] Reject or safely redirect medical, legal, dangerous electrical/HVAC repair, and unrelated requests.
+### 14.2 AI toggle and schedules
 
-### 2.3 Tool-backed answers
+- [ ] “Is AI auto-apply on in Room 1?” gives a direct configured-state answer with no table.
+- [ ] If Room 1 is offline, the answer does not claim the setting is currently being applied by the device.
+- [ ] A conflicting older mlSuggestion/autoApplyEnabled value never overrides control/aiAutoApply.
+- [ ] “Which rooms have AI auto-apply on?” summarizes a common state in text and uses a table only when a per-room comparison is useful or requested.
+- [ ] “How many schedules does Room 2 have?” returns 2 for the supplied snapshot shape and no table.
+- [ ] “How many schedules are configured?” returns 4 across the 3 active rooms for the supplied snapshot shape and no full telemetry table.
+- [ ] “List Room 2's schedules” returns two readable schedule items with day/time/subject and no telemetry columns.
+- [ ] “List every room's schedules” uses one compact schedule table, not the full telemetry table.
 
-- [x] Keep every facility-specific number, room, time, status, ranking, and conclusion derived from typed server presentations/facts.
-- [x] Use the answer model to organize and prioritize verified evidence, not to invent facility prose.
-- [x] Render a useful text conclusion before any chart or table.
-- [x] Choose the smallest useful visualization: table for many rooms, chart for trends/rankings, metric cards for a few totals, and plain text when a visual adds no value.
-- [x] Preserve partial-data notices, coverage, unavailable-device states, no-record states, and timestamps.
-- [x] Never describe missing records as zero consumption or an unavailable device as off.
+### 14.3 Energy and follow-ups
 
----
+- [ ] “How can we reduce AC energy waste?” uses only the snapshot's partial stored energy/configuration evidence, prioritizes the highest recorded consumer when useful, states the offline/incomplete-data limitations, and gives no generic outside-system advice.
+- [ ] A facility-specific recommendation appears only when each recommendation is backed by current/stored OcuTemp evidence.
+- [ ] “Give me the whole-year energy report” may show one useful chart when recorded data exists.
+- [ ] With the supplied snapshot, the 2026 report treats April, May, and July as recorded periods and the unrecorded months as gaps rather than zero-consumption months.
+- [ ] The immediate follow-up “Who ranked first?” inherits that year and room scope, returns only the winner/tie and value, and does not repeat the report visual.
+- [ ] With the supplied snapshot, that follow-up identifies Room 1 at approximately 11.451 estimated kWh and 63.7% of the recorded total, while retaining the partial-coverage qualifier.
+- [ ] “Show the full ranking” uses a table or bar chart when multiple recorded rooms exist.
+- [ ] “Show the yearly trend” uses a line chart only when recorded points exist.
+- [ ] No energyDaily records in the selected range produces no zero-total chart and no ranking claim.
+- [ ] Equal first-place values produce a tie answer.
 
-## 3. Tool transparency without clutter
+### 14.4 Natural answer and visual behavior
 
-- [x] Keep charts, tables, and metrics visible as part of the assistant's answer when they are needed to answer the question.
-- [x] Hide technical tool names and tool-result inspection content by default.
-- [x] Add one unobtrusive “Show tools used” icon/button to an assistant turn only when that turn used at least one tool.
-- [x] Give the control an accessible text label, tooltip, keyboard focus state, `aria-expanded`, and `aria-controls`.
-- [x] Open a per-turn disclosure panel only after the user activates the control.
-- [x] Inside the opened panel, list the exact executed tool names and a short result summary.
-- [x] Keep the detailed result collapsed one level further or place it in a bounded scroll area so it never overwhelms the answer.
-- [x] Show only the already-sanitized client presentation as the inspectable result; never return or label an internal Firebase snapshot as “raw data.”
-- [x] Label partial status at the turn level unless the API exposes verified per-tool partial status.
-- [x] Lazily serialize/display result JSON only while the disclosure is open.
-- [x] Remove always-visible “Tool used” rows, terminal styling, or internal implementation wording from the main answer surface.
+- [ ] Existence, yes/no, single-value, count, winner, unavailable, and insufficient-evidence questions default to text only.
+- [ ] List questions use bullets for one room and a table only for useful multi-room structure.
+- [ ] Comparison questions use the smallest useful table or chart.
+- [ ] Explicit “text only,” “no table,” “show table,” and “show graph” requests are honored when compatible with evidence.
+- [ ] Different questions over the same tool result produce different focused answers.
+- [ ] No answer repeats the same generic report paragraph solely because the same tool ran.
+- [ ] Technical tools/results remain hidden until “Show tools used” is activated.
+- [ ] Tool-backed text-only turns still expose the hidden disclosure control.
+- [ ] No empty chart, table, pagination, or report shell is rendered.
 
----
+### 14.5 Security and resilience
 
-## 4. ChatGPT/Claude-inspired OcuTemp design
-
-### 4.1 Simplify the page structure
-
-- [x] Replace the current dashboard-like hero, large safety strip, thread header, message count, and decorative instrumentation with a quieter chat workspace.
-- [x] Keep a compact top bar containing OcuGuide identity, a subtle read-only status, and New chat.
-- [x] Move the longer read-only explanation into a small informational affordance or composer footer instead of a full-width banner.
-- [x] Use one centered conversation column with a comfortable reading width and generous vertical rhythm.
-- [x] Keep the composer visually anchored at the bottom with a subtle frosted/sticky surface.
-- [x] Preserve full conversation history and the jump-to-latest control.
-
-### 4.2 Message layout
-
-- [x] Render user messages as compact right-aligned OcuTemp-blue bubbles.
-- [x] Render assistant responses as open, wide content blocks rather than heavy nested cards.
-- [x] Use a small OcuGuide avatar or blue facility-status mark only where it helps identify the speaker.
-- [x] Make answer text the strongest visual element; keep metadata, evidence time, notices, and tool controls secondary.
-- [x] Use at least comfortable 14–16 px body text, readable line height, and sensible paragraph width.
-- [x] Style paragraphs, bullets, numbered steps, callouts, tables, code/result inspection, and links consistently.
-- [x] Keep errors inline with one safe retry action only for the latest retryable request.
-
-### 4.3 Empty, thinking, and follow-up states
-
-- [x] Reduce the empty state to a concise welcome, a few role-aware prompt chips, and the composer.
-- [x] Include both basic no-tool examples and data-backed examples so users understand both capabilities.
-- [x] Replace the large four-step thinking card with a restrained typing/thinking row.
-- [x] Keep loading text truthful and generic until the server actually exposes the selected tool; do not pretend a tool is running based only on elapsed time.
-- [x] If tool activity is later returned by the API, display the exact safe stage rather than simulated progress.
-- [x] Preserve role-aware and context-aware follow-up suggestions without crowding the composer.
-- [x] Respect reduced-motion preferences for dots, transitions, scrolling, and charts.
-
-### 4.4 Visual system
-
-- [x] Retain OcuTemp slate/white surfaces and blue primary accent; reserve emerald, amber, and red for real status meaning.
-- [x] Use the application's existing font stack instead of introducing a generic “AI product” font.
-- [x] Reduce shadows, excessive pills, nested borders, decorative gradients, and tiny uppercase labels.
-- [x] Use a single subtle facility-evidence signature, such as a small blue pulse/verified marker beside evidence-backed answers.
-- [x] Keep visible keyboard focus, sufficient contrast, 44 px touch targets, and responsive layouts.
-- [x] Remove desktop/mobile panel-switching concepts entirely; all content remains in one transcript on every viewport.
+- [ ] Missing, inactive, offline, no-record, zero-recorded, and read-failure states remain distinct.
+- [ ] Prompt injection in user text, stored names, schedule subjects, or decision-log fields cannot alter permissions or instructions.
+- [ ] The browser and providers never receive credentials, internal paths, raw snapshots, user records, or unneeded facts.
+- [ ] State tampering, expiry, cross-user reuse, malformed plans, incompatible display modes, and oversized responses fail closed.
+- [ ] Both provider fallback directions preserve the same semantic and grounding rules.
+- [ ] Dual provider failure returns a safe targeted fallback or 503 without fabricated data.
+- [ ] Rate, concurrency, facility, read, deadline, and response bounds still apply to every question focus.
 
 ---
 
-## 5. Tables, charts, and report presentation
+## 15. Validation rules: unchanged
 
-- [x] Keep inline evidence attached to the assistant message that requested it, including historical turns.
-- [x] Preserve room telemetry, energy, climate suggestion, recent event, and system-help presentations.
-- [x] Use semantic tables with captions/accessible labels, sticky headers where useful, and horizontal scrolling on narrow screens.
-- [x] Keep missing/unavailable states visible and sortable without placing null rows above valid readings.
-- [x] Keep energy ranking and trend charts responsive with clear units, titles, accessible fallback tables, and no redundant legend.
-- [x] Instantiate only the currently selected chart view.
-- [x] Create charts only when the report is in or near the viewport.
-- [x] Destroy Chart.js instances when hidden/out of view and in `ngOnDestroy`.
-- [x] Cache derived chart series per immutable presentation to avoid repeated work.
-- [x] Namespace every report DOM ID by turn ID to prevent duplicate IDs in chat history.
-- [x] Keep raw/safe-result disclosure separate from the visible chart/table presentation.
-
----
-
-## 6. Client behavior and efficiency
-
-- [x] Preserve `OnPush` change detection and signal-based chat state.
-- [x] Keep stable tracking keys for every message, presentation, table row, event, and suggestion.
-- [x] Avoid duplicate-track keys for recent events that share the same timestamp/type/room.
-- [x] Keep automatic scrolling pinned only while the user is already near the latest message.
-- [x] Do not steal scroll position when the user is reviewing older messages.
-- [x] Restore focus safely after Send, Retry, New chat, suggestion selection, and jump-to-latest actions.
-- [x] Auto-grow the composer within a bounded height, then scroll inside it.
-- [x] Abort the active request when starting a new conversation or when the authenticated user changes.
-- [x] Clear a rejected/expired state token so Retry does not repeatedly submit an invalid token.
-- [x] Consider a single forced Firebase token refresh only after a genuine authentication-expired response; do not refresh on every turn.
-- [x] Use `content-visibility`/viewport deferral for long histories before adding a virtual-scroll dependency.
-- [x] Keep Angular component styles below the existing 8 kB per-component hard budget.
-- [x] Do not increase the initial bundle with an additional renderer or chart library.
-
----
-
-## 7. Server safety, reliability, and production checks
-
-- [x] Keep request processing in this order: method/origin/content checks, pre-auth IP limit, bounded body read, Firebase authentication, user/concurrency/facility limits, state decode, planner, tools, answer.
-- [x] Keep the shared abort signal across body reading, authentication, limits, Firebase reads, planner, tools, and answer generation.
-- [x] Keep the 20-second internal turn deadline below Vercel's 25-second function duration.
-- [x] Keep the concurrency lease owner-checked, short-lived, and released in `finally`.
-- [x] Keep exact-origin allowlisting; do not introduce wildcard origins.
-- [x] Keep state encrypted and UID-bound with the existing JWE size, turn-count, and lifetime bounds.
-- [x] Keep response bodies and Firebase REST reads byte-capped and abortable.
-- [x] Keep Firebase REST paths and query parameters allowlisted and GET-only.
-- [x] Keep provider errors, config details, keys, tokens, causes, and stack traces out of public responses.
-- [x] Log only sanitized request IDs, stages, provider categories, and failure categories needed for operations.
-- [ ] Verify both configured models are available to the deployed provider accounts before rollout.
-- [ ] Verify all required Vercel Preview environment variables exist and redeploy after changes; do not hardcode them.
-- [x] Keep only `api/chat/index.ts` under `api/` so the Vercel Hobby deployment remains one Serverless Function.
-
----
-
-## 8. Exact implementation file map
-
-### 8.1 Server files that must change
-
-- [x] `server/chat/types/chat.types.ts`
-  - Add the general intent and the bounded typed answer-block contract.
-  - Keep server response types aligned with the browser models.
-- [x] `server/chat/tools/schema.ts`
-  - Add `general` to the planner schema.
-  - Add a separate bounded schema for safe general answers, or extend the answer schema without weakening facility evidence requirements.
-- [x] `server/chat/prompts/planner.prompt.ts`
-  - Teach the planner the exact zero-tool versus tool-required decision boundary.
-- [x] `server/chat/prompts/answerer.prompt.ts`
-  - Improve organization, plain-language rules, and typed answer formatting for tool-backed answers.
-- [x] `server/chat/prompts/general-answer.prompt.ts` (new)
-  - Define the narrow in-scope general-knowledge, safety, and no-facility-claim policy.
-- [x] `server/chat/orchestrator.ts`
-  - Route `general` requests to the answer model without executing tools.
-  - Validate and sanitize general answers separately from grounded facility answers.
-  - Preserve deterministic formatting for tool-backed claims and safe fallbacks.
-  - Keep planner/answerer model responsibilities and provider fallback explicit.
-
-### 8.2 Client files that must change
-
-- [x] `src/app/models/chat.models.ts`
-  - Mirror the bounded answer-block and response contract exactly.
-- [x] `src/app/services/chat.service.ts`
-  - Validate the expanded response shape defensively.
-  - Preserve abort, authentication, state reset, safe retry, and error mapping behavior.
-- [x] `src/app/pages/ocu-guide/ocu-guide.ts`
-  - Keep only page-level New chat/focus coordination needed by the simplified shell.
-- [x] `src/app/pages/ocu-guide/ocu-guide.html`
-  - Replace the heavy hero/safety-strip structure with the compact chat header and one transcript.
-- [x] `src/app/pages/ocu-guide/ocu-guide.css`
-  - Implement the centered responsive shell and remove obsolete decorative/page styles.
-- [x] `src/app/pages/ocu-guide/ocu-guide-conversation.ts`
-  - Add typed-block helpers, per-turn tool-disclosure state, composer resizing, and honest simplified loading behavior.
-  - Preserve role-aware suggestions, focus, scroll pinning, latest-only retry, and accessibility announcements.
-- [x] `src/app/pages/ocu-guide/ocu-guide-conversation.html`
-  - Render human-readable typed answers, inline presentations, hidden tool disclosure, simplified thinking, suggestions, errors, and composer.
-- [x] `src/app/pages/ocu-guide/ocu-guide-conversation.css`
-  - Implement the ChatGPT/Claude-inspired message rhythm while retaining OcuTemp colors and staying below the style budget.
-- [x] `src/app/components/ocu-guide-report/ocu-guide-report.ts`
-  - Separate visible evidence rendering from hidden tool inspection.
-  - Preserve lazy chart lifecycle, caching, unique IDs, sorting, filtering, and pagination.
-- [x] `src/app/components/ocu-guide-report/ocu-guide-report.html`
-  - Keep only user-facing tables/charts/help in the visible report; move technical tool/result details behind the per-turn disclosure control.
-- [x] `src/app/components/ocu-guide-report/ocu-guide-report.css`
-  - Flatten nested cards, improve inline readability, and retain responsive/accessible charts and tables below the style budget.
-
-### 8.3 Existing files to review and change only if the response contract requires it
-
-- [x] `api/chat/index.ts`
-  - Verify the new answer contract serializes within the public response limit; no new route or handler style.
-- [x] `server/chat/state.ts`
-  - Verify the compact state summary remains within existing limits; do not store full answer blocks or tool results.
-- [x] `server/chat/retry.ts`
-  - Verify schema-invalid planner/general/answer output triggers the second provider.
-- [x] `server/chat/providers/provider.interface.ts`
-  - Change only if a distinct bounded generation option is required by the new general-answer phase.
-- [ ] `server/chat/providers/gemini.provider.ts`
-  - Verify the configured planner model supports the structured schema in the deployed account.
-- [ ] `server/chat/providers/groq.provider.ts`
-  - Verify the configured answer model supports structured output and is permitted in the deployed Groq organization.
-- [x] `server/chat/tools/executor.ts`
-  - Preserve the existing five read-only tools, caps, sanitization, room selection, and client-safe presentations.
-  - Change only if verified per-tool status metadata is added to the public contract.
-- [x] `server/chat/tools/energy.ts`
-  - Preserve range validation, coverage, null-state handling, trend caps, and deterministic calculations.
-
-### 8.4 Security/deployment files to verify, not redesign
-
-- [ ] `server/chat/config.ts` — verify exact origins, 32-byte state secret, Firebase URLs, and Upstash configuration.
-- [x] `server/chat/firebase-rest.ts` — verify GET-only bounded reads and safe error mapping.
-- [x] `server/chat/middleware/auth.ts` — verify Firebase JWT, approval, role, and email-verification policy remains server-derived.
-- [x] `server/chat/middleware/rate-limit.ts` — verify IP, UID, facility, and concurrency limits still protect all paths, including zero-tool answers.
-- [x] `server/chat/middleware/validate-request.ts` — verify exact request keys, 500-code-point message cap, state-token cap, JSON-only POST, and origin checks.
-- [x] `vercel.json` — preserve the single function, 25-second duration, API rewrite exclusion, and security headers.
-- [x] `tsconfig.api.json` — keep both `api/**/*.ts` and `server/**/*.ts` in strict server type checking.
-- [x] `package.json` — reuse existing AI SDK, `jose`, Upstash, Angular, Tailwind, and Chart.js dependencies; no new package expected.
-- [x] `src/app/app.routes.ts` — verify lazy OcuGuide route and existing auth/approval guards; no route change expected.
-- [x] `src/app/components/sidebar/sidebar.html` — verify the OcuGuide navigation link still fits the simplified page; no behavior change expected.
-
-### 8.5 Validation without test files or test runners
-
-- [x] Do not add or modify any `*.spec.ts`, `*.test.ts`, fixture, mock-test, snapshot, or automated test file.
-- [x] Do not run `npm test`, `ng test`, Vitest, or another test command at any point.
-- [x] Review every changed server and client file for strict typing, bounded inputs/outputs, sanitization, cleanup, accessibility, and existing project-pattern compliance.
-- [x] Use the existing `npm run build` command as the required compilation and production-build validation.
-- [x] Use `ng serve` only when a manual browser check is needed; do not treat it as authorization to create or run automated tests.
-- [ ] Manually check the functional examples in Section 10 through the running application or deployed feature-branch Preview when available.
-
----
-
-## 9. Implementation order
-
-- [x] Phase 1 — Lock the intent, answer-block, presentation, and tool-disclosure contracts.
-- [x] Phase 2 — Implement planner classification and safe zero-tool general answers.
-- [x] Phase 3 — Update deterministic/tool-backed answer organization and shared client models.
-- [x] Phase 4 — Simplify the page shell and message presentation.
-- [x] Phase 5 — Move technical tool inspection behind the per-turn icon/button while retaining visible answer visuals.
-- [x] Phase 6 — Complete responsive, accessibility, chart lifecycle, long-history, and focus behavior.
-- [x] Phase 7 — Review the code, run the production build, and perform optional manual `ng serve` or feature-branch Preview checks without test files or test runners.
-
----
-
-## 10. Verification checklist
-
-### Functional examples
-
-- [ ] “What is relative humidity?” returns a readable text answer with no tool disclosure.
-- [ ] “How can we reduce AC energy waste?” returns practical text guidance with no fabricated facility claim.
-- [ ] “What is the current temperature in every room?” uses one telemetry tool and returns a readable comparison table.
-- [ ] “Give me this month's energy report for every room” uses one energy tool and returns summary text, coverage, table, and useful chart.
-- [ ] “Why is Room 101 hot?” reports current verified observations and clearly avoids inventing a cause.
-- [ ] “Turn off Room 101” performs no tool write and explains the read-only boundary.
-- [ ] “What about last month?” resolves from valid recent context or asks a safe clarification.
-- [ ] Technical tool names/results are absent until the user activates “Show tools used.”
-
-### Security and resilience
-
-- [ ] Unauthenticated, unapproved, wrong-origin, oversized, malformed, and rate-limited requests fail with the intended safe status/message.
-- [ ] Prompt injection in the user message or stored Firebase text cannot change tool permissions or expose internals.
-- [ ] Facility claims never appear without typed evidence.
-- [ ] General answers never masquerade as current facility readings.
-- [ ] Both provider fallback directions work and dual failure returns a safe 503.
-- [ ] State tampering, cross-user reuse, and expiry fail closed.
-- [ ] The browser never receives credentials, internal paths, or unsanitized database records.
-
-### UI, accessibility, and performance
-
-- [ ] Keyboard and screen-reader users can send, retry, start a new chat, jump to latest, switch chart views, inspect tables, and open/close tool details.
-- [ ] Mobile, tablet, desktop, short landscape, zoomed, and reduced-motion layouts remain usable.
-- [ ] Tables scroll safely on narrow screens and charts retain accessible tabular data.
-- [ ] A long conversation does not accumulate offscreen Chart.js instances or lose scroll position.
-- [x] Every component remains below the Angular 8 kB component-style error threshold.
-- [ ] No new browser console errors, duplicate DOM IDs, duplicate tracking keys, or memory leaks are introduced.
-
-### Required commands before deployment
-
-- [x] `npm run build`
-- [ ] Optionally run `ng serve` for manual browser validation when needed.
-- [ ] Deploy the feature branch Preview and manually check authenticated text-only, tool-backed, error, retry, disclosure, and mobile flows.
-- [x] Do not run an automated test command before, during, or after these checks.
+- [x] Never create, add, modify, generate, or rename a test/spec file.
+- [x] Never run npm test, ng test, Vitest, Jest, Karma, or any automated test runner.
+- [x] Do not add fixtures, snapshots, mocks, or test-only utilities.
+- [x] Validate implementation through careful code review, strict existing compilation, and npm run build.
+- [x] Use ng serve only for optional manual browser checking.
+- [x] Do not change application code merely to make a test harness possible.
+- [x] Confirm git diff contains no test-file, environment-file, database-rule, database-data, dependency, or extra-endpoint change.
+- [ ] Perform the manual acceptance cases above in the authenticated feature-branch Preview when deployment configuration is available.
 
 ---
 
 ## Definition of done
 
-- [x] Basic in-scope questions receive natural answers without mandatory tools.
-- [x] Live/stored facility questions use only the minimum necessary read-only tools.
-- [x] Answers are human-readable and use tables/charts only when those visuals improve understanding.
-- [x] Technical tool names and safe result details are hidden until explicitly opened.
-- [x] The interface is calm, modern, responsive, accessible, and recognizably OcuTemp.
-- [x] The same secured `/api/chat` endpoint, database structure, Firebase rules, and read-only boundary remain intact.
-- [x] Careful code validation, the production build, and any requested manual `ng serve` or Preview checks pass without adding or running tests.
+- [ ] A nonexistent room is identified before any climate reasoning.
+- [ ] Offline/stale readings are never presented as current or used for a current hot-condition claim.
+- [ ] Efficiency advice is based only on verified OcuTemp evidence, or the assistant says evidence is insufficient.
+- [ ] A short follow-up inherits the correct room/range/metric and answers the new question rather than repeating the prior report.
+- [ ] AI auto-apply and schedule count/list questions receive concise, correct, configuration-aware answers.
+- [ ] Tables and charts appear only when the validated question focus and available data justify them.
+- [ ] Every facility claim remains grounded, every tool remains read-only, and all current security/boundary limits remain intact.
+- [x] The production build passes with no test files created and no automated tests run.

@@ -2,19 +2,23 @@ import type { FirebaseRestClient } from '../firebase-rest.js';
 import type {
     AuthenticatedChatUser,
     ChatPresentation,
+    ChatQuestionFocus,
     ChatToolName,
     ClimateSuggestionRow,
     ClimateSuggestionsPresentation,
     DeviceOnlineState,
     GroundingFact,
+    MeasurementStatus,
     PlannerToolPlan,
     RecentEventRow,
     RecentEventsPresentation,
     RoomCondition,
+    RoomScopeResolution,
     RoomTelemetryPresentation,
     RoomTelemetryRow,
     SystemHelpPresentation,
     ToolExecutionResult,
+    ToolOutcome,
 } from '../types/chat.types.js';
 import { ChatApiError } from '../types/chat.types.js';
 import {
@@ -24,7 +28,7 @@ import {
 } from './energy.js';
 
 const MAX_TOOL_PLANS = 4;
-const MAX_ACTIVE_ROOMS = 200;
+const MAX_FACILITY_ROOMS = 200;
 const MAX_REQUESTED_ROOMS = 50;
 const MAX_EVENTS_RETURNED = 25;
 const MAX_EVENT_SCAN = 200;
@@ -51,7 +55,7 @@ const ENERGY_PRESETS = new Set([
     'custom',
 ]);
 const ENERGY_BUCKETS = new Set(['auto', 'day', 'week', 'month', 'year']);
-const WEEK_DAYS = new Set([
+const WEEK_DAY_NAMES = [
     'Monday',
     'Tuesday',
     'Wednesday',
@@ -59,24 +63,37 @@ const WEEK_DAYS = new Set([
     'Friday',
     'Saturday',
     'Sunday',
-]);
+] as const;
+const WEEK_DAYS: ReadonlySet<string> = new Set(WEEK_DAY_NAMES);
+const WEEK_DAY_ORDER: ReadonlyMap<string, number> = new Map(
+    WEEK_DAY_NAMES.map((day, index) => [day, index]),
+);
 
 export interface ToolExecutionContext {
     readonly firebase: FirebaseRestClient;
     readonly user: AuthenticatedChatUser;
+    readonly questionFocus: ChatQuestionFocus;
     readonly now?: Date;
     readonly abortSignal?: AbortSignal;
 }
 
+const ROOM_CATALOG_ONLY_FOCUSES: ReadonlySet<ChatQuestionFocus> = new Set([
+    'room_existence',
+    'schedule_count',
+    'schedule_list',
+]);
+
 interface FacilityRoom {
     readonly uid: string;
     readonly roomName: string;
+    readonly status: 'active' | 'inactive';
     readonly deviceAssigned: boolean;
     readonly deviceId: string | null;
     readonly raw: Record<string, unknown>;
 }
 
 interface FacilityRoomSnapshot {
+    /** Complete bounded catalog. Entity resolution must happen before active filtering. */
     readonly rooms: readonly FacilityRoom[];
     readonly notices: readonly string[];
     readonly partial: boolean;
@@ -84,6 +101,11 @@ interface FacilityRoomSnapshot {
 
 interface RoomSelection {
     readonly rooms: readonly FacilityRoom[];
+    readonly requestedNames: readonly string[];
+    readonly inactiveRoomNames: readonly string[];
+    readonly missingRoomNames: readonly string[];
+    readonly ambiguousRoomNames: readonly string[];
+    readonly activeRoomNames: readonly string[];
     readonly notices: readonly string[];
     readonly facts: readonly string[];
     readonly partial: boolean;
@@ -105,7 +127,7 @@ class RequestSnapshots {
     constructor(readonly firebase: FirebaseRestClient) {}
 
     rooms(): Promise<FacilityRoomSnapshot> {
-        this.roomPromise ??= loadActiveRooms(this.firebase);
+        this.roomPromise ??= loadRoomCatalog(this.firebase);
         return this.roomPromise;
     }
 
@@ -260,7 +282,15 @@ export async function executeToolPlans(
 
     const settled = await Promise.allSettled(
         validatedPlans.map((plan, index) =>
-            executeOne(plan, index + 1, snapshots, context.user, now, context.abortSignal),
+            executeOne(
+                plan,
+                index + 1,
+                snapshots,
+                context.user,
+                context.questionFocus,
+                now,
+                context.abortSignal,
+            ),
         ),
     );
     assertToolNotAborted(context.abortSignal);
@@ -283,19 +313,20 @@ async function executeOne(
     ordinal: number,
     snapshots: RequestSnapshots,
     user: AuthenticatedChatUser,
+    questionFocus: ChatQuestionFocus,
     now: Date,
     abortSignal?: AbortSignal,
 ): Promise<ToolExecutionResult> {
     assertToolNotAborted(abortSignal);
     switch (plan.name) {
         case 'get_room_telemetry':
-            return executeTelemetry(plan, ordinal, snapshots, now);
+            return executeTelemetry(plan, ordinal, snapshots, questionFocus, now);
         case 'get_energy_report':
             return executeEnergy(plan, ordinal, snapshots, now);
         case 'get_climate_prediction_logs':
-            return executeClimateSuggestions(plan, ordinal, snapshots);
+            return executeClimateSuggestions(plan, ordinal, snapshots, now);
         case 'get_recent_room_events':
-            return executeRecentEvents(plan, ordinal, snapshots);
+            return executeRecentEvents(plan, ordinal, snapshots, now);
         case 'get_system_help':
             return executeSystemHelp(plan, ordinal, user);
     }
@@ -317,18 +348,23 @@ async function executeTelemetry(
     plan: PlannerToolPlan,
     ordinal: number,
     snapshots: RequestSnapshots,
+    questionFocus: ChatQuestionFocus,
     now: Date,
 ): Promise<ToolExecutionResult> {
-    const [facility, deviceOutcome] = await Promise.all([
-        snapshots.rooms(),
-        settlePromise(snapshots.devices()),
-    ]);
+    const facility = await snapshots.rooms();
+    const selection = selectRooms(facility, plan.roomNames);
+    if (isTerminalSelection(selection)) {
+        return buildScopeTerminalResult(plan, ordinal, facility, selection, now);
+    }
+    const requiresDeviceSnapshot = !ROOM_CATALOG_ONLY_FOCUSES.has(questionFocus);
+    const deviceOutcome: PromiseSettledResult<Record<string, unknown>> = requiresDeviceSnapshot
+        ? await settlePromise(snapshots.devices())
+        : { status: 'fulfilled', value: {} };
     if (deviceOutcome.status === 'rejected' && shouldPropagate(deviceOutcome.reason)) {
         throw deviceOutcome.reason;
     }
     const deviceSnapshotFailed = deviceOutcome.status === 'rejected';
     const devices = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : {};
-    const selection = selectRooms(facility, plan.roomNames);
     let unavailableDevices = 0;
     let scheduleFactCount = 0;
     let scheduleFactsOmitted = false;
@@ -336,23 +372,42 @@ async function executeTelemetry(
 
     const rooms: RoomTelemetryRow[] = selection.rooms.map((room, index) => {
         const device = getAssignedDevice(room, devices);
-        if (room.deviceAssigned && !device) unavailableDevices += 1;
-        const temperature = boundedNumber(device?.['temperature'], -50, 100);
-        const humidity = boundedNumber(device?.['humidity'], 0, 100);
+        if (requiresDeviceSnapshot && room.deviceAssigned && !device) unavailableDevices += 1;
+        const deviceAssignmentStatus: RoomTelemetryRow['deviceAssignmentStatus'] =
+            !room.deviceAssigned
+                ? 'not_assigned'
+                : !room.deviceId || requiresDeviceSnapshot && !device
+                    ? 'unavailable'
+                    : 'assigned';
+        const storedTemperature = boundedNumber(device?.['temperature'], -50, 100);
+        const storedHumidity = boundedNumber(device?.['humidity'], 0, 100);
         const lastSeen = normalizedTimestamp(nestedValue(device, 'status', 'lastSeen'));
         const onlineState: DeviceOnlineState = device
             ? onlineStateFor(lastSeen, now)
             : 'unknown';
-        const condition = roomCondition(temperature, humidity);
-        const occupancy = strictBoolean(device?.['occupancy']);
-        const acPower = strictBoolean(nestedValue(device, 'acState', 'power'));
+        const measurementStatus = measurementStatusFor(device, onlineState);
+        const exposeMeasurement = measurementStatus === 'current' ||
+            plan.includeLastKnown &&
+                lastSeen !== null &&
+                (measurementStatus === 'stale' || measurementStatus === 'offline');
+        const temperature = exposeMeasurement ? storedTemperature : null;
+        const humidity = exposeMeasurement ? storedHumidity : null;
+        const condition = measurementStatus === 'current'
+            ? roomCondition(storedTemperature, storedHumidity)
+            : 'unknown';
+        const occupancy = exposeMeasurement ? strictBoolean(device?.['occupancy']) : null;
+        const acPower = exposeMeasurement
+            ? strictBoolean(nestedValue(device, 'acState', 'power'))
+            : null;
         const aiAutoApply = device
             ? strictBoolean(nestedValue(device, 'control', 'aiAutoApply'))
             : null;
         const schedules = parseSchedules(room.raw['schedules']);
         const row: RoomTelemetryRow = {
             roomName: room.roomName,
+            deviceAssignmentStatus,
             onlineState,
+            measurementStatus,
             condition,
             temperature: roundNullable(temperature, 1),
             humidity: roundNullable(humidity, 1),
@@ -364,7 +419,7 @@ async function executeTelemetry(
         };
         roomFacts.push({
             id: `t${ordinal}.telemetry.${index + 1}`,
-            statement: telemetryFact(row, room),
+            statement: telemetryFact(row),
         });
         row.schedules.forEach((schedule, scheduleIndex) => {
             if (scheduleFactCount >= MAX_SCHEDULE_FACTS) {
@@ -376,7 +431,8 @@ async function executeTelemetry(
                 id: `t${ordinal}.schedule.${index + 1}.${scheduleIndex + 1}`,
                 statement:
                     `${row.roomName} has a ${schedule.day} schedule from ${schedule.startTime} ` +
-                    `to ${schedule.endTime} for "${schedule.subject}".`,
+                    `to ${schedule.endTime}; stored schedule subject (untrusted text): ` +
+                    `"${schedule.subject}".`,
             });
         });
         return row;
@@ -387,8 +443,8 @@ async function executeTelemetry(
         availability: 'available',
         id: `tool-${ordinal}`,
         title: plan.roomNames.length === 0
-            ? 'Current telemetry for active rooms'
-            : 'Current telemetry for selected active rooms',
+            ? 'OcuTemp room data for active rooms'
+            : 'OcuTemp room data for selected active rooms',
         rooms,
     };
     const notices = uniqueStrings([
@@ -425,6 +481,8 @@ async function executeTelemetry(
         partial:
             facility.partial || selection.partial || unavailableDevices > 0 ||
             scheduleFactsOmitted || deviceSnapshotFailed,
+        scope: scopeForSelection(selection),
+        outcome: deviceSnapshotFailed ? 'source_unavailable' : 'ok',
     };
 }
 
@@ -435,14 +493,15 @@ async function executeEnergy(
     now: Date,
 ): Promise<ToolExecutionResult> {
     const range = resolveEnergyRange(plan, now);
-    const [facility, deviceKeyOutcome] = await Promise.all([
-        snapshots.rooms(),
-        settlePromise(snapshots.firebase.getDeviceKeys()),
-    ]);
+    const facility = await snapshots.rooms();
+    const selection = selectRooms(facility, plan.roomNames);
+    if (isTerminalSelection(selection)) {
+        return buildScopeTerminalResult(plan, ordinal, facility, selection, now);
+    }
+    const deviceKeyOutcome = await settlePromise(snapshots.firebase.getDeviceKeys());
     if (deviceKeyOutcome.status === 'rejected' && shouldPropagate(deviceKeyOutcome.reason)) {
         throw deviceKeyOutcome.reason;
     }
-    const selection = selectRooms(facility, plan.roomNames);
     if (deviceKeyOutcome.status === 'rejected') {
         const unavailable = buildUnavailableResult(plan, ordinal, now);
         return {
@@ -458,6 +517,8 @@ async function executeEnergy(
                 ...unavailable.notices,
             ]),
             partial: true,
+            scope: scopeForSelection(selection),
+            outcome: 'source_unavailable',
         };
     }
     const availableDeviceKeys = isRecord(deviceKeyOutcome.value) ? deviceKeyOutcome.value : {};
@@ -516,6 +577,19 @@ async function executeEnergy(
         rooms: inputs,
         now,
     });
+    const hasUnavailableEnergy = built.presentation.rooms.some(
+        (room) => room.status === 'device_unavailable',
+    );
+    const hasReadableRoomWithoutRecords = built.presentation.rooms.some(
+        (room) => room.status === 'no_records',
+    );
+    const outcome: ToolOutcome = built.presentation.metrics.roomsWithRecords > 0
+        ? 'ok'
+        : hasUnavailableEnergy
+            ? 'source_unavailable'
+            : hasReadableRoomWithoutRecords
+                ? 'no_energy_records'
+                : 'insufficient_evidence';
     return {
         name: plan.name,
         presentation: built.presentation,
@@ -529,6 +603,8 @@ async function executeEnergy(
             ...built.notices,
         ]),
         partial: facility.partial || selection.partial || built.partial,
+        scope: scopeForSelection(selection),
+        outcome,
     };
 }
 
@@ -536,17 +612,19 @@ async function executeClimateSuggestions(
     plan: PlannerToolPlan,
     ordinal: number,
     snapshots: RequestSnapshots,
+    now: Date,
 ): Promise<ToolExecutionResult> {
-    const [facility, deviceOutcome] = await Promise.all([
-        snapshots.rooms(),
-        settlePromise(snapshots.devices()),
-    ]);
+    const facility = await snapshots.rooms();
+    const selection = selectRooms(facility, plan.roomNames);
+    if (isTerminalSelection(selection)) {
+        return buildScopeTerminalResult(plan, ordinal, facility, selection, now);
+    }
+    const deviceOutcome = await settlePromise(snapshots.devices());
     if (deviceOutcome.status === 'rejected' && shouldPropagate(deviceOutcome.reason)) {
         throw deviceOutcome.reason;
     }
     const deviceSnapshotFailed = deviceOutcome.status === 'rejected';
     const devices = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : {};
-    const selection = selectRooms(facility, plan.roomNames);
     let unavailableDevices = 0;
     const facts: GroundingFact[] = [];
 
@@ -567,28 +645,22 @@ async function executeClimateSuggestions(
                 const controlAutoApply = strictBoolean(
                     nestedValue(device, 'control', 'aiAutoApply'),
                 );
+                const lastSeen = normalizedTimestamp(nestedValue(device, 'status', 'lastSeen'));
+                const onlineState = onlineStateFor(lastSeen, now);
+                const exposeCurrentMeasurement = onlineState === 'online';
                 row = {
                     roomName: room.roomName,
                     status: 'available',
-                    currentRoomTemp: roundNullable(
-                        firstNumber(
-                            boundedNumber(suggestion['currentRoomTemp'], -50, 100),
-                            boundedNumber(device['temperature'], -50, 100),
-                        ),
-                        1,
-                    ),
-                    humidity: roundNullable(
-                        firstNumber(
-                            boundedNumber(suggestion['humidity'], 0, 100),
-                            boundedNumber(device['humidity'], 0, 100),
-                        ),
-                        1,
-                    ),
+                    currentRoomTemp: exposeCurrentMeasurement
+                        ? roundNullable(boundedNumber(device['temperature'], -50, 100), 1)
+                        : null,
+                    humidity: exposeCurrentMeasurement
+                        ? roundNullable(boundedNumber(device['humidity'], 0, 100), 1)
+                        : null,
                     suggestedTemp: round(suggestedTemp, 1),
                     reason: cleanStoredText(suggestion['reason'], 300),
                     applied: strictBoolean(suggestion['applied']),
-                    autoApplyEnabled:
-                        controlAutoApply ?? strictBoolean(suggestion['autoApplyEnabled']),
+                    autoApplyEnabled: controlAutoApply,
                     updatedAt: normalizedTimestamp(suggestion['updatedAt']),
                 };
             }
@@ -622,6 +694,13 @@ async function executeClimateSuggestions(
             ? ['The device snapshot could not be read; climate suggestions are marked unavailable.']
             : []),
     ]);
+    const availableSuggestions = rooms.filter((room) => room.status === 'available').length;
+    const outcome: ToolOutcome = deviceSnapshotFailed ||
+        availableSuggestions === 0 && unavailableDevices > 0
+        ? 'source_unavailable'
+        : availableSuggestions > 0
+            ? 'ok'
+            : 'insufficient_evidence';
     return {
         name: plan.name,
         presentation,
@@ -635,6 +714,8 @@ async function executeClimateSuggestions(
         ],
         notices,
         partial: facility.partial || selection.partial || unavailableDevices > 0 || deviceSnapshotFailed,
+        scope: scopeForSelection(selection),
+        outcome,
     };
 }
 
@@ -642,17 +723,21 @@ async function executeRecentEvents(
     plan: PlannerToolPlan,
     ordinal: number,
     snapshots: RequestSnapshots,
+    now: Date,
 ): Promise<ToolExecutionResult> {
-    const [facility, logOutcome] = await Promise.all([
-        snapshots.rooms(),
-        settlePromise(snapshots.logs()),
-    ]);
+    const range = resolveEnergyRange(plan, now);
+    const facility = await snapshots.rooms();
+    const selection = selectRooms(facility, plan.roomNames);
+    if (isTerminalSelection(selection)) {
+        return buildScopeTerminalResult(plan, ordinal, facility, selection, now);
+    }
+    const logOutcome = await settlePromise(snapshots.logs());
     if (logOutcome.status === 'rejected' && shouldPropagate(logOutcome.reason)) {
         throw logOutcome.reason;
     }
     const logSnapshotFailed = logOutcome.status === 'rejected';
     const rawLogs = logOutcome.status === 'fulfilled' ? logOutcome.value : {};
-    const selection = selectRooms(facility, plan.roomNames);
+    const logScanMayBeTruncated = Object.keys(rawLogs).length >= MAX_EVENT_SCAN;
     const roomByUid = new Map(selection.rooms.map((room) => [room.uid, room]));
     const roomByDevice = new Map(
         selection.rooms
@@ -669,6 +754,8 @@ async function executeRecentEvents(
             if (!room) return null;
             const updatedAt = normalizedTimestamp(raw['updatedAt']);
             if (!updatedAt) return null;
+            const eventDate = manilaDateKeyForTimestamp(updatedAt);
+            if (!eventDate || eventDate < range.start || eventDate > range.end) return null;
             const eventType = cleanStoredText(raw['eventType'], 60) ?? 'Operational event';
             const mode = cleanStoredText(raw['mode'], 40);
             const detail = cleanStoredText(raw['reason'], 240) ?? 'No additional detail was recorded.';
@@ -703,8 +790,9 @@ async function executeRecentEvents(
             id: `t${ordinal}.events.summary`,
             statement: logSnapshotFailed
                 ? 'Recent operational events could not be read.'
-                : `${events.length} matching events were returned after scanning up to the latest ` +
-                    `${MAX_EVENT_SCAN} facility events (result limit ${limit}).`,
+                : `${events.length} matching events in ${range.label} (${range.start} through ${range.end}) ` +
+                    `were returned after scanning up to the latest ${MAX_EVENT_SCAN} facility events ` +
+                    `(result limit ${limit}).`,
         },
         ...selectionFacts(selection, `t${ordinal}.scope`),
         ...events.map((event, index) => ({
@@ -720,8 +808,22 @@ async function executeRecentEvents(
             ...facility.notices,
             ...selection.notices,
             ...(logSnapshotFailed ? ['Recent operational events could not be read.'] : []),
+            ...(logScanMayBeTruncated
+                ? [
+                    `Only the latest ${MAX_EVENT_SCAN} facility events were scanned; ` +
+                        'older matching events may be outside this bounded snapshot.',
+                ]
+                : []),
         ]),
-        partial: facility.partial || selection.partial || logSnapshotFailed,
+        partial:
+            facility.partial || selection.partial || logSnapshotFailed ||
+            logScanMayBeTruncated,
+        scope: scopeForSelection(selection),
+        outcome: logSnapshotFailed
+            ? 'source_unavailable'
+            : events.length > 0
+                ? 'ok'
+                : 'insufficient_evidence',
     };
 }
 
@@ -752,6 +854,8 @@ function executeSystemHelp(
             }],
             notices: ['No exact static help topic matched the request.'],
             partial: false,
+            scope: emptyScope(),
+            outcome: 'insufficient_evidence',
         };
     }
 
@@ -775,31 +879,32 @@ function executeSystemHelp(
         facts: [{ id: `t${ordinal}.help`, statement }],
         notices: restricted ? ['This help topic requires administrator access.'] : [],
         partial: false,
+        scope: emptyScope(),
+        outcome: 'ok',
     };
 }
 
-async function loadActiveRooms(firebase: FirebaseRestClient): Promise<FacilityRoomSnapshot> {
+async function loadRoomCatalog(firebase: FirebaseRestClient): Promise<FacilityRoomSnapshot> {
     const rawRooms = await firebase.getRooms();
-    const activeEntries = Object.entries(rawRooms).filter(([, raw]) =>
-        isRecord(raw) && raw['status'] === 'active',
-    );
-    if (activeEntries.length > MAX_ACTIVE_ROOMS) {
+    const roomEntries = Object.entries(rawRooms);
+    if (roomEntries.length > MAX_FACILITY_ROOMS) {
         throw new ChatApiError(
             'facility_too_large',
-            `OcuGuide supports at most ${MAX_ACTIVE_ROOMS} active rooms per request.`,
+            `OcuGuide supports at most ${MAX_FACILITY_ROOMS} configured rooms per request.`,
             413,
         );
     }
 
     const rooms: FacilityRoom[] = [];
     let invalidRooms = 0;
-    for (const [uid, rawValue] of activeEntries) {
+    for (const [uid, rawValue] of roomEntries) {
         if (!isRecord(rawValue) || !isSafeFirebaseKey(uid)) {
             invalidRooms += 1;
             continue;
         }
         const roomName = cleanStoredText(rawValue['roomName'], 100);
-        if (!roomName) {
+        const status = rawValue['status'];
+        if (!roomName || status !== 'active' && status !== 'inactive') {
             invalidRooms += 1;
             continue;
         }
@@ -811,6 +916,7 @@ async function loadActiveRooms(firebase: FirebaseRestClient): Promise<FacilityRo
         rooms.push({
             uid,
             roomName,
+            status,
             deviceAssigned,
             deviceId,
             raw: rawValue,
@@ -818,84 +924,175 @@ async function loadActiveRooms(firebase: FirebaseRestClient): Promise<FacilityRo
     }
     rooms.sort((left, right) =>
         left.roomName.localeCompare(right.roomName) || left.uid.localeCompare(right.uid));
-    const uniqueRooms: FacilityRoom[] = [];
-    const seenRoomNames = new Set<string>();
-    let duplicateRoomNames = 0;
-    for (const room of rooms) {
-        const normalizedName = roomKey(room.roomName);
-        if (seenRoomNames.has(normalizedName)) {
-            duplicateRoomNames += 1;
-            continue;
-        }
-        seenRoomNames.add(normalizedName);
-        uniqueRooms.push(room);
-    }
+    const groupedNames = groupRoomsByName(rooms);
+    const duplicateRoomNames = [...groupedNames.values()]
+        .filter((matches) => matches.length > 1)
+        .reduce((total, matches) => total + matches.length, 0);
     const notices = [
         ...(invalidRooms > 0
             ? [
-                `${invalidRooms} active room record${invalidRooms === 1 ? '' : 's'} ` +
+                `${invalidRooms} room record${invalidRooms === 1 ? '' : 's'} ` +
                     `${invalidRooms === 1 ? 'was' : 'were'} omitted because required identifiers were invalid.`,
             ]
             : []),
         ...(duplicateRoomNames > 0
             ? [
-                `${duplicateRoomNames} duplicate active room name${duplicateRoomNames === 1 ? '' : 's'} ` +
-                    `${duplicateRoomNames === 1 ? 'was' : 'were'} omitted from this response.`,
+                `${duplicateRoomNames} room records share a normalized name and are treated as ambiguous.`,
             ]
             : []),
     ];
     return {
-        rooms: uniqueRooms,
+        rooms,
         notices,
         partial: invalidRooms > 0 || duplicateRoomNames > 0,
     };
 }
 
 function selectRooms(facility: FacilityRoomSnapshot, requestedNames: readonly string[]): RoomSelection {
+    const roomGroups = groupRoomsByName(facility.rooms);
+    const activeRoomNames = [...roomGroups.values()]
+        .filter((matches) => matches.length === 1 && matches[0]?.status === 'active')
+        .map((matches) => matches[0]!.roomName)
+        .sort(compareRoomNames);
+
     if (requestedNames.length === 0) {
+        const ambiguousRoomNames = [...roomGroups.values()]
+            .filter((matches) => matches.length > 1 && matches.some((room) => room.status === 'active'))
+            .map((matches) => matches[0]!.roomName)
+            .sort(compareRoomNames);
         return {
-            rooms: facility.rooms,
-            notices: [],
-            facts: facility.rooms.length === 0 ? ['No active rooms are configured.'] : [],
-            partial: false,
+            rooms: facility.rooms
+                .filter((room) => room.status === 'active' && !ambiguousRoomNames.some(
+                    (name) => roomKey(name) === roomKey(room.roomName),
+                )),
+            requestedNames: [],
+            inactiveRoomNames: [],
+            missingRoomNames: [],
+            ambiguousRoomNames,
+            activeRoomNames,
+            notices: ambiguousRoomNames.length > 0
+                ? ['Rooms with duplicate normalized names were omitted because their identity is ambiguous.']
+                : [],
+            facts: activeRoomNames.length === 0 ? ['No unambiguous active rooms are configured.'] : [],
+            partial: ambiguousRoomNames.length > 0,
         };
     }
 
     const selected: FacilityRoom[] = [];
     const missing: string[] = [];
+    const inactive: string[] = [];
+    const ambiguous: string[] = [];
     const selectedUids = new Set<string>();
     for (const requested of requestedNames) {
         const key = roomKey(requested);
-        const matches = facility.rooms.filter((room) => roomKey(room.roomName) === key);
+        const matches = roomGroups.get(key) ?? [];
         if (matches.length === 0) {
             missing.push(requested);
             continue;
         }
-        for (const room of matches) {
-            if (!selectedUids.has(room.uid)) {
-                selected.push(room);
-                selectedUids.add(room.uid);
-            }
+        if (matches.length > 1) {
+            ambiguous.push(requested);
+            continue;
+        }
+        const room = matches[0]!;
+        if (room.status === 'inactive') {
+            inactive.push(room.roomName);
+            continue;
+        }
+        if (!selectedUids.has(room.uid)) {
+            selected.push(room);
+            selectedUids.add(room.uid);
         }
     }
-    selected.sort((left, right) => left.roomName.localeCompare(right.roomName));
+    selected.sort((left, right) => compareRoomNames(left.roomName, right.roomName));
+    const selectionFacts = [
+        ...missing.map((name) => `${name} is not configured in OcuTemp.`),
+        ...inactive.map((name) => `${name} exists in OcuTemp but is inactive.`),
+        ...ambiguous.map((name) => `${name} matches more than one configured room and is ambiguous.`),
+    ];
     return {
         rooms: selected,
-        notices: missing.length > 0
-            ? [
-                `${missing.length} requested room name${missing.length === 1 ? '' : 's'} did not exactly match an active room.`,
-            ]
-            : [],
-        facts: missing.map((name) => `No active room exactly matches "${name}".`),
-        partial: missing.length > 0,
+        requestedNames: [...requestedNames],
+        inactiveRoomNames: inactive,
+        missingRoomNames: missing,
+        ambiguousRoomNames: ambiguous,
+        activeRoomNames,
+        // Scope outcomes are answer facts, not duplicate user-facing warnings.
+        notices: [],
+        facts: selectionFacts,
+        partial: selectionFacts.length > 0,
     };
 }
 
+function groupRoomsByName(
+    rooms: readonly FacilityRoom[],
+): ReadonlyMap<string, readonly FacilityRoom[]> {
+    const groups = new Map<string, FacilityRoom[]>();
+    for (const room of rooms) {
+        const key = roomKey(room.roomName);
+        const current = groups.get(key);
+        if (current) current.push(room);
+        else groups.set(key, [room]);
+    }
+    return groups;
+}
+
+function compareRoomNames(left: string, right: string): number {
+    return left.localeCompare(right, 'en-US', { numeric: true, sensitivity: 'base' });
+}
+
 function selectionFacts(selection: RoomSelection, prefix: string): GroundingFact[] {
-    return selection.facts.map((statement, index) => ({
+    const statements = [
+        ...selection.facts,
+        ...(selection.rooms.length === 0 && selection.activeRoomNames.length > 0
+            ? [`The unambiguous active rooms are ${formatNameList(selection.activeRoomNames)}.`]
+            : []),
+    ];
+    return statements.map((statement, index) => ({
         id: `${prefix}.${index + 1}`,
         statement,
     }));
+}
+
+function scopeForSelection(selection: RoomSelection): RoomScopeResolution {
+    return {
+        requestedNames: [...selection.requestedNames],
+        matchedRoomNames: selection.rooms.map((room) => room.roomName),
+        inactiveRoomNames: [...selection.inactiveRoomNames],
+        missingRoomNames: [...selection.missingRoomNames],
+        ambiguousRoomNames: [...selection.ambiguousRoomNames],
+        activeRoomNames: [...selection.activeRoomNames],
+    };
+}
+
+function selectionOutcome(selection: RoomSelection): ToolOutcome {
+    if (selection.rooms.length > 0) return 'ok';
+    if (selection.ambiguousRoomNames.length > 0) return 'room_ambiguous';
+    if (selection.inactiveRoomNames.length > 0) return 'room_inactive';
+    if (selection.missingRoomNames.length > 0) return 'room_not_found';
+    return 'insufficient_evidence';
+}
+
+function isTerminalSelection(selection: RoomSelection): boolean {
+    return selection.rooms.length === 0;
+}
+
+function emptyScope(): RoomScopeResolution {
+    return {
+        requestedNames: [],
+        matchedRoomNames: [],
+        inactiveRoomNames: [],
+        missingRoomNames: [],
+        ambiguousRoomNames: [],
+        activeRoomNames: [],
+    };
+}
+
+function formatNameList(names: readonly string[]): string {
+    if (names.length === 0) return 'none';
+    if (names.length === 1) return names[0]!;
+    if (names.length === 2) return `${names[0]} and ${names[1]}`;
+    return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
 function getAssignedDevice(
@@ -920,24 +1117,37 @@ function findEventRoom(
     return storedName ? byName.get(roomKey(storedName)) ?? null : null;
 }
 
-function telemetryFact(row: RoomTelemetryRow, room: FacilityRoom): string {
-    if (!room.deviceAssigned) {
+function telemetryFact(row: RoomTelemetryRow): string {
+    if (row.deviceAssignmentStatus === 'not_assigned') {
         return `${row.roomName} is active with no assigned device; live telemetry is unavailable.`;
     }
-    if (!room.deviceId || row.lastSeen === null && row.temperature === null && row.humidity === null) {
+    if (row.deviceAssignmentStatus === 'unavailable') {
         return `${row.roomName} is active but its assigned-device telemetry is unavailable.`;
     }
+    const isLastKnown = row.measurementStatus === 'stale' || row.measurementStatus === 'offline';
     const parts = [
         `${row.roomName}: device ${row.onlineState}`,
-        `condition ${row.condition}`,
-        row.temperature === null ? 'temperature unavailable' : `${row.temperature} °C`,
-        row.humidity === null ? 'humidity unavailable' : `${row.humidity}% humidity`,
-        row.occupancy === null ? 'occupancy unavailable' : row.occupancy ? 'occupied' : 'unoccupied',
-        row.acPower === null ? 'AC state unavailable' : row.acPower ? 'AC on' : 'AC off',
+        `measurement status ${row.measurementStatus}`,
+        row.condition === 'unknown' ? 'current heat condition unavailable' : `current condition ${row.condition}`,
+        row.temperature === null
+            ? 'temperature unavailable'
+            : `${isLastKnown ? 'last-known temperature' : 'current temperature'} ${row.temperature} °C`,
+        row.humidity === null
+            ? 'humidity unavailable'
+            : `${isLastKnown ? 'last-known humidity' : 'current humidity'} ${row.humidity}%`,
+        row.occupancy === null
+            ? 'occupancy unavailable'
+            : `${isLastKnown ? 'last-known occupancy' : 'current occupancy'} ${row.occupancy ? 'occupied' : 'unoccupied'}`,
+        row.acPower === null
+            ? 'AC state unavailable'
+            : `${isLastKnown ? 'last-known AC state' : 'current AC state'} ${row.acPower ? 'on' : 'off'}`,
         row.aiAutoApply === null
-            ? 'AI auto-apply state unavailable'
-            : `AI auto-apply ${row.aiAutoApply ? 'enabled' : 'disabled'}`,
-        `${row.schedules.length} schedules`,
+            ? 'stored AI auto-apply configuration unavailable'
+            : `AI auto-apply is configured as ${row.aiAutoApply ? 'enabled' : 'disabled'} in OcuTemp` +
+                (row.measurementStatus === 'current'
+                    ? ''
+                    : '; current device application cannot be confirmed'),
+        `${row.schedules.length} valid configured schedules`,
     ];
     if (row.lastSeen) parts.push(`last seen ${row.lastSeen}`);
     return `${parts.join(', ')}.`;
@@ -950,14 +1160,15 @@ function telemetrySummary(rooms: readonly RoomTelemetryRow[]): string {
     const hot = reportedConditions.filter(
         (room) => room.condition === 'hot' || room.condition === 'critical',
     ).length;
-    const unavailable = rooms.filter((room) => room.onlineState === 'unknown').length;
+    const unavailable = rooms.filter((room) => room.measurementStatus !== 'current').length;
     const heatSummary = reportedConditions.length > 0
         ? `${hot} of ${reportedConditions.length} rooms with reported conditions have a hot or critical heat condition`
         : 'no room has a reported condition available for heat assessment';
-    const onlineSummary = reportedStatuses.length > 0
-        ? `${online} of ${reportedStatuses.length} rooms with reported device status are online`
-        : 'no room has reported device status available';
-    return `${onlineSummary}; ${heatSummary}; ${unavailable} have unavailable device status.`;
+    const onlineSummary = online > 0
+        ? `${online} selected room${online === 1 ? ' has' : 's have'} a current online reading`
+        : 'No selected room has a current online reading';
+    return `${onlineSummary}; ${heatSummary}; ${unavailable} selected room${unavailable === 1 ? '' : 's'} ` +
+        `${unavailable === 1 ? 'does' : 'do'} not have a current reading.`;
 }
 
 function climateSummary(rooms: readonly ClimateSuggestionRow[]): string {
@@ -1051,6 +1262,12 @@ function parseSchedules(value: unknown): RoomTelemetryRow['schedules'] {
             return { day, startTime, endTime, subject };
         })
         .filter((schedule): schedule is NonNullable<typeof schedule> => schedule !== null)
+        .sort((left, right) =>
+            (WEEK_DAY_ORDER.get(left.day) ?? Number.MAX_SAFE_INTEGER) -
+                (WEEK_DAY_ORDER.get(right.day) ?? Number.MAX_SAFE_INTEGER) ||
+            left.startTime.localeCompare(right.startTime) ||
+            left.endTime.localeCompare(right.endTime) ||
+            left.subject.localeCompare(right.subject, 'en-US', { sensitivity: 'base' }))
         .slice(0, 30);
 }
 
@@ -1061,6 +1278,15 @@ function onlineStateFor(lastSeen: string | null, now: Date): DeviceOnlineState {
     if (age < 2 * 60_000) return 'online';
     if (age < 5 * 60_000) return 'stale';
     return 'offline';
+}
+
+function measurementStatusFor(
+    device: Record<string, unknown> | null,
+    onlineState: DeviceOnlineState,
+): MeasurementStatus {
+    if (!device || onlineState === 'unknown') return 'unavailable';
+    if (onlineState === 'online') return 'current';
+    return onlineState;
 }
 
 function roomCondition(temperature: number | null, humidity: number | null): RoomCondition {
@@ -1089,6 +1315,82 @@ function computeHeatIndex(temperature: number, humidity: number | null): number 
     return Number.isFinite(celsius) ? celsius : temperature;
 }
 
+function buildScopeTerminalResult(
+    plan: PlannerToolPlan,
+    ordinal: number,
+    facility: FacilityRoomSnapshot,
+    selection: RoomSelection,
+    now: Date,
+): ToolExecutionResult {
+    const id = `tool-${ordinal}`;
+    let presentation: ChatPresentation;
+    switch (plan.name) {
+        case 'get_room_telemetry':
+            presentation = {
+                kind: 'room-telemetry',
+                availability: 'available',
+                id,
+                title: 'Room scope result',
+                rooms: [],
+            };
+            break;
+        case 'get_energy_report': {
+            const range = resolveEnergyRange(plan, now);
+            presentation = {
+                kind: 'energy-report',
+                availability: 'available',
+                id,
+                title: `Estimated energy report — ${range.label}`,
+                estimated: true,
+                range,
+                metrics: {
+                    totalKwh: null,
+                    runtimeSeconds: null,
+                    sessionCount: null,
+                    activeRooms: 0,
+                    roomsWithRecords: 0,
+                    coveragePercent: 0,
+                    recordedDays: 0,
+                    expectedDays: inclusiveDateKeySpan(range.start, range.end),
+                    dataCoveragePercent: 0,
+                },
+                trend: [],
+                rooms: [],
+            };
+            break;
+        }
+        case 'get_climate_prediction_logs':
+            presentation = {
+                kind: 'climate-suggestions',
+                availability: 'available',
+                id,
+                title: 'Room scope result',
+                rooms: [],
+            };
+            break;
+        case 'get_recent_room_events':
+            presentation = {
+                kind: 'recent-events',
+                availability: 'available',
+                id,
+                title: 'Room scope result',
+                events: [],
+            };
+            break;
+        case 'get_system_help':
+            throw new ChatApiError('invalid_request', 'System help does not use room scope.', 400);
+    }
+    return {
+        name: plan.name,
+        presentation,
+        facts: selectionFacts(selection, `t${ordinal}.scope`),
+        notices: uniqueStrings([...facility.notices, ...selection.notices]),
+        partial: facility.partial || selection.partial,
+        scope: scopeForSelection(selection),
+        outcome: selectionOutcome(selection),
+    };
+}
+
 function buildUnavailableResult(
     plan: PlannerToolPlan,
     ordinal: number,
@@ -1100,14 +1402,15 @@ function buildUnavailableResult(
         case 'get_room_telemetry':
             presentation = { kind: 'room-telemetry', availability: 'unavailable', id, title: 'Room telemetry unavailable', rooms: [] };
             break;
-        case 'get_energy_report':
+        case 'get_energy_report': {
+            const range = resolveEnergyRange(plan, now);
             presentation = {
                 kind: 'energy-report',
                 availability: 'unavailable',
                 id,
                 title: 'Estimated energy report unavailable',
                 estimated: true,
-                range: resolveEnergyRange(plan, now),
+                range,
                 metrics: {
                     totalKwh: null,
                     runtimeSeconds: null,
@@ -1115,11 +1418,15 @@ function buildUnavailableResult(
                     activeRooms: 0,
                     roomsWithRecords: 0,
                     coveragePercent: 0,
+                    recordedDays: 0,
+                    expectedDays: inclusiveDateKeySpan(range.start, range.end),
+                    dataCoveragePercent: 0,
                 },
                 trend: [],
                 rooms: [],
             };
             break;
+        }
         case 'get_climate_prediction_logs':
             presentation = { kind: 'climate-suggestions', availability: 'unavailable', id, title: 'Climate suggestions unavailable', rooms: [] };
             break;
@@ -1148,6 +1455,8 @@ function buildUnavailableResult(
         }],
         notices: [`The requested ${toolLabel(plan.name)} data is temporarily unavailable.`],
         partial: true,
+        scope: emptyScope(),
+        outcome: 'source_unavailable',
     };
 }
 
@@ -1167,7 +1476,7 @@ function validatePlans(plans: readonly PlannerToolPlan[]): PlannerToolPlan[] {
         if (!Array.isArray(plan.roomNames) || plan.roomNames.length > MAX_REQUESTED_ROOMS) {
             throw new ChatApiError('invalid_request', 'The requested room scope is invalid.', 400);
         }
-        const roomNames = uniqueStrings(
+        const roomNames = uniqueRoomNames(
             plan.roomNames.map((roomName: unknown) => validateRequestedText(roomName, 100)),
         );
         if (!ENERGY_PRESETS.has(plan.rangePreset) || !ENERGY_BUCKETS.has(plan.bucket)) {
@@ -1187,6 +1496,9 @@ function validatePlans(plans: readonly PlannerToolPlan[]): PlannerToolPlan[] {
         if (!Number.isInteger(plan.limit) || plan.limit < 1 || plan.limit > MAX_EVENTS_RETURNED) {
             throw new ChatApiError('invalid_request', 'The requested result limit is invalid.', 400);
         }
+        if (typeof plan.includeLastKnown !== 'boolean') {
+            throw new ChatApiError('invalid_request', 'The requested freshness scope is invalid.', 400);
+        }
         return { ...plan, roomNames, topic };
     });
 }
@@ -1204,6 +1516,30 @@ function normalizedTimestamp(value: unknown): string | null {
     if (typeof value !== 'string' || value.length > 64 || hasUnsafeControls(value)) return null;
     const parsed = new Date(value);
     return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
+function manilaDateKeyForTimestamp(value: string): string | null {
+    const parsed = new Date(value);
+    if (!Number.isFinite(parsed.getTime())) return null;
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(parsed);
+    const part = (type: Intl.DateTimeFormatPartTypes): string | null =>
+        parts.find((candidate) => candidate.type === type)?.value ?? null;
+    const year = part('year');
+    const month = part('month');
+    const day = part('day');
+    return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+function inclusiveDateKeySpan(start: string, end: string): number {
+    const startTime = Date.parse(`${start}T00:00:00.000Z`);
+    const endTime = Date.parse(`${end}T00:00:00.000Z`);
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime > endTime) return 0;
+    return Math.floor((endTime - startTime) / 86_400_000) + 1;
 }
 
 function safeClockTime(value: unknown): string | null {
@@ -1265,10 +1601,6 @@ function boundedNumber(value: unknown, minimum: number, maximum: number): number
         : null;
 }
 
-function firstNumber(...values: Array<number | null>): number | null {
-    return values.find((value): value is number => value !== null) ?? null;
-}
-
 function roundNullable(value: number | null, decimals: number): number | null {
     return value === null ? null : round(value, decimals);
 }
@@ -1296,6 +1628,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function uniqueStrings(values: readonly string[]): string[] {
     return [...new Set(values)];
+}
+
+function uniqueRoomNames(values: readonly string[]): string[] {
+    const seen = new Set<string>();
+    return values.filter((value) => {
+        const key = roomKey(value);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
 async function allSettledBounded<T, R>(

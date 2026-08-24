@@ -3,6 +3,44 @@ export interface ChatTurnRequest {
   readonly stateToken?: string;
 }
 
+export type ChatQuestionFocus =
+  | 'room_existence'
+  | 'current_temperature'
+  | 'last_known_temperature'
+  | 'current_humidity'
+  | 'current_condition'
+  | 'device_status'
+  | 'ac_power_status'
+  | 'ai_auto_apply_status'
+  | 'schedule_count'
+  | 'schedule_list'
+  | 'energy_total'
+  | 'energy_rank_winner'
+  | 'energy_ranking'
+  | 'energy_trend'
+  | 'energy_report'
+  | 'facility_efficiency_analysis'
+  | 'climate_suggestion'
+  | 'recent_events'
+  | 'system_help'
+  | 'greeting'
+  | 'control_request'
+  | 'unsupported';
+
+export type ChatDisplayMode =
+  | 'compact_metrics'
+  | 'key_value'
+  | 'bullet_list'
+  | 'table'
+  | 'ranking_chart'
+  | 'trend_chart'
+  | 'full_report';
+
+export interface ChatDisplayDirective {
+  readonly presentationId: string;
+  readonly mode: ChatDisplayMode;
+}
+
 export interface ChatAnswerHighlight {
   readonly text: string;
 }
@@ -77,7 +115,9 @@ export interface EnergyTrendPoint {
   readonly label: string;
   readonly start: string;
   readonly end: string;
-  readonly estimatedKwh: number;
+  readonly estimatedKwh: number | null;
+  readonly recordedDays: number;
+  readonly expectedDays: number;
 }
 
 export interface EnergyReportPresentation {
@@ -94,17 +134,24 @@ export interface EnergyReportPresentation {
     readonly activeRooms: number;
     readonly roomsWithRecords: number;
     readonly coveragePercent: number;
+    readonly recordedDays: number;
+    readonly expectedDays: number;
+    readonly dataCoveragePercent: number;
   };
   readonly trend: EnergyTrendPoint[];
   readonly rooms: EnergyRoomRow[];
 }
 
 export type DeviceOnlineState = 'online' | 'stale' | 'offline' | 'unknown';
+export type DeviceAssignmentStatus = 'assigned' | 'not_assigned' | 'unavailable';
 export type RoomCondition = 'comfortable' | 'warm' | 'hot' | 'critical' | 'unknown';
+export type MeasurementStatus = 'current' | 'stale' | 'offline' | 'unavailable';
 
 export interface RoomTelemetryRow {
   readonly roomName: string;
+  readonly deviceAssignmentStatus: DeviceAssignmentStatus;
   readonly onlineState: DeviceOnlineState;
+  readonly measurementStatus: MeasurementStatus;
   readonly condition: RoomCondition;
   readonly temperature: number | null;
   readonly humidity: number | null;
@@ -185,8 +232,10 @@ export type ChatPresentation =
 
 export interface ChatTurnResponse {
   readonly turnId: string;
+  readonly questionFocus: ChatQuestionFocus;
   readonly answer: ChatAnswer;
   readonly presentations: ChatPresentation[];
+  readonly displayPlan: ChatDisplayDirective[];
   readonly evidence: ChatEvidenceMetadata;
   readonly stateToken: string;
   readonly contextReset: boolean;
@@ -219,7 +268,9 @@ export interface RenderableChatMessage {
   readonly role: 'user' | 'assistant';
   readonly text: string;
   readonly answer?: ChatAnswer;
+  readonly questionFocus?: ChatQuestionFocus;
   readonly presentations: ChatPresentation[];
+  readonly displayPlan: ChatDisplayDirective[];
   readonly evidence?: ChatEvidenceMetadata;
   readonly errorCode?: string;
   readonly retryAfterSeconds?: number;

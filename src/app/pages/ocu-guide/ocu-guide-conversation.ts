@@ -11,7 +11,13 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { OcuGuideReportComponent } from '../../components/ocu-guide-report/ocu-guide-report';
-import { ChatAnswerBlock, ChatPresentation, RenderableChatMessage } from '../../models/chat.models';
+import {
+  ChatAnswerBlock,
+  ChatDisplayDirective,
+  ChatPresentation,
+  ChatQuestionFocus,
+  RenderableChatMessage,
+} from '../../models/chat.models';
 import { AuthStateService } from '../../services/auth-state.service';
 import { ChatService } from '../../services/chat.service';
 
@@ -66,18 +72,6 @@ export class OcuGuideConversationComponent implements OnDestroy {
     this.maxMessageLength - Array.from(this.draft()).length
   ));
   readonly primarySuggestion = this.buildCurrentMonthSuggestion();
-  readonly generalSuggestions: readonly ChatSuggestion[] = [
-    {
-      label: 'Understand humidity',
-      prompt: 'What is relative humidity, and why does it matter for indoor comfort?',
-      icon: 'humidity_percentage',
-    },
-    {
-      label: 'Reduce AC energy waste',
-      prompt: 'What practical steps can reduce AC energy waste?',
-      icon: 'energy_savings_leaf',
-    },
-  ];
   readonly suggestions = computed<readonly ChatSuggestion[]>(() => {
     const roleSuggestion: ChatSuggestion = this.currentUser()?.role === 'admin'
       ? {
@@ -92,8 +86,8 @@ export class OcuGuideConversationComponent implements OnDestroy {
         };
     return [
       {
-        label: 'Current facility conditions',
-        prompt: 'Compare the current temperature, humidity, occupancy, and AC status for every active room.',
+        label: 'Current room temperatures',
+        prompt: 'What is the current temperature in every active room?',
         icon: 'sensors',
       },
       {
@@ -101,41 +95,78 @@ export class OcuGuideConversationComponent implements OnDestroy {
         prompt: this.primarySuggestion,
         icon: 'calendar_month',
       },
+      {
+        label: 'AI auto-apply status',
+        prompt: 'Which active rooms have AI auto-apply enabled in OcuTemp?',
+        icon: 'auto_awesome',
+      },
+      {
+        label: 'Configured schedules',
+        prompt: 'List the configured schedules for every active room.',
+        icon: 'event_note',
+      },
       roleSuggestion,
     ];
   });
   readonly followUpSuggestions = computed<readonly ChatSuggestion[]>(() => {
     const latestAssistant = [...this.messages()].reverse().find((message) => message.role === 'assistant');
-    const latestPresentation = [...(latestAssistant?.presentations ?? [])]
-      .reverse()
-      .find((presentation) => this.hasUsefulResult(presentation));
-    const latestKind = latestPresentation?.kind;
-    switch (latestKind) {
-      case 'energy-report':
+    if (!latestAssistant || latestAssistant.errorCode) return [];
+    const usefulPresentations = latestAssistant.presentations.filter((presentation) => (
+      this.hasUsefulResult(presentation)
+    ));
+    const hasUsefulEnergy = usefulPresentations.some((item) => item.kind === 'energy-report');
+    const hasUsefulTelemetry = latestAssistant.presentations.some((item) => (
+      item.kind === 'room-telemetry'
+      && this.hasUsefulTelemetryForFocus(item, latestAssistant.questionFocus)
+    ));
+
+    switch (latestAssistant.questionFocus) {
+      case 'energy_report':
+        if (!hasUsefulEnergy) return [];
         return [
-          { label: 'Compare conditions', prompt: 'Compare the highest-energy rooms with their current temperature and occupancy.', icon: 'compare_arrows' },
-          { label: 'Check another period', prompt: 'Show estimated energy for every active room over the last 7 days.', icon: 'date_range' },
+          { label: 'Who ranked first?', prompt: 'Who ranked first?', icon: 'workspace_premium' },
+          { label: 'Show the trend', prompt: 'Show the energy trend for that same report.', icon: 'show_chart' },
         ];
-      case 'room-telemetry':
+      case 'energy_total':
+      case 'energy_rank_winner':
+      case 'energy_ranking':
+      case 'energy_trend':
+        if (!hasUsefulEnergy) return [];
         return [
-          { label: 'Find rooms needing attention', prompt: 'Which active rooms need attention based on the current facility conditions?', icon: 'warning' },
-          { label: 'Review climate guidance', prompt: 'Show the latest climate suggestions for the rooms that need attention.', icon: 'thermostat' },
+          { label: 'Show the ranking', prompt: 'Show the room ranking for that same energy period.', icon: 'leaderboard' },
+          { label: 'Show the trend', prompt: 'Show the energy trend for that same period.', icon: 'show_chart' },
         ];
-      case 'climate-suggestions':
+      case 'current_temperature':
+      case 'current_humidity':
+      case 'current_condition':
+      case 'device_status':
+      case 'ac_power_status':
+        if (!hasUsefulTelemetry) {
+          return latestAssistant.questionFocus === 'current_temperature'
+            ? [{ label: 'Check last-known readings', prompt: 'Show the last-known temperature for every active room.', icon: 'history' }]
+            : [];
+        }
         return [
-          { label: 'Compare live conditions', prompt: 'Compare these climate suggestions with the current room conditions.', icon: 'sensors' },
-          { label: 'Review recent events', prompt: 'Show recent operational events for the rooms in this result.', icon: 'history' },
+          { label: 'Check AI auto-apply', prompt: 'Which of those rooms have AI auto-apply enabled?', icon: 'auto_awesome' },
+          { label: 'List schedules', prompt: 'List the configured schedules for those rooms.', icon: 'event_note' },
         ];
-      case 'recent-events':
+      case 'ai_auto_apply_status':
+      case 'schedule_count':
+      case 'schedule_list':
+        if (!hasUsefulTelemetry) return [];
         return [
-          { label: 'Check current state', prompt: 'Show the current conditions for the rooms in these recent events.', icon: 'sensors' },
-          { label: 'Review energy', prompt: 'Show estimated energy for every active room over the last 7 days.', icon: 'bolt' },
+          { label: 'Check current status', prompt: 'Show the current device status for those rooms.', icon: 'sensors' },
         ];
+      case 'climate_suggestion':
+        return usefulPresentations.some((item) => item.kind === 'climate-suggestions')
+          ? [{ label: 'Check current readings', prompt: 'Compare those suggestions with current online room readings.', icon: 'sensors' }]
+          : [];
+      case 'recent_events':
+        return usefulPresentations.some((item) => item.kind === 'recent-events')
+          ? [{ label: 'Check current status', prompt: 'Show the current device status for the rooms in those events.', icon: 'sensors' }]
+          : [];
       default: {
-        const [facilitySuggestion, , roleSuggestion] = this.suggestions();
-        return [facilitySuggestion, roleSuggestion].filter(
-          (suggestion): suggestion is ChatSuggestion => suggestion !== undefined,
-        );
+        return [];
       }
     }
   });
@@ -317,8 +348,32 @@ export class OcuGuideConversationComponent implements OnDestroy {
     switch (presentation.kind) {
       case 'energy-report':
         return `${presentation.rooms.length} room${presentation.rooms.length === 1 ? '' : 's'} for ${presentation.range.label}; ${presentation.metrics.coveragePercent}% recorded-data coverage.`;
-      case 'room-telemetry':
-        return `Current telemetry for ${presentation.rooms.length} room${presentation.rooms.length === 1 ? '' : 's'}.`;
+      case 'room-telemetry': {
+        const current = presentation.rooms.filter((room) => room.measurementStatus === 'current').length;
+        const lastKnown = presentation.rooms.filter((room) => (
+          (room.measurementStatus === 'stale' || room.measurementStatus === 'offline')
+          && (room.temperature !== null
+            || room.humidity !== null
+            || room.occupancy !== null
+            || room.acPower !== null)
+        )).length;
+        const configured = presentation.rooms.filter((room) => (
+          room.aiAutoApply !== null || room.schedules.length > 0
+        )).length;
+        const noDevice = presentation.rooms.filter((room) => (
+          room.deviceAssignmentStatus === 'not_assigned'
+        )).length;
+        const unavailableDevice = presentation.rooms.filter((room) => (
+          room.deviceAssignmentStatus === 'unavailable'
+        )).length;
+        const parts = [`${presentation.rooms.length} room${presentation.rooms.length === 1 ? '' : 's'} returned`];
+        if (current > 0) parts.push(`${current} with current readings`);
+        if (lastKnown > 0) parts.push(`${lastKnown} with explicitly requested last-known readings`);
+        if (configured > 0) parts.push(`${configured} with stored configuration`);
+        if (noDevice > 0) parts.push(`${noDevice} without an assigned device`);
+        if (unavailableDevice > 0) parts.push(`${unavailableDevice} with unavailable device data`);
+        return `${parts.join('; ')}.`;
+      }
       case 'climate-suggestions': {
         const available = presentation.rooms.filter((room) => room.status === 'available').length;
         return `${available} available suggestion${available === 1 ? '' : 's'} across ${presentation.rooms.length} room${presentation.rooms.length === 1 ? '' : 's'}.`;
@@ -337,10 +392,78 @@ export class OcuGuideConversationComponent implements OnDestroy {
     return this.normalizeAnswerText(block.text) === this.normalizeAnswerText(summary);
   }
 
-  hasFacilityData(presentations: readonly ChatPresentation[]): boolean {
-    return presentations.some((presentation) => (
-      presentation.availability === 'available' && presentation.kind !== 'system-help'
+  isRepeatedAnswerText(
+    value: string,
+    summary: string,
+    blocks: readonly ChatAnswerBlock[] = [],
+  ): boolean {
+    const normalized = this.normalizeAnswerText(value);
+    if (normalized === this.normalizeAnswerText(summary)) return true;
+    return blocks.some((block) => (
+      (block.text && this.normalizeAnswerText(block.text) === normalized)
+      || block.items.some((item) => this.normalizeAnswerText(item) === normalized)
+      || block.entries.some((entry) => (
+        this.normalizeAnswerText(`${entry.label} ${entry.value}`) === normalized
+        || this.normalizeAnswerText(entry.value) === normalized
+      ))
     ));
+  }
+
+  hasAdditionalHighlights(
+    highlights: readonly { readonly text: string }[],
+    summary: string,
+    blocks: readonly ChatAnswerBlock[],
+  ): boolean {
+    return highlights.some((highlight) => (
+      !this.isRepeatedAnswerText(highlight.text, summary, blocks)
+    ));
+  }
+
+  shouldRenderAnswerDetails(message: RenderableChatMessage): boolean {
+    if (message.displayPlan.length === 0) return true;
+    switch (message.questionFocus) {
+      case 'current_temperature':
+      case 'last_known_temperature':
+      case 'current_humidity':
+      case 'current_condition':
+      case 'device_status':
+      case 'ac_power_status':
+      case 'ai_auto_apply_status':
+      case 'schedule_list':
+      case 'energy_rank_winner':
+      case 'energy_ranking':
+      case 'energy_trend':
+      case 'climate_suggestion':
+      case 'recent_events':
+      case 'system_help':
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  hasFacilityData(
+    focus: ChatQuestionFocus | undefined,
+    presentations: readonly ChatPresentation[],
+  ): boolean {
+    if (focus === 'room_existence' || focus === 'system_help' ||
+      focus === 'greeting' || focus === 'control_request' || focus === 'unsupported') return false;
+    return presentations.some((presentation) => (
+      presentation.kind !== 'system-help' && this.hasUsefulResult(presentation)
+    ));
+  }
+
+  visibleDirective(message: RenderableChatMessage): ChatDisplayDirective | null {
+    return message.displayPlan[0] ?? null;
+  }
+
+  visiblePresentation(
+    message: RenderableChatMessage,
+    directive: ChatDisplayDirective,
+  ): ChatPresentation | null {
+    return message.presentations.find((presentation) => (
+      presentation.id === directive.presentationId
+    )) ?? null;
   }
 
   answerBlockTrackKey(block: ChatAnswerBlock, index: number): string {
@@ -387,12 +510,14 @@ export class OcuGuideConversationComponent implements OnDestroy {
         return presentation.metrics.roomsWithRecords > 0;
       case 'room-telemetry':
         return presentation.rooms.some((room) => (
-          room.onlineState !== 'unknown'
+          room.deviceAssignmentStatus !== 'assigned'
+          || room.onlineState !== 'unknown'
           || room.condition !== 'unknown'
           || room.temperature !== null
           || room.humidity !== null
           || room.occupancy !== null
           || room.acPower !== null
+          || room.aiAutoApply !== null
           || room.schedules.length > 0
         ));
       case 'climate-suggestions':
@@ -401,6 +526,45 @@ export class OcuGuideConversationComponent implements OnDestroy {
         return presentation.events.length > 0;
       case 'system-help':
         return !presentation.restricted && presentation.steps.length > 0;
+    }
+  }
+
+  private hasUsefulTelemetryForFocus(
+    presentation: Extract<ChatPresentation, { readonly kind: 'room-telemetry' }>,
+    focus: RenderableChatMessage['questionFocus'],
+  ): boolean {
+    switch (focus) {
+      case 'current_temperature':
+        return presentation.rooms.some((room) => (
+          room.measurementStatus === 'current' && room.temperature !== null
+        ));
+      case 'last_known_temperature':
+        return presentation.rooms.some((room) => room.temperature !== null);
+      case 'current_humidity':
+        return presentation.rooms.some((room) => (
+          room.measurementStatus === 'current' && room.humidity !== null
+        ));
+      case 'current_condition':
+        return presentation.rooms.some((room) => (
+          room.measurementStatus === 'current' && room.condition !== 'unknown'
+        ));
+      case 'ac_power_status':
+        return presentation.rooms.some((room) => (
+          room.measurementStatus === 'current' && room.acPower !== null
+        ));
+      case 'ai_auto_apply_status':
+        return presentation.rooms.some((room) => room.aiAutoApply !== null);
+      case 'schedule_count':
+      case 'schedule_list':
+        return presentation.rooms.some((room) => room.schedules.length > 0);
+      case 'device_status':
+        return presentation.rooms.some((room) => room.onlineState !== 'unknown');
+      default:
+        return presentation.rooms.some((room) => (
+          room.measurementStatus !== 'unavailable'
+          || room.aiAutoApply !== null
+          || room.schedules.length > 0
+        ));
     }
   }
 

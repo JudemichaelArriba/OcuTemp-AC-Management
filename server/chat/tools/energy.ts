@@ -26,8 +26,8 @@ interface CalendarDate {
 interface EnergyRecord {
     readonly date: string;
     readonly estimatedKwh: number;
-    readonly runtimeSeconds: number;
-    readonly sessionCount: number;
+    readonly runtimeSeconds: number | null;
+    readonly sessionCount: number | null;
     readonly updatedAt: string | null;
 }
 
@@ -89,13 +89,15 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
     const recordedRooms = aggregated
         .filter((room) => room.status === 'recorded')
         .sort((left, right) => {
-            const valueOrder = (right.estimatedKwh ?? 0) - (left.estimatedKwh ?? 0);
+            const valueOrder = publishedKwh(recordedKwh(right)) - publishedKwh(recordedKwh(left));
             return valueOrder || left.input.roomName.localeCompare(right.input.roomName);
         });
 
-    const totalKwh = sum(recordedRooms.map((room) => room.estimatedKwh ?? 0));
-    const totalRuntimeSeconds = sum(recordedRooms.map((room) => room.runtimeSeconds ?? 0));
-    const totalSessionCount = sum(recordedRooms.map((room) => room.sessionCount ?? 0));
+    const totalKwh = sum(recordedRooms.map(recordedKwh));
+    const totalRuntimeSeconds = sumComplete(recordedRooms.map((room) => room.runtimeSeconds));
+    const totalSessionCount = sumComplete(recordedRooms.map((room) => room.sessionCount));
+    const incompleteRuntime = recordedRooms.length > 0 && totalRuntimeSeconds === null;
+    const incompleteSessions = recordedRooms.length > 0 && totalSessionCount === null;
     const rankByRoom = rankRooms(recordedRooms);
 
     const rows: EnergyRoomRow[] = aggregated
@@ -105,7 +107,7 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
             sharePercent:
                 room.status !== 'recorded'
                     ? null
-                    : round(totalKwh > 0 ? ((room.estimatedKwh ?? 0) / totalKwh) * 100 : 0, 1),
+                    : round(totalKwh > 0 ? (recordedKwh(room) / totalKwh) * 100 : 0, 1),
             rank: rankByRoom.get(room) ?? null,
             runtimeSeconds:
                 room.runtimeSeconds === null ? null : Math.round(room.runtimeSeconds),
@@ -117,21 +119,33 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
 
     const trend: EnergyTrendPoint[] = recordedRooms.length === 0
         ? []
-        : buckets.map((bucket) => ({
-            label: bucket.label,
-            start: dateKey(bucket.start),
-            end: dateKey(bucket.end),
-            estimatedKwh: round(
-                sum(
-                    recordedRooms.flatMap((room) =>
-                        room.records
-                            .filter((record) => isBetween(parseDateKey(record.date)!, bucket.start, bucket.end))
-                            .map((record) => record.estimatedKwh),
-                    ),
-                ),
-                3,
-            ),
-        }));
+        : buckets.map((bucket) => {
+            const bucketRecords = recordedRooms.flatMap((room) =>
+                room.records.filter((record) =>
+                    isBetween(parseDateKey(record.date)!, bucket.start, bucket.end)),
+            );
+            const recordedDates = new Set(bucketRecords.map((record) => record.date));
+            return {
+                label: bucket.label,
+                start: dateKey(bucket.start),
+                end: dateKey(bucket.end),
+                estimatedKwh: bucketRecords.length === 0
+                    ? null
+                    : round(sum(bucketRecords.map((record) => record.estimatedKwh)), 3),
+                recordedDays: recordedDates.size,
+                expectedDays: differenceInDays(bucket.start, bucket.end) + 1,
+            };
+        });
+
+    const recordedDateKeys = new Set(
+        recordedRooms.flatMap((room) => room.records.map((record) => record.date)),
+    );
+    const expectedDays = differenceInDays(resolved.start, resolved.end) + 1;
+    const recordedDays = recordedDateKeys.size;
+    const dataCoveragePercent = round(
+        expectedDays > 0 ? (recordedDays / expectedDays) * 100 : 0,
+        1,
+    );
 
     const roomsWithRecords = recordedRooms.length;
     const coveragePercent = round(
@@ -147,17 +161,26 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
         range: resolved.range,
         metrics: {
             totalKwh: roomsWithRecords > 0 ? round(totalKwh, 3) : null,
-            runtimeSeconds: roomsWithRecords > 0 ? Math.round(totalRuntimeSeconds) : null,
-            sessionCount: roomsWithRecords > 0 ? Math.round(totalSessionCount) : null,
+            runtimeSeconds:
+                roomsWithRecords > 0 && totalRuntimeSeconds !== null
+                    ? Math.round(totalRuntimeSeconds)
+                    : null,
+            sessionCount:
+                roomsWithRecords > 0 && totalSessionCount !== null
+                    ? Math.round(totalSessionCount)
+                    : null,
             activeRooms: options.rooms.length,
             roomsWithRecords,
             coveragePercent,
+            recordedDays,
+            expectedDays,
+            dataCoveragePercent,
         },
         trend,
         rooms: rows,
     };
 
-    const facts = buildEnergyFacts(options.factPrefix, presentation);
+    const facts = buildEnergyFacts(options.factPrefix, presentation, aggregated, expectedDays);
     const unavailableRooms = aggregated.filter((room) => room.status === 'device_unavailable').length;
     const failedReads = aggregated.filter((room) => room.input.readFailed === true).length;
     if (failedReads > 0) {
@@ -171,12 +194,30 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
                 `${unavailableRooms === 1 ? 'has' : 'have'} unavailable assigned-device data.`,
         );
     }
+    if (recordedDays > 0 && recordedDays < expectedDays) {
+        notices.push(
+            `Energy records exist on ${recordedDays} of ${expectedDays} calendar days ` +
+                `in the selected range (${dataCoveragePercent}% temporal coverage); unrecorded intervals are gaps, not zero usage.`,
+        );
+    }
+    if (incompleteRuntime || incompleteSessions) {
+        notices.push(
+            `Some recorded energy entries lack valid ${[
+                incompleteRuntime ? 'runtime' : null,
+                incompleteSessions ? 'session-count' : null,
+            ].filter((value): value is string => value !== null).join(' and ')} data; ` +
+                'the corresponding aggregate remains unavailable rather than being treated as zero.',
+        );
+    }
 
     return {
         presentation,
         facts,
         notices,
-        partial: unavailableRooms > 0,
+        partial:
+            unavailableRooms > 0 || coveragePercent < 100 ||
+            (recordedDays > 0 && recordedDays < expectedDays) ||
+            incompleteRuntime || incompleteSessions,
     };
 }
 
@@ -323,8 +364,8 @@ function aggregateRoom(
         status: 'recorded',
         records,
         estimatedKwh: sum(records.map((record) => record.estimatedKwh)),
-        runtimeSeconds: sum(records.map((record) => record.runtimeSeconds)),
-        sessionCount: sum(records.map((record) => record.sessionCount)),
+        runtimeSeconds: sumComplete(records.map((record) => record.runtimeSeconds)),
+        sessionCount: sumComplete(records.map((record) => record.sessionCount)),
         lastUpdatedAt: latestTimestamp(records.map((record) => record.updatedAt)),
     };
 }
@@ -353,8 +394,8 @@ function parseEnergyRecord(key: string, value: unknown): EnergyRecord | null {
     return {
         date: key,
         estimatedKwh,
-        runtimeSeconds: boundedNumber(value['runtimeSeconds'], 0, MAX_RUNTIME_SECONDS_PER_DAY) ?? 0,
-        sessionCount: boundedInteger(value['sessionCount'], 0, MAX_SESSIONS_PER_DAY) ?? 0,
+        runtimeSeconds: boundedNumber(value['runtimeSeconds'], 0, MAX_RUNTIME_SECONDS_PER_DAY),
+        sessionCount: boundedInteger(value['sessionCount'], 0, MAX_SESSIONS_PER_DAY),
         updatedAt: normalizedTimestamp(value['updatedAt']),
     };
 }
@@ -365,7 +406,7 @@ function rankRooms(rooms: readonly AggregatedRoom[]): ReadonlyMap<AggregatedRoom
     let previousRank = 0;
 
     rooms.forEach((room, index) => {
-        const value = room.estimatedKwh ?? 0;
+        const value = publishedKwh(recordedKwh(room));
         const rank = previousValue !== null && value === previousValue ? previousRank : index + 1;
         ranks.set(room, rank);
         previousValue = value;
@@ -384,12 +425,17 @@ function compareEnergyRows(left: EnergyRoomRow, right: EnergyRoomRow): number {
 function buildEnergyFacts(
     prefix: string,
     presentation: EnergyReportPresentation,
+    aggregated: readonly AggregatedRoom[],
+    expectedDays: number,
 ): GroundingFact[] {
-    const recordedTotalsAvailable =
-        presentation.metrics.roomsWithRecords > 0 &&
-        presentation.metrics.totalKwh !== null &&
-        presentation.metrics.runtimeSeconds !== null &&
-        presentation.metrics.sessionCount !== null;
+    const recordedDaysByRoom = new Map<string, number>(
+        aggregated.map((room): [string, number] => [
+            room.input.roomName,
+            new Set(room.records.map((record) => record.date)).size,
+        ]),
+    );
+    const recordedEnergyAvailable =
+        presentation.metrics.roomsWithRecords > 0 && presentation.metrics.totalKwh !== null;
     const noRecords = presentation.rooms.filter((room) => room.status === 'no_records').length;
     const noDevice = presentation.rooms.filter((room) => room.status === 'no_device').length;
     const unavailable = presentation.rooms.filter((room) => room.status === 'device_unavailable').length;
@@ -412,12 +458,18 @@ function buildEnergyFacts(
     if (presentation.metrics.activeRooms === 0) {
         unavailableDetails.push('No active rooms matched the requested energy scope.');
     }
-    const summary = recordedTotalsAvailable
+    const summary = recordedEnergyAvailable
         ? `${presentation.range.label} (${presentation.range.start} through ${presentation.range.end}): ` +
             `${presentation.metrics.roomsWithRecords} of ${presentation.metrics.activeRooms} active rooms ` +
             `have records (${presentation.metrics.coveragePercent}% coverage); those recorded rooms total an estimated ` +
-            `${presentation.metrics.totalKwh} kWh, ${presentation.metrics.runtimeSeconds} runtime seconds, ` +
-            `and ${presentation.metrics.sessionCount} sessions.`
+            `${presentation.metrics.totalKwh} kWh. Records exist on ${presentation.metrics.recordedDays} of ` +
+            `${presentation.metrics.expectedDays} calendar days (${presentation.metrics.dataCoveragePercent}% temporal coverage). ` +
+            (presentation.metrics.runtimeSeconds === null
+                ? 'A complete runtime total is unavailable. '
+                : `Complete recorded runtime totals ${presentation.metrics.runtimeSeconds} seconds. `) +
+            (presentation.metrics.sessionCount === null
+                ? 'A complete session total is unavailable.'
+                : `Complete recorded sessions total ${presentation.metrics.sessionCount}.`)
         : `${presentation.range.label} (${presentation.range.start} through ${presentation.range.end}): ` +
             'no verified recorded energy total, runtime total, session total, or trend is available. ' +
             (unavailableDetails.join(' ') || 'Recorded totals could not be verified.');
@@ -427,16 +479,49 @@ function buildEnergyFacts(
             statement: summary.trim(),
         },
     ];
+    const firstPlace = presentation.rooms.filter(
+        (room) => room.status === 'recorded' && room.rank === 1,
+    );
+    if (firstPlace.length === 1) {
+        const winner = firstPlace[0]!;
+        facts.push({
+            id: `${prefix}.rank.first`,
+            statement:
+                `${winner.roomName} is the sole rank-one room for ${presentation.range.label} ` +
+                `with an estimated ${winner.estimatedKwh} kWh (${winner.sharePercent}% of the recorded total), ` +
+                `based on records for ${recordedDaysByRoom.get(winner.roomName) ?? 0} of ` +
+                `${expectedDays} calendar days.`,
+        });
+    } else if (firstPlace.length > 1) {
+        facts.push({
+            id: `${prefix}.rank.first`,
+            statement:
+                `${firstPlace.map((room) => room.roomName).join(', ')} are tied for rank one for ` +
+                `${presentation.range.label} at an estimated ${firstPlace[0]!.estimatedKwh} kWh each. ` +
+                `Their recorded-day coverage is ${firstPlace.map((room) =>
+                    `${room.roomName}: ${recordedDaysByRoom.get(room.roomName) ?? 0}/${expectedDays}`
+                ).join('; ')}.`,
+        });
+    }
 
     presentation.rooms.forEach((room, index) => {
         let statement: string;
         switch (room.status) {
-            case 'recorded':
+            case 'recorded': {
+                const roomRecordedDays = recordedDaysByRoom.get(room.roomName) ?? 0;
                 statement =
                     `${room.roomName} ranks ${room.rank} with an estimated ${room.estimatedKwh} kWh ` +
-                    `(${room.sharePercent}% share), ${room.runtimeSeconds} runtime seconds, and ` +
-                    `${room.sessionCount} sessions.`;
+                    `(${room.sharePercent}% share), ` +
+                    (room.runtimeSeconds === null
+                        ? 'runtime unavailable, '
+                        : `${room.runtimeSeconds} runtime seconds, `) +
+                    (room.sessionCount === null
+                        ? 'and session count unavailable.'
+                        : `and ${room.sessionCount} sessions.`) +
+                    ` Its total is based on records for ${roomRecordedDays} of ` +
+                    `${expectedDays} calendar days in the selected range.`;
                 break;
+            }
             case 'no_device':
                 statement = `${room.roomName} is active but has no assigned device.`;
                 break;
@@ -453,9 +538,12 @@ function buildEnergyFacts(
     presentation.trend.forEach((point, index) => {
         facts.push({
             id: `${prefix}.trend.${index + 1}`,
-            statement:
-                `${point.label} (${point.start} through ${point.end}) totals an estimated ` +
-                `${point.estimatedKwh} kWh.`,
+            statement: point.estimatedKwh === null
+                ? `${point.label} (${point.start} through ${point.end}) has no recorded energy data; ` +
+                    `the interval is a gap, not measured zero usage.`
+                : `${point.label} (${point.start} through ${point.end}) totals an estimated ` +
+                    `${point.estimatedKwh} kWh from records on ${point.recordedDays} of ` +
+                    `${point.expectedDays} calendar days.`,
         });
     });
     return facts;
@@ -711,6 +799,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sum(values: readonly number[]): number {
     return values.reduce((total, value) => total + value, 0);
+}
+
+/** Missing runtime/session fields stay unavailable rather than becoming false zeroes. */
+function sumComplete(values: readonly (number | null)[]): number | null {
+    let total = 0;
+    for (const value of values) {
+        if (value === null) return null;
+        total += value;
+    }
+    return total;
+}
+
+/** Ranking and tie detection use the same precision exposed in the public report. */
+function recordedKwh(room: AggregatedRoom): number {
+    if (room.status !== 'recorded' || room.estimatedKwh === null) {
+        throw new ChatApiError(
+            'data_unavailable',
+            'A recorded energy aggregation is incomplete.',
+            503,
+        );
+    }
+    return room.estimatedKwh;
+}
+
+function publishedKwh(value: number): number {
+    return round(value, 3);
 }
 
 function round(value: number, decimals: number): number {

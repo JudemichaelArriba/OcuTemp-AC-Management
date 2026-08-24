@@ -76,22 +76,28 @@ async function handler(request: Request): Promise<Response> {
 
         const nowSeconds = Math.floor(Date.now() / 1_000);
         const state: ChatStatePayload = {
-            version: 1,
+            version: 2,
             uid: user.uid,
             conversationId: decoded.state?.conversationId ?? globalThis.crypto.randomUUID(),
             issuedAt: nowSeconds,
             expiresAt: nowSeconds + CHAT_STATE_LIFETIME_SECONDS,
             turns: [
                 ...(decoded.state?.turns ?? []),
-                { user: input.message, assistant: result.stateSummary },
+                {
+                    user: input.message,
+                    assistant: result.stateSummary,
+                    context: result.stateContext,
+                },
             ].slice(-5),
         };
 
         stage = 'state_encode';
         const response: ChatTurnResponse = {
             turnId: requestId,
+            questionFocus: result.questionFocus,
             answer: result.answer,
             presentations: result.presentations,
+            displayPlan: result.displayPlan,
             evidence: {
                 asOf: new Date().toISOString(),
                 timeZone: 'Asia/Manila',

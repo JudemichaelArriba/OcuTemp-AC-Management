@@ -3,9 +3,12 @@ import { Auth, onAuthStateChanged } from '@angular/fire/auth';
 import {
   ChatAnswer,
   ChatAnswerBlock,
+  ChatDisplayDirective,
+  ChatDisplayMode,
   ChatErrorBody,
   ChatEvidenceMetadata,
   ChatPresentation,
+  ChatQuestionFocus,
   ChatRequestError,
   ChatTurnRequest,
   ChatTurnResponse,
@@ -59,7 +62,7 @@ export class ChatService {
     this.lastUserMessage = message;
     this.renderableMessages.update((items) => [
       ...items,
-      { id: userId, role: 'user', text: message, presentations: [] },
+      { id: userId, role: 'user', text: message, presentations: [], displayPlan: [] },
     ]);
 
     await this.performTurn(message);
@@ -99,7 +102,9 @@ export class ChatService {
           role: 'assistant',
           text: response.answer.summary,
           answer: response.answer,
+          questionFocus: response.questionFocus,
           presentations: response.presentations,
+          displayPlan: response.displayPlan,
           evidence: response.evidence,
         },
       ]);
@@ -215,6 +220,7 @@ export class ChatService {
         role: 'assistant',
         text: message,
         presentations: [],
+        displayPlan: [],
         errorCode: code,
         retryAfterSeconds,
       },
@@ -272,6 +278,39 @@ const ANSWER_BLOCK_KINDS = new Set<ChatAnswerBlock['kind']>([
   'key-value',
 ]);
 const ANSWER_BLOCK_TONES = new Set<ChatAnswerBlock['tone']>(['neutral', 'info', 'warning']);
+const CHAT_QUESTION_FOCUSES = new Set<ChatQuestionFocus>([
+  'room_existence',
+  'current_temperature',
+  'last_known_temperature',
+  'current_humidity',
+  'current_condition',
+  'device_status',
+  'ac_power_status',
+  'ai_auto_apply_status',
+  'schedule_count',
+  'schedule_list',
+  'energy_total',
+  'energy_rank_winner',
+  'energy_ranking',
+  'energy_trend',
+  'energy_report',
+  'facility_efficiency_analysis',
+  'climate_suggestion',
+  'recent_events',
+  'system_help',
+  'greeting',
+  'control_request',
+  'unsupported',
+]);
+const CHAT_DISPLAY_MODES = new Set<ChatDisplayMode>([
+  'compact_metrics',
+  'key_value',
+  'bullet_list',
+  'table',
+  'ranking_chart',
+  'trend_chart',
+  'full_report',
+]);
 const PRESENTATION_KINDS = new Set<ChatPresentation['kind']>([
   'energy-report',
   'room-telemetry',
@@ -288,6 +327,8 @@ const ENERGY_ROOM_STATUSES = new Set([
   'device_unavailable',
 ]);
 const DEVICE_ONLINE_STATES = new Set(['online', 'stale', 'offline', 'unknown']);
+const DEVICE_ASSIGNMENT_STATUSES = new Set(['assigned', 'not_assigned', 'unavailable']);
+const MEASUREMENT_STATUSES = new Set(['current', 'stale', 'offline', 'unavailable']);
 const ROOM_CONDITIONS = new Set(['comfortable', 'warm', 'hot', 'critical', 'unknown']);
 const CLIMATE_STATUSES = new Set([
   'available',
@@ -304,6 +345,9 @@ const WEEK_DAYS = new Set([
   'Saturday',
   'Sunday',
 ]);
+const WEEK_DAY_ORDER = new Map(
+  [...WEEK_DAYS].map((day, index) => [day, index] as const),
+);
 const HELP_ROUTES = new Set([
   '/app/settings',
   '/app/room-management',
@@ -321,25 +365,39 @@ const MAX_TREND_POINTS = 60;
 const MAX_RECENT_EVENTS = 25;
 const MAX_ROOM_SCHEDULES = 30;
 const MAX_HELP_STEPS = 30;
+const MAX_DISPLAY_DIRECTIVES = 1;
 
 function isChatTurnResponse(value: unknown): value is ChatTurnResponse {
   if (!isRecord(value) || !hasExactKeys(value, [
     'turnId',
+    'questionFocus',
     'answer',
     'presentations',
+    'displayPlan',
     'evidence',
     'stateToken',
     'contextReset',
   ])) return false;
 
   const presentations = value['presentations'];
+  const displayPlan = value['displayPlan'];
   return typeof value['turnId'] === 'string'
     && UUID_PATTERN.test(value['turnId'])
+    && typeof value['questionFocus'] === 'string'
+    && CHAT_QUESTION_FOCUSES.has(value['questionFocus'] as ChatQuestionFocus)
     && isChatAnswer(value['answer'])
     && Array.isArray(presentations)
     && presentations.length <= MAX_PRESENTATIONS
     && presentations.every(isChatPresentation)
     && hasUniqueStrings(presentations.map((presentation) => presentation.id))
+    && Array.isArray(displayPlan)
+    && displayPlan.length <= MAX_DISPLAY_DIRECTIVES
+    && displayPlan.every(isChatDisplayDirective)
+    && isDisplayPlanCompatible(
+      value['questionFocus'] as ChatQuestionFocus,
+      presentations,
+      displayPlan,
+    )
     && isChatEvidence(value['evidence'])
     && isBoundedString(value['stateToken'], 1, 12 * 1024)
     && value['stateToken'].split('.').length === 5
@@ -398,9 +456,192 @@ function isChatAnswerBlock(value: unknown): value is ChatAnswerBlock {
     return Boolean(text.trim()) && items.length === 0 && entries.length === 0;
   }
   if (kind === 'bullet-list' || kind === 'numbered-list') {
-    return items.length >= 2 && entries.length === 0;
+    return items.length >= 1 && entries.length === 0;
   }
   return items.length === 0 && entries.length >= 1;
+}
+
+function isChatDisplayDirective(value: unknown): value is ChatDisplayDirective {
+  return isRecord(value)
+    && hasExactKeys(value, ['presentationId', 'mode'])
+    && typeof value['presentationId'] === 'string'
+    && PRESENTATION_ID_PATTERN.test(value['presentationId'])
+    && typeof value['mode'] === 'string'
+    && CHAT_DISPLAY_MODES.has(value['mode'] as ChatDisplayMode);
+}
+
+function isDisplayPlanCompatible(
+  focus: ChatQuestionFocus,
+  presentations: readonly ChatPresentation[],
+  displayPlan: readonly ChatDisplayDirective[],
+): boolean {
+  if (displayPlan.length === 0) return true;
+  if (isAlwaysTextOnlyFocus(focus)) return false;
+
+  const directive = displayPlan[0];
+  if (!directive) return false;
+  const presentation = presentations.find((candidate) => candidate.id === directive.presentationId);
+  if (!presentation
+    || presentation.availability !== 'available'
+    || !isPresentationKindCompatibleWithFocus(focus, presentation.kind)) return false;
+
+  switch (presentation.kind) {
+    case 'energy-report':
+      return isEnergyDisplayCompatible(focus, directive.mode, presentation);
+    case 'room-telemetry':
+      return isTelemetryDisplayCompatible(focus, directive.mode, presentation);
+    case 'climate-suggestions': {
+      const availableRows = presentation.rooms.filter((row) => row.status === 'available').length;
+      return availableRows > 0 && directive.mode === 'table';
+    }
+    case 'recent-events':
+      return presentation.events.length > 0 && directive.mode === 'table';
+    case 'system-help':
+      return !presentation.restricted
+        && presentation.steps.length > 0
+        && directive.mode === 'bullet_list';
+  }
+}
+
+function isAlwaysTextOnlyFocus(focus: ChatQuestionFocus): boolean {
+  return focus === 'room_existence'
+    || focus === 'schedule_count'
+    || focus === 'greeting'
+    || focus === 'control_request'
+    || focus === 'unsupported';
+}
+
+function isPresentationKindCompatibleWithFocus(
+  focus: ChatQuestionFocus,
+  kind: ChatPresentation['kind'],
+): boolean {
+  switch (focus) {
+    case 'current_temperature':
+    case 'last_known_temperature':
+    case 'current_humidity':
+    case 'current_condition':
+    case 'device_status':
+    case 'ac_power_status':
+    case 'ai_auto_apply_status':
+    case 'schedule_list':
+      return kind === 'room-telemetry';
+    case 'energy_total':
+    case 'energy_rank_winner':
+    case 'energy_ranking':
+    case 'energy_trend':
+    case 'energy_report':
+      return kind === 'energy-report';
+    case 'climate_suggestion':
+      return kind === 'climate-suggestions';
+    case 'recent_events':
+      return kind === 'recent-events';
+    case 'system_help':
+      return kind === 'system-help';
+    case 'facility_efficiency_analysis':
+      return kind === 'energy-report';
+    default:
+      return false;
+  }
+}
+
+function isEnergyDisplayCompatible(
+  focus: ChatQuestionFocus,
+  mode: ChatDisplayMode,
+  presentation: Extract<ChatPresentation, { readonly kind: 'energy-report' }>,
+): boolean {
+  const recordedRooms = presentation.rooms.filter((room) => room.status === 'recorded').length;
+  const recordedTrendPoints = presentation.trend.filter((point) => point.estimatedKwh !== null).length;
+  if (mode === 'compact_metrics') {
+    return focus === 'energy_total' && presentation.metrics.totalKwh !== null;
+  }
+  if (mode === 'ranking_chart') {
+    return (focus === 'energy_rank_winner'
+      || focus === 'energy_ranking'
+      || focus === 'facility_efficiency_analysis')
+      && recordedRooms >= 2;
+  }
+  if (mode === 'trend_chart') {
+    return (focus === 'energy_total'
+      || focus === 'energy_trend'
+      || focus === 'energy_report')
+      && recordedTrendPoints > 0;
+  }
+  if (mode === 'table') {
+    return (focus === 'energy_total'
+      || focus === 'energy_rank_winner'
+      || focus === 'energy_ranking'
+      || focus === 'energy_trend'
+      || focus === 'energy_report'
+      || focus === 'facility_efficiency_analysis')
+      && recordedRooms > 0;
+  }
+  return mode === 'full_report'
+    && focus === 'energy_report'
+    && recordedRooms > 0;
+}
+
+function isTelemetryDisplayCompatible(
+  focus: ChatQuestionFocus,
+  mode: ChatDisplayMode,
+  presentation: Extract<ChatPresentation, { readonly kind: 'room-telemetry' }>,
+): boolean {
+  const rooms = presentation.rooms;
+  if (mode === 'bullet_list') {
+    return focus === 'schedule_list'
+      && rooms.length === 1
+      && rooms[0]!.schedules.length > 0;
+  }
+  if (mode === 'key_value') {
+    if (rooms.length === 0) return false;
+    switch (focus) {
+      case 'current_temperature':
+        return rooms.some((room) => room.measurementStatus === 'current' && room.temperature !== null);
+      case 'last_known_temperature':
+        return rooms.some((room) => room.temperature !== null && room.lastSeen !== null);
+      case 'current_humidity':
+        return rooms.some((room) => room.measurementStatus === 'current' && room.humidity !== null);
+      case 'current_condition':
+        return rooms.some((room) => room.measurementStatus === 'current' && room.condition !== 'unknown');
+      case 'device_status':
+        return true;
+      case 'ac_power_status':
+        return rooms.some((room) => room.measurementStatus === 'current' && room.acPower !== null);
+      case 'ai_auto_apply_status':
+        return rooms.some((room) => room.aiAutoApply !== null);
+      default:
+        return false;
+    }
+  }
+  if (mode !== 'table' || rooms.length < 2) return false;
+
+  switch (focus) {
+    case 'schedule_list':
+      return rooms.some((room) => room.schedules.length > 0);
+    case 'ai_auto_apply_status':
+      return true;
+    case 'current_temperature':
+      return rooms.filter((room) => (
+        room.measurementStatus === 'current' && room.temperature !== null
+      )).length >= 2;
+    case 'current_humidity':
+      return rooms.filter((room) => (
+        room.measurementStatus === 'current' && room.humidity !== null
+      )).length >= 2;
+    case 'current_condition':
+      return rooms.filter((room) => (
+        room.measurementStatus === 'current' && room.condition !== 'unknown'
+      )).length >= 2;
+    case 'last_known_temperature':
+      return rooms.filter((room) => room.temperature !== null && room.lastSeen !== null).length >= 2;
+    case 'device_status':
+      return true;
+    case 'ac_power_status':
+      return rooms.filter((room) => (
+        room.measurementStatus === 'current' && room.acPower !== null
+      )).length >= 2;
+    default:
+      return false;
+  }
 }
 
 function isChatPresentation(value: unknown): value is ChatPresentation {
@@ -464,15 +705,25 @@ function isEnergyReportPresentation(value: Record<string, unknown>): boolean {
   const expectedCoverage = metrics.activeRooms === 0
     ? 0
     : roundTo((recordedRooms / metrics.activeRooms) * 100, 1);
-  const recordedRanks = rooms
-    .filter((room) => room.status === 'recorded')
-    .map((room) => room.rank)
-    .sort((left, right) => (left ?? 0) - (right ?? 0));
+  const rankedRooms = rooms.filter((room) => room.status === 'recorded');
+  const hasValidCompetitionRanks = rankedRooms.every((room) => (
+    room.rank === 1 + rankedRooms.filter((candidate) => (
+      (candidate.estimatedKwh ?? 0) > (room.estimatedKwh ?? 0)
+    )).length
+  ));
+  const expectedDays = inclusiveDateSpan(range.start, range.end);
+  const expectedDataCoverage = metrics.expectedDays === 0
+    ? 0
+    : roundTo((metrics.recordedDays / metrics.expectedDays) * 100, 1);
   if (metrics.activeRooms !== rooms.length
     || metrics.roomsWithRecords !== recordedRooms
     || metrics.roomsWithRecords > metrics.activeRooms
     || metrics.coveragePercent !== expectedCoverage
-    || recordedRanks.some((rank, index) => rank !== index + 1)) return false;
+    || !hasValidCompetitionRanks
+    || metrics.expectedDays !== expectedDays
+    || metrics.recordedDays > metrics.expectedDays
+    || metrics.dataCoveragePercent !== expectedDataCoverage
+    || trend.reduce((total, point) => total + point.recordedDays, 0) !== metrics.recordedDays) return false;
 
   if (value['availability'] === 'unavailable') {
     return trend.length === 0
@@ -482,17 +733,22 @@ function isEnergyReportPresentation(value: Record<string, unknown>): boolean {
       && metrics.sessionCount === null
       && metrics.activeRooms === 0
       && metrics.roomsWithRecords === 0
-      && metrics.coveragePercent === 0;
+      && metrics.coveragePercent === 0
+      && metrics.recordedDays === 0
+      && metrics.expectedDays === expectedDays
+      && metrics.dataCoveragePercent === 0;
   }
   if (metrics.roomsWithRecords === 0) {
     return metrics.totalKwh === null
       && metrics.runtimeSeconds === null
       && metrics.sessionCount === null
-      && trend.length === 0;
+      && trend.length === 0
+      && metrics.recordedDays === 0
+      && metrics.dataCoveragePercent === 0;
   }
   return metrics.totalKwh !== null
-    && metrics.runtimeSeconds !== null
-    && metrics.sessionCount !== null;
+    && metrics.recordedDays > 0
+    && trend.length > 0;
 }
 
 function isEnergyRange(value: unknown): value is {
@@ -518,6 +774,9 @@ function isEnergyMetrics(value: unknown): value is {
   readonly activeRooms: number;
   readonly roomsWithRecords: number;
   readonly coveragePercent: number;
+  readonly recordedDays: number;
+  readonly expectedDays: number;
+  readonly dataCoveragePercent: number;
 } {
   return isRecord(value)
     && hasExactKeys(value, [
@@ -527,28 +786,50 @@ function isEnergyMetrics(value: unknown): value is {
       'activeRooms',
       'roomsWithRecords',
       'coveragePercent',
+      'recordedDays',
+      'expectedDays',
+      'dataCoveragePercent',
     ])
     && isNullableFiniteNumberInRange(value['totalKwh'], 0, Number.MAX_SAFE_INTEGER)
     && isNullableSafeIntegerInRange(value['runtimeSeconds'], 0, Number.MAX_SAFE_INTEGER)
     && isNullableSafeIntegerInRange(value['sessionCount'], 0, Number.MAX_SAFE_INTEGER)
     && isSafeIntegerInRange(value['activeRooms'], 0, MAX_FACILITY_ROOMS)
     && isSafeIntegerInRange(value['roomsWithRecords'], 0, MAX_FACILITY_ROOMS)
-    && isFiniteNumberInRange(value['coveragePercent'], 0, 100);
+    && isFiniteNumberInRange(value['coveragePercent'], 0, 100)
+    && isSafeIntegerInRange(value['recordedDays'], 0, 3660)
+    && isSafeIntegerInRange(value['expectedDays'], 1, 3660)
+    && isFiniteNumberInRange(value['dataCoveragePercent'], 0, 100);
 }
 
 function isEnergyTrendPoint(value: unknown): value is {
   readonly label: string;
   readonly start: string;
   readonly end: string;
-  readonly estimatedKwh: number;
+  readonly estimatedKwh: number | null;
+  readonly recordedDays: number;
+  readonly expectedDays: number;
 } {
-  return isRecord(value)
-    && hasExactKeys(value, ['label', 'start', 'end', 'estimatedKwh'])
-    && isBoundedString(value['label'], 1, 100)
+  if (!isRecord(value)
+    || !hasExactKeys(value, [
+      'label',
+      'start',
+      'end',
+      'estimatedKwh',
+      'recordedDays',
+      'expectedDays',
+    ])) return false;
+  const expectedDays = isDateKey(value['start']) && isDateKey(value['end'])
+    ? inclusiveDateSpan(value['start'], value['end'])
+    : 0;
+  return isBoundedString(value['label'], 1, 100)
     && isDateKey(value['start'])
     && isDateKey(value['end'])
     && value['start'] <= value['end']
-    && isFiniteNumberInRange(value['estimatedKwh'], 0, Number.MAX_SAFE_INTEGER);
+    && isNullableFiniteNumberInRange(value['estimatedKwh'], 0, Number.MAX_SAFE_INTEGER)
+    && isSafeIntegerInRange(value['recordedDays'], 0, expectedDays)
+    && value['expectedDays'] === expectedDays
+    && ((value['recordedDays'] === 0 && value['estimatedKwh'] === null)
+      || (value['recordedDays'] > 0 && value['estimatedKwh'] !== null));
 }
 
 function isEnergyRoomRow(value: unknown): value is {
@@ -586,9 +867,7 @@ function isEnergyRoomRow(value: unknown): value is {
   if (value['status'] === 'recorded') {
     return value['estimatedKwh'] !== null
       && value['sharePercent'] !== null
-      && value['rank'] !== null
-      && value['runtimeSeconds'] !== null
-      && value['sessionCount'] !== null;
+      && value['rank'] !== null;
   }
   return value['estimatedKwh'] === null
     && value['sharePercent'] === null
@@ -610,7 +889,9 @@ function isRoomTelemetryPresentation(value: Record<string, unknown>): boolean {
 function isRoomTelemetryRow(value: unknown): value is { readonly roomName: string } {
   if (!isRecord(value) || !hasExactKeys(value, [
     'roomName',
+    'deviceAssignmentStatus',
     'onlineState',
+    'measurementStatus',
     'condition',
     'temperature',
     'humidity',
@@ -621,9 +902,13 @@ function isRoomTelemetryRow(value: unknown): value is { readonly roomName: strin
     'lastSeen',
   ])) return false;
 
-  return isBoundedString(value['roomName'], 1, 100)
+  const hasValidFields = isBoundedString(value['roomName'], 1, 100)
+    && typeof value['deviceAssignmentStatus'] === 'string'
+    && DEVICE_ASSIGNMENT_STATUSES.has(value['deviceAssignmentStatus'])
     && typeof value['onlineState'] === 'string'
     && DEVICE_ONLINE_STATES.has(value['onlineState'])
+    && typeof value['measurementStatus'] === 'string'
+    && MEASUREMENT_STATUSES.has(value['measurementStatus'])
     && typeof value['condition'] === 'string'
     && ROOM_CONDITIONS.has(value['condition'])
     && isNullableFiniteNumberInRange(value['temperature'], -50, 100)
@@ -635,6 +920,42 @@ function isRoomTelemetryRow(value: unknown): value is { readonly roomName: strin
     && value['schedules'].length <= MAX_ROOM_SCHEDULES
     && value['schedules'].every(isRoomSchedule)
     && isNullableIsoTimestamp(value['lastSeen']);
+  if (!hasValidFields) return false;
+
+  const schedules = value['schedules'] as Array<{
+    readonly day: string;
+    readonly startTime: string;
+    readonly endTime: string;
+    readonly subject: string;
+  }>;
+  if (!areSchedulesSorted(schedules)) return false;
+  if (value['deviceAssignmentStatus'] !== 'assigned' &&
+    value['measurementStatus'] !== 'unavailable') return false;
+
+  switch (value['measurementStatus']) {
+    case 'current':
+      return value['deviceAssignmentStatus'] === 'assigned'
+        && value['onlineState'] === 'online' && value['lastSeen'] !== null;
+    case 'stale':
+      return value['deviceAssignmentStatus'] === 'assigned'
+        && value['onlineState'] === 'stale'
+        && value['lastSeen'] !== null
+        && value['condition'] === 'unknown';
+    case 'offline':
+      return value['deviceAssignmentStatus'] === 'assigned'
+        && value['onlineState'] === 'offline' && value['condition'] === 'unknown';
+    case 'unavailable':
+      return value['onlineState'] === 'unknown'
+        && value['condition'] === 'unknown'
+        && value['temperature'] === null
+        && value['humidity'] === null
+        && value['occupancy'] === null
+        && value['acPower'] === null
+        && value['aiAutoApply'] === null
+        && value['lastSeen'] === null;
+    default:
+      return false;
+  }
 }
 
 function isRoomSchedule(value: unknown): boolean {
@@ -648,6 +969,32 @@ function isRoomSchedule(value: unknown): boolean {
     && CLOCK_TIME_PATTERN.test(value['endTime'])
     && value['startTime'] < value['endTime']
     && isBoundedString(value['subject'], 1, 100);
+}
+
+function areSchedulesSorted(
+  schedules: readonly {
+    readonly day: string;
+    readonly startTime: string;
+    readonly endTime: string;
+    readonly subject: string;
+  }[],
+): boolean {
+  return schedules.every((schedule, index) => {
+    const previous = schedules[index - 1];
+    if (!previous) return true;
+    const dayDifference = (WEEK_DAY_ORDER.get(previous.day) ?? Number.MAX_SAFE_INTEGER)
+      - (WEEK_DAY_ORDER.get(schedule.day) ?? Number.MAX_SAFE_INTEGER);
+    if (dayDifference !== 0) return dayDifference < 0;
+    const startDifference = previous.startTime.localeCompare(schedule.startTime);
+    if (startDifference !== 0) return startDifference < 0;
+    const endDifference = previous.endTime.localeCompare(schedule.endTime);
+    if (endDifference !== 0) return endDifference < 0;
+    return previous.subject.localeCompare(
+      schedule.subject,
+      'en-US',
+      { sensitivity: 'base' },
+    ) <= 0;
+  });
 }
 
 function isClimateSuggestionsPresentation(value: Record<string, unknown>): boolean {
@@ -785,6 +1132,13 @@ function isDateKey(value: unknown): value is string {
   if (typeof value !== 'string' || !DATE_KEY_PATTERN.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function inclusiveDateSpan(start: string, end: string): number {
+  const startTime = new Date(`${start}T00:00:00.000Z`).getTime();
+  const endTime = new Date(`${end}T00:00:00.000Z`).getTime();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) return 0;
+  return Math.floor((endTime - startTime) / 86_400_000) + 1;
 }
 
 function isIsoTimestamp(value: unknown): value is string {
