@@ -35,6 +35,10 @@ export const routes: Routes = [
         path: 'energy-reports',
         loadComponent: () => import('./pages/energy-reports/energy-reports').then(m => m.EnergyReports)
       },
+      {
+        path: 'ocu-guide',
+        loadComponent: () => import('./pages/ocu-guide/ocu-guide').then(m => m.OcuGuidePage),
+      },
       { path: 'settings', component: SettingsPage },
       {
         path: 'user-management',

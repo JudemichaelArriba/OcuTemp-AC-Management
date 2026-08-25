@@ -2,7 +2,23 @@ import { ChatApiError } from './types/chat.types.js';
 const DEFAULT_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 1_500_000;
 const PROFILE_MAX_RESPONSE_BYTES = 64 * 1024;
+const DEVICE_FIELD_MAX_RESPONSE_BYTES = 256 * 1024;
+const MAP_LAYOUT_MAX_RESPONSE_BYTES = 512 * 1024;
+const USER_AGGREGATE_MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_DECISION_LOGS = 200;
+
+export const FIREBASE_DEVICE_PROJECTION_FIELDS = [
+    'temperature',
+    'humidity',
+    'occupancy',
+    'acState',
+    'control',
+    'mlSuggestion',
+    'status',
+] as const;
+
+export type FirebaseDeviceProjectionField =
+    typeof FIREBASE_DEVICE_PROJECTION_FIELDS[number];
 
 const ALLOWED_QUERY_PARAMETERS = new Set([
     'orderBy',
@@ -39,6 +55,12 @@ export class FirebaseRestClient {
     private roomsSnapshotPromise: Promise<Record<string, unknown>> | undefined;
     private devicesSnapshotPromise: Promise<Record<string, unknown>> | undefined;
     private deviceKeysSnapshotPromise: Promise<Record<string, unknown>> | undefined;
+    private mapLayoutSnapshotPromise: Promise<Record<string, unknown>> | undefined;
+    private userAggregateSnapshotPromise: Promise<Record<string, unknown>> | undefined;
+    private readonly deviceRecordPromises = new Map<
+        string,
+        Promise<Record<string, unknown> | null>
+    >();
     private readonly energyPromises = new Map<string, Promise<Record<string, unknown> | null>>();
     private readonly decisionLogPromises = new Map<number, Promise<Record<string, unknown>>>();
 
@@ -146,6 +168,46 @@ export class FirebaseRestClient {
         return this.deviceKeysSnapshotPromise;
     }
 
+    /**
+     * Returns only allowlisted device children for a named-room query. A single
+     * bounded device record is read and immediately projected, avoiding one
+     * Firebase request per field. Facility-wide queries use the cached devices
+     * snapshot instead, so neither path can fan out per field.
+     */
+    async getDeviceProjection(
+        deviceId: string,
+        fields: readonly FirebaseDeviceProjectionField[],
+    ): Promise<Record<string, unknown> | null> {
+        assertFirebaseKey(deviceId, 'device ID');
+        const normalizedFields = uniqueDeviceProjectionFields(fields);
+        if (normalizedFields.length === 0) return {};
+
+        const device = await this.getDeviceRecord(deviceId);
+        if (device === null) return null;
+        return Object.fromEntries(
+            normalizedFields.map((field) => [field, device[field]] as const),
+        );
+    }
+
+    /** Bounded dynamic floor-layout records. Room cell assignments remain in rooms. */
+    getMapLayout(): Promise<Record<string, unknown>> {
+        this.mapLayoutSnapshotPromise ??= this.readRecordSnapshot('mapLayout', {}, {
+            maxResponseBytes: MAP_LAYOUT_MAX_RESPONSE_BYTES,
+        });
+        return this.mapLayoutSnapshotPromise;
+    }
+
+    /**
+     * Server-only aggregate source. The executor must authorize an admin and
+     * reduce this snapshot to counts before constructing any public/model data.
+     */
+    getUsersForAggregate(): Promise<Record<string, unknown>> {
+        this.userAggregateSnapshotPromise ??= this.readRecordSnapshot('users', {}, {
+            maxResponseBytes: USER_AGGREGATE_MAX_RESPONSE_BYTES,
+        });
+        return this.userAggregateSnapshotPromise;
+    }
+
     getEnergyForDevice(
         deviceId: string,
         startDate?: string,
@@ -197,6 +259,23 @@ export class FirebaseRestClient {
         });
     }
 
+    private getDeviceRecord(deviceId: string): Promise<Record<string, unknown> | null> {
+        const cached = this.deviceRecordPromises.get(deviceId);
+        if (cached) return cached;
+
+        const promise = this.read<unknown>(`devices/${deviceId}`, {}, {
+            maxResponseBytes: DEVICE_FIELD_MAX_RESPONSE_BYTES,
+        }).then((value) => {
+            if (value === null) return null;
+            if (!isRecord(value)) {
+                throw unavailableError('Firebase returned an invalid device snapshot.');
+            }
+            return value;
+        });
+        this.deviceRecordPromises.set(deviceId, promise);
+        return promise;
+    }
+
     private async loadEnergyForDevice(
         deviceId: string,
         startDate?: string,
@@ -242,8 +321,9 @@ export class FirebaseRestClient {
     private async readRecordSnapshot(
         path: string,
         query: FirebaseRestQuery = {},
+        options: FirebaseReadOptions = {},
     ): Promise<Record<string, unknown>> {
-        const value = await this.read<unknown>(path, query);
+        const value = await this.read<unknown>(path, query, options);
         if (value === null) {
             return {};
         }
@@ -252,6 +332,31 @@ export class FirebaseRestClient {
         }
         return value;
     }
+}
+
+function uniqueDeviceProjectionFields(
+    fields: readonly FirebaseDeviceProjectionField[],
+): FirebaseDeviceProjectionField[] {
+    if (!Array.isArray(fields) || fields.length > FIREBASE_DEVICE_PROJECTION_FIELDS.length) {
+        throw new ChatApiError(
+            'invalid_request',
+            'The requested device projection is invalid.',
+            400,
+        );
+    }
+    const result: FirebaseDeviceProjectionField[] = [];
+    for (const field of fields) {
+        if (!FIREBASE_DEVICE_PROJECTION_FIELDS.includes(field) || result.includes(field)) {
+            if (result.includes(field)) continue;
+            throw new ChatApiError(
+                'invalid_request',
+                'The requested device projection is invalid.',
+                400,
+            );
+        }
+        result.push(field);
+    }
+    return result;
 }
 
 function filterEnergyRange(

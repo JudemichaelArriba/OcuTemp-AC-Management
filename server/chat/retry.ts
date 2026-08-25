@@ -7,16 +7,25 @@ export interface GenerateWithFallbackResult<T> {
     readonly usedFallback: boolean;
 }
 
+export interface GenerateWithFallbackOptions {
+    readonly fallbackTimeoutMs?: number;
+    readonly deadlineAtMs?: number;
+    readonly reserveMs?: number;
+    readonly allowFallback?: boolean;
+}
+
 export async function generateWithFallback<T>(
     primary: ChatProvider,
     fallback: ChatProvider,
     request: StructuredGenerationRequest,
     validate?: (result: T) => T,
+    options: GenerateWithFallbackOptions = {},
 ): Promise<GenerateWithFallbackResult<T>> {
     try {
+        const primaryRequest = requestForAttempt(primary.id, request, request.timeoutMs, options);
         const result = validateProviderResult(
             primary.id,
-            await primary.generateStructured<T>(request),
+            await primary.generateStructured<T>(primaryRequest),
             validate,
         );
         return {
@@ -28,10 +37,20 @@ export async function generateWithFallback<T>(
         if (!(primaryError instanceof ProviderRecoverableError) &&
             !(primaryError instanceof ProviderResponseError)) throw primaryError;
         if (request.abortSignal?.aborted) throw primaryError;
+        if (options.allowFallback === false) {
+            throw new BothProvidersFailedError(primaryError,
+                new ProviderRecoverableError(fallback.id, 'timeout'));
+        }
         try {
+            const fallbackRequest = requestForAttempt(
+                fallback.id,
+                request,
+                options.fallbackTimeoutMs ?? request.timeoutMs,
+                options,
+            );
             const result = validateProviderResult(
                 fallback.id,
-                await fallback.generateStructured<T>(request),
+                await fallback.generateStructured<T>(fallbackRequest),
                 validate,
             );
             return {
@@ -43,6 +62,23 @@ export async function generateWithFallback<T>(
             throw new BothProvidersFailedError(primaryError, fallbackError);
         }
     }
+}
+
+function requestForAttempt(
+    providerId: ChatProviderId,
+    request: StructuredGenerationRequest,
+    desiredTimeoutMs: number,
+    options: GenerateWithFallbackOptions,
+): StructuredGenerationRequest {
+    const reserveMs = Math.max(0, options.reserveMs ?? 0);
+    const remainingMs = options.deadlineAtMs === undefined
+        ? desiredTimeoutMs
+        : options.deadlineAtMs - Date.now() - reserveMs;
+    const timeoutMs = Math.floor(Math.min(desiredTimeoutMs, remainingMs));
+    if (timeoutMs < 250) {
+        throw new ProviderRecoverableError(providerId, 'timeout');
+    }
+    return { ...request, timeoutMs };
 }
 
 function validateProviderResult<T>(

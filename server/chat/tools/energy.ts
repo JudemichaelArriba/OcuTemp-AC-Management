@@ -157,6 +157,8 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
         availability: 'available',
         id: options.id,
         title: `Estimated energy report — ${resolved.range.label}`,
+        partId: options.plan.partId,
+        toolName: options.plan.name,
         estimated: true,
         range: resolved.range,
         metrics: {
@@ -180,7 +182,13 @@ export function buildEnergyReport(options: BuildEnergyReportOptions): BuiltEnerg
         rooms: rows,
     };
 
-    const facts = buildEnergyFacts(options.factPrefix, presentation, aggregated, expectedDays);
+    const facts = buildEnergyFacts(
+        options.factPrefix,
+        options.plan.partId,
+        presentation,
+        aggregated,
+        expectedDays,
+    );
     const unavailableRooms = aggregated.filter((room) => room.status === 'device_unavailable').length;
     const failedReads = aggregated.filter((room) => room.input.readFailed === true).length;
     if (failedReads > 0) {
@@ -424,6 +432,7 @@ function compareEnergyRows(left: EnergyRoomRow, right: EnergyRoomRow): number {
 
 function buildEnergyFacts(
     prefix: string,
+    partId: PlannerToolPlan['partId'],
     presentation: EnergyReportPresentation,
     aggregated: readonly AggregatedRoom[],
     expectedDays: number,
@@ -476,6 +485,7 @@ function buildEnergyFacts(
     const facts: GroundingFact[] = [
         {
             id: `${prefix}.summary`,
+            partId,
             statement: summary.trim(),
         },
     ];
@@ -486,6 +496,7 @@ function buildEnergyFacts(
         const winner = firstPlace[0]!;
         facts.push({
             id: `${prefix}.rank.first`,
+            partId,
             statement:
                 `${winner.roomName} is the sole rank-one room for ${presentation.range.label} ` +
                 `with an estimated ${winner.estimatedKwh} kWh (${winner.sharePercent}% of the recorded total), ` +
@@ -495,6 +506,7 @@ function buildEnergyFacts(
     } else if (firstPlace.length > 1) {
         facts.push({
             id: `${prefix}.rank.first`,
+            partId,
             statement:
                 `${firstPlace.map((room) => room.roomName).join(', ')} are tied for rank one for ` +
                 `${presentation.range.label} at an estimated ${firstPlace[0]!.estimatedKwh} kWh each. ` +
@@ -532,12 +544,13 @@ function buildEnergyFacts(
                 statement = `${room.roomName} has no energy records in the selected range.`;
                 break;
         }
-        facts.push({ id: `${prefix}.room.${index + 1}`, statement });
+        facts.push({ id: `${prefix}.room.${index + 1}`, partId, statement });
     });
 
     presentation.trend.forEach((point, index) => {
         facts.push({
             id: `${prefix}.trend.${index + 1}`,
+            partId,
             statement: point.estimatedKwh === null
                 ? `${point.label} (${point.start} through ${point.end}) has no recorded energy data; ` +
                     `the interval is a gap, not measured zero usage.`
@@ -772,8 +785,28 @@ function formatMonth(date: CalendarDate): string {
 
 function normalizedTimestamp(value: unknown): string | null {
     if (typeof value !== 'string' || value.length > 64) return null;
-    const timestamp = new Date(value);
+    const trimmed = value.trim();
+    const absoluteIso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u;
+    const legacyManila = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/u;
+    if (!absoluteIso.test(trimmed) && !legacyManila.test(trimmed) ||
+        !hasValidIsoCalendarParts(trimmed)) return null;
+    const timestamp = new Date(legacyManila.test(trimmed) ? `${trimmed}+08:00` : trimmed);
     return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null;
+}
+
+function hasValidIsoCalendarParts(value: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/u.exec(value);
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = Number(match[4]);
+    const minute = Number(match[5]);
+    const second = Number(match[6]);
+    if (hour > 23 || minute > 59 || second > 59 || month < 1 || month > 12 || day < 1) {
+        return false;
+    }
+    return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 function latestTimestamp(values: readonly (string | null)[]): string | null {

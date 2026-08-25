@@ -1,11 +1,13 @@
 export type ChatUserRole = 'staff' | 'admin';
 
 export type ChatToolName =
+    | 'get_facility_summary'
     | 'get_room_telemetry'
     | 'get_energy_report'
     | 'get_climate_prediction_logs'
     | 'get_recent_room_events'
-    | 'get_system_help';
+    | 'get_system_help'
+    | 'get_admin_user_aggregates';
 
 export type ChatIntent =
     | 'data'
@@ -40,6 +42,151 @@ export type ChatQuestionFocus =
 
 export type ChatOutputPreference = 'auto' | 'text' | 'table' | 'graph';
 
+export type ChatPartId = 'part-1' | 'part-2' | 'part-3';
+
+export type SystemDomain =
+    | 'rooms'
+    | 'devices'
+    | 'measurements'
+    | 'occupancy'
+    | 'ac_control'
+    | 'overrides'
+    | 'ai_auto_apply'
+    | 'schedules'
+    | 'energy'
+    | 'climate_suggestions'
+    | 'decision_events'
+    | 'floor_plan'
+    | 'own_account'
+    | 'admin_user_aggregates'
+    | 'app_help'
+    | 'assistant_capabilities'
+    | 'conversation'
+    | 'unsupported';
+
+export type SystemOperation =
+    | 'greet'
+    | 'count'
+    | 'list'
+    | 'status'
+    | 'detail'
+    | 'compare'
+    | 'summarize'
+    | 'report'
+    | 'explain'
+    | 'how_to'
+    | 'clarify'
+    | 'deny';
+
+export type SystemField =
+    | 'room_name'
+    | 'room_status'
+    | 'room_count'
+    | 'device_assignment'
+    | 'device_status'
+    | 'device_count'
+    | 'last_seen'
+    | 'temperature'
+    | 'last_known_temperature'
+    | 'humidity'
+    | 'last_known_humidity'
+    | 'condition'
+    | 'occupancy'
+    | 'last_known_occupancy'
+    | 'ac_power'
+    | 'last_known_ac_power'
+    | 'override_active'
+    | 'override_target_temperature'
+    | 'override_until'
+    | 'ai_auto_apply'
+    | 'schedule_count'
+    | 'schedules'
+    | 'estimated_kwh'
+    | 'runtime_seconds'
+    | 'session_count'
+    | 'energy_rank'
+    | 'energy_trend'
+    | 'climate_suggestion'
+    | 'decision_event'
+    | 'floor_plan_assignment'
+    | 'floor_plan_layout'
+    | 'account_name'
+    | 'account_email'
+    | 'account_role'
+    | 'account_approval'
+    | 'user_total'
+    | 'approved_staff_count'
+    | 'pending_staff_count'
+    | 'admin_count'
+    | 'help_topic'
+    | 'capabilities';
+
+export type SystemFilterOperator = 'eq' | 'in' | 'gt' | 'gte' | 'lt' | 'lte';
+
+/** Strict-schema filter: exactly one typed value slot is selected by valueType. */
+export interface SystemFilter {
+    readonly field: SystemField;
+    readonly operator: SystemFilterOperator;
+    readonly valueType: 'string' | 'number' | 'boolean' | 'strings';
+    readonly stringValue: string;
+    readonly numberValue: number;
+    readonly booleanValue: boolean;
+    readonly stringValues: string[];
+}
+
+export interface SystemSort {
+    readonly field: SystemField;
+    readonly direction: 'none' | 'asc' | 'desc';
+}
+
+export type SystemScopeKind =
+    | 'facility'
+    | 'named_rooms'
+    | 'own_account'
+    | 'previous_request'
+    | 'previous_result'
+    | 'prior_part';
+
+export interface SystemScope {
+    readonly kind: SystemScopeKind;
+    readonly roomNames: string[];
+    readonly inventory: 'active' | 'inactive' | 'all';
+    readonly referencePartId: '' | ChatPartId;
+}
+
+export interface SystemTimeRange {
+    readonly preset: EnergyRangePreset;
+    readonly startDate: string;
+    readonly endDate: string;
+    readonly bucket: EnergyBucket;
+}
+
+export interface FollowUpReference {
+    readonly kind: 'none' | 'previous_request' | 'previous_result' | 'prior_part';
+    readonly partId: '' | ChatPartId;
+    readonly ordinal: 0 | 1 | 2 | 3;
+}
+
+export interface SystemQueryPart {
+    readonly partId: ChatPartId;
+    readonly domain: SystemDomain;
+    readonly operation: SystemOperation;
+    readonly fields: SystemField[];
+    readonly filters: SystemFilter[];
+    readonly sort: SystemSort;
+    readonly scope: SystemScope;
+    readonly timeRange: SystemTimeRange;
+    readonly outputPreference: ChatOutputPreference;
+    readonly followUpReference: FollowUpReference;
+    readonly limit: number;
+    readonly needsClarification: boolean;
+    readonly clarification: string;
+}
+
+export interface SystemQueryPlan {
+    readonly parts: SystemQueryPart[];
+}
+
 export type ChatDisplayMode =
     | 'compact_metrics'
     | 'key_value'
@@ -50,6 +197,7 @@ export type ChatDisplayMode =
     | 'full_report';
 
 export interface ChatDisplayDirective {
+    readonly partId: ChatPartId;
     readonly presentationId: string;
     readonly mode: ChatDisplayMode;
 }
@@ -139,8 +287,73 @@ export interface GeneralAnswerDraft {
 export interface ChatEvidenceMetadata {
     readonly asOf: string;
     readonly timeZone: 'Asia/Manila';
+    readonly source: 'facility' | 'application' | 'none';
     readonly partial: boolean;
     readonly notices: string[];
+}
+
+export type ChatValueState =
+    | 'current'
+    | 'historical'
+    | 'configured'
+    | 'expired'
+    | 'unknown'
+    | 'unavailable'
+    | 'not_applicable';
+
+export type ChatValueUnit =
+    | 'none'
+    | 'celsius'
+    | 'percent'
+    | 'kwh'
+    | 'seconds'
+    | 'count'
+    | 'datetime';
+
+export interface ProjectedValue {
+    readonly field: SystemField;
+    readonly label: string;
+    readonly value: string | number | boolean | null;
+    readonly state: ChatValueState;
+    readonly unit: ChatValueUnit;
+    readonly asOf: string | null;
+}
+
+export interface ChatPresentationBase {
+    readonly availability: 'available' | 'unavailable';
+    readonly id: string;
+    readonly title: string;
+    readonly partId: ChatPartId;
+    readonly toolName: ChatToolName;
+}
+
+export interface MetricSummaryPresentation extends ChatPresentationBase {
+    readonly kind: 'metric-summary';
+    readonly metrics: ProjectedValue[];
+}
+
+export interface RoomDataRow {
+    readonly roomName: string;
+    readonly values: ProjectedValue[];
+}
+
+export interface RoomDataPresentation extends ChatPresentationBase {
+    readonly kind: 'room-data';
+    readonly rooms: RoomDataRow[];
+}
+
+export interface ScheduleDataRow {
+    readonly roomName: string;
+    readonly day: string;
+    readonly startTime: string;
+    readonly endTime: string;
+    readonly subject: string;
+    readonly state: Extract<ChatValueState, 'configured' | 'unknown' | 'unavailable'>;
+}
+
+export interface ScheduleDataPresentation extends ChatPresentationBase {
+    readonly kind: 'schedule-data';
+    readonly schedules: ScheduleDataRow[];
 }
 
 export interface EnergyRange {
@@ -176,11 +389,8 @@ export interface EnergyTrendPoint {
     readonly expectedDays: number;
 }
 
-export interface EnergyReportPresentation {
+export interface EnergyReportPresentation extends ChatPresentationBase {
     readonly kind: 'energy-report';
-    readonly availability: 'available' | 'unavailable';
-    readonly id: string;
-    readonly title: string;
     readonly estimated: true;
     readonly range: EnergyRange;
     readonly metrics: {
@@ -223,11 +433,9 @@ export interface RoomTelemetryRow {
     readonly lastSeen: string | null;
 }
 
-export interface RoomTelemetryPresentation {
+/** @deprecated Internal compatibility shape; new public room results use room-data. */
+export interface RoomTelemetryPresentation extends ChatPresentationBase {
     readonly kind: 'room-telemetry';
-    readonly availability: 'available' | 'unavailable';
-    readonly id: string;
-    readonly title: string;
     readonly rooms: RoomTelemetryRow[];
 }
 
@@ -243,11 +451,8 @@ export interface ClimateSuggestionRow {
     readonly updatedAt: string | null;
 }
 
-export interface ClimateSuggestionsPresentation {
+export interface ClimateSuggestionsPresentation extends ChatPresentationBase {
     readonly kind: 'climate-suggestions';
-    readonly availability: 'available' | 'unavailable';
-    readonly id: string;
-    readonly title: string;
     readonly rooms: ClimateSuggestionRow[];
 }
 
@@ -260,19 +465,13 @@ export interface RecentEventRow {
     readonly updatedAt: string;
 }
 
-export interface RecentEventsPresentation {
+export interface RecentEventsPresentation extends ChatPresentationBase {
     readonly kind: 'recent-events';
-    readonly availability: 'available' | 'unavailable';
-    readonly id: string;
-    readonly title: string;
     readonly events: RecentEventRow[];
 }
 
-export interface SystemHelpPresentation {
+export interface SystemHelpPresentation extends ChatPresentationBase {
     readonly kind: 'system-help';
-    readonly availability: 'available' | 'unavailable';
-    readonly id: string;
-    readonly title: string;
     readonly topic: string;
     readonly steps: string[];
     readonly route: string | null;
@@ -280,19 +479,45 @@ export interface SystemHelpPresentation {
 }
 
 export type ChatPresentation =
+    | MetricSummaryPresentation
+    | RoomDataPresentation
+    | ScheduleDataPresentation
     | EnergyReportPresentation
     | RoomTelemetryPresentation
     | ClimateSuggestionsPresentation
     | RecentEventsPresentation
     | SystemHelpPresentation;
 
+export interface ChatResponseContext {
+    readonly partId: ChatPartId;
+    readonly domain: SystemDomain;
+    readonly operation: SystemOperation;
+    readonly fields: SystemField[];
+    readonly scope: SystemScopeKind;
+    readonly answerability: ChatAnswerabilityOutcome;
+}
+
+export interface ChatAnswerPart {
+    readonly partId: ChatPartId;
+    readonly text: string;
+    readonly blocks: ChatAnswerBlock[];
+    readonly highlights: ChatAnswerHighlight[];
+    readonly caveats: string[];
+}
+
+export interface ChatFollowUp {
+    readonly label: string;
+    readonly prompt: string;
+}
+
 export interface ChatTurnResponse {
     readonly turnId: string;
-    readonly questionFocus: ChatQuestionFocus;
-    readonly answer: ChatAnswer;
+    readonly responseContexts: ChatResponseContext[];
+    readonly answerParts: ChatAnswerPart[];
     readonly presentations: ChatPresentation[];
     readonly displayPlan: ChatDisplayDirective[];
     readonly evidence: ChatEvidenceMetadata;
+    readonly followUps: ChatFollowUp[];
     readonly stateToken: string;
     readonly contextReset: boolean;
 }
@@ -308,7 +533,14 @@ export interface ChatErrorResponse {
 
 export interface PlannerToolPlan {
     readonly name: ChatToolName;
+    readonly partId: ChatPartId;
+    readonly domain: SystemDomain;
+    readonly operation: SystemOperation;
     readonly roomNames: string[];
+    readonly inventory: 'active' | 'inactive' | 'all';
+    readonly fields: SystemField[];
+    readonly filters: SystemFilter[];
+    readonly sort: SystemSort;
     readonly rangePreset: EnergyRangePreset;
     readonly startDate: string;
     readonly endDate: string;
@@ -318,28 +550,17 @@ export interface PlannerToolPlan {
     readonly includeLastKnown: boolean;
 }
 
-export interface PlannerResult {
-    readonly intent: ChatIntent;
-    readonly questionFocus: ChatQuestionFocus;
-    readonly outputPreference: ChatOutputPreference;
-    readonly requestedRoomNames: string[];
-    readonly allRooms: boolean;
-    readonly metric: ChatMetric;
-    readonly comparisonTarget: ChatComparisonTarget;
-    readonly isFollowUp: boolean;
-    readonly needsClarification: boolean;
-    readonly clarification: string;
-    readonly resolvedSummary: string;
-    readonly tools: PlannerToolPlan[];
-}
+export type PlannerResult = SystemQueryPlan;
 
 export interface GroundingFact {
     readonly id: string;
+    readonly partId: ChatPartId;
     readonly statement: string;
 }
 
 export interface ToolExecutionResult {
     readonly name: ChatToolName;
+    readonly partId: ChatPartId;
     readonly presentation: ChatPresentation;
     readonly facts: GroundingFact[];
     readonly notices: string[];
@@ -365,7 +586,8 @@ export type ToolOutcome =
     | 'no_online_reading'
     | 'no_energy_records'
     | 'source_unavailable'
-    | 'insufficient_evidence';
+    | 'insufficient_evidence'
+    | 'permission_denied';
 
 export type ChatAnswerabilityOutcome =
     | 'answerable'
@@ -377,6 +599,7 @@ export type ChatAnswerabilityOutcome =
     | 'no_energy_records'
     | 'source_unavailable'
     | 'insufficient_evidence'
+    | 'permission_denied'
     | 'clarification_required'
     | 'not_applicable';
 
@@ -402,7 +625,10 @@ export interface EvidenceBackedRecommendation {
 }
 
 export interface AnswerPacket {
-    readonly questionFocus: ChatQuestionFocus;
+    readonly partId: ChatPartId;
+    readonly domain: SystemDomain;
+    readonly operation: SystemOperation;
+    readonly fields: SystemField[];
     readonly scope: RoomScopeResolution;
     readonly range: EnergyRange | null;
     readonly answerability: ChatAnswerabilityOutcome;
@@ -414,10 +640,8 @@ export interface AnswerPacket {
 }
 
 export interface GroundedAnswerDraft {
-    readonly headline: string;
-    readonly headlineEvidenceRefs: string[];
-    readonly summary: string;
-    readonly summaryEvidenceRefs: string[];
+    readonly text: string;
+    readonly evidenceRefs: string[];
     readonly highlights: Array<{
         readonly text: string;
         readonly evidenceRefs: string[];
@@ -434,31 +658,47 @@ export interface AuthenticatedChatUser {
     readonly role: ChatUserRole;
     readonly approved: true;
     readonly emailVerified: boolean;
+    readonly fullName: string | null;
+    readonly email: string | null;
     readonly idToken: string;
 }
 
+export interface ChatPrincipal {
+    readonly uid: string;
+    readonly role: ChatUserRole;
+    readonly approved: true;
+    readonly emailVerified: boolean;
+    readonly fullName: string | null;
+    readonly email: string | null;
+}
+
 export interface ChatStateTurn {
-    readonly user: string;
-    readonly assistant: string;
-    readonly context: ChatStateContext;
+    readonly contexts: ChatStateContext[];
+    readonly referents: ChatStateReferent[];
 }
 
 export interface ChatStateContext {
-    readonly questionFocus: ChatQuestionFocus;
-    readonly metric: ChatMetric;
-    readonly roomNames: string[];
-    readonly allRooms: boolean;
-    readonly rangePreset: EnergyRangePreset;
-    readonly startDate: string;
-    readonly endDate: string;
-    readonly bucket: EnergyBucket;
+    readonly partId: ChatPartId;
+    readonly domain: SystemDomain;
+    readonly operation: SystemOperation;
+    readonly fields: SystemField[];
+    readonly requestedScope: SystemScope;
+    readonly timeRange: SystemTimeRange;
     readonly toolNames: ChatToolName[];
     readonly answerability: ChatAnswerabilityOutcome;
     readonly hadVisual: boolean;
 }
 
+export interface ChatStateReferent {
+    readonly sourcePartId: ChatPartId;
+    readonly kind: 'room_result';
+    readonly roomNames: string[];
+    readonly complete: boolean;
+    readonly ordering: 'query' | 'ranking';
+}
+
 export interface ChatStatePayload {
-    readonly version: 2;
+    readonly version: 3;
     readonly uid: string;
     readonly conversationId: string;
     readonly issuedAt: number;

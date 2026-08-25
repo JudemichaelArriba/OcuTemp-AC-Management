@@ -1,2085 +1,1690 @@
+import type { FirebaseRestClient } from './firebase-rest.js';
+import {
+    CapabilityValidationError,
+    capabilitiesForRole,
+    compileSystemQueryPlan,
+    plannerCapabilitySlice,
+    validateSystemQueryPlan,
+} from './capabilities.js';
+import { ANSWERER_SYSTEM_PROMPT } from './prompts/answerer.prompt.js';
+import { PLANNER_SYSTEM_PROMPT } from './prompts/planner.prompt.js';
 import { GeminiProvider } from './providers/gemini.provider.js';
 import { GroqProvider } from './providers/groq.provider.js';
-import { generateWithFallback } from './retry.js';
-import { PLANNER_SYSTEM_PROMPT } from './prompts/planner.prompt.js';
-import { ANSWERER_SYSTEM_PROMPT } from './prompts/answerer.prompt.js';
-import {
-    ANSWER_OUTPUT_SCHEMA,
-    CHAT_COMPARISON_TARGETS,
-    CHAT_METRICS,
-    CHAT_OUTPUT_PREFERENCES,
-    CHAT_QUESTION_FOCUSES,
-    CHAT_TOOL_NAMES,
-    PLANNER_OUTPUT_SCHEMA,
-    RECOMMENDATION_CATEGORIES,
-} from './tools/schema.js';
+import { ProviderResponseError } from './providers/provider.interface.js';
+import { BothProvidersFailedError, generateWithFallback } from './retry.js';
+import { ANSWER_OUTPUT_SCHEMA, PLANNER_OUTPUT_SCHEMA } from './tools/schema.js';
 import { executeToolPlans } from './tools/executor.js';
-import type { FirebaseRestClient } from './firebase-rest.js';
 import type {
     AnswerPacket,
-    AuthenticatedChatUser,
-    ChatAnswer,
     ChatAnswerBlock,
+    ChatAnswerPart,
     ChatAnswerabilityOutcome,
-    ChatComparisonTarget,
     ChatDisplayDirective,
     ChatDisplayMode,
-    ChatFreshnessOutcome,
-    ChatIntent,
-    ChatMetric,
-    ChatOutputPreference,
+    ChatFollowUp,
+    ChatPartId,
     ChatPresentation,
+    ChatPrincipal,
     ChatQuestionFocus,
+    ChatResponseContext,
     ChatStateContext,
     ChatStatePayload,
+    ChatStateReferent,
+    ChatStateTurn,
     ChatToolName,
     ClimateSuggestionsPresentation,
-    EnergyBucket,
     EnergyRange,
-    EnergyRangePreset,
     EnergyReportPresentation,
     EvidenceBackedRecommendation,
     GroundedAnswerDraft,
     GroundingFact,
-    PlannerResult,
+    MetricSummaryPresentation,
     PlannerToolPlan,
+    ProjectedValue,
     RecentEventsPresentation,
+    RoomDataPresentation,
     RoomScopeResolution,
-    RoomTelemetryPresentation,
-    SystemHelpPresentation,
+    ScheduleDataPresentation,
+    SystemDomain,
+    SystemField,
+    SystemFilter,
+    SystemOperation,
+    SystemQueryPart,
+    SystemQueryPlan,
+    SystemTimeRange,
     ToolExecutionResult,
+    ToolOutcome,
 } from './types/chat.types.js';
-import { ChatApiError } from './types/chat.types.js';
 
-const MANILA_TIME_ZONE = 'Asia/Manila';
-const MAX_TOOLS = 4;
-const MAX_PACKET_FACTS = 80;
-const MAX_PACKET_NOTICES = 8;
-const MAX_PACKET_BYTES = 48 * 1024;
-const MAX_STATE_SUMMARY = 500;
-const CHAT_INTENTS: readonly ChatIntent[] = ['data', 'help', 'greeting', 'control', 'unsupported'];
-const ENERGY_RANGE_PRESETS: readonly EnergyRangePreset[] = [
-    'today', 'this_week', 'last_week', 'last_7_days', 'this_month',
-    'last_month', 'this_year', 'last_12_months', 'custom',
-];
-const ENERGY_BUCKETS: readonly EnergyBucket[] = ['auto', 'day', 'week', 'month', 'year'];
-const SYSTEM_HELP_TOPICS = new Set([
-    'change-password', 'add-room', 'edit-room', 'assign-floor-plan-cell',
-    'floor-plan-legend', 'manage-schedules', 'approve-staff',
-    'view-energy-reports', 'manual-override', 'forced-off', 'ocu-guide',
-]);
-const TELEMETRY_FOCUSES = new Set<ChatQuestionFocus>([
-    'room_existence', 'current_temperature', 'last_known_temperature',
-    'current_humidity', 'current_condition', 'device_status', 'ac_power_status',
-    'ai_auto_apply_status', 'schedule_count', 'schedule_list',
-]);
-const CURRENT_MEASUREMENT_FOCUSES = new Set<ChatQuestionFocus>([
-    'current_temperature', 'current_humidity', 'current_condition', 'ac_power_status',
-]);
-const ENERGY_FOCUSES = new Set<ChatQuestionFocus>([
-    'energy_total', 'energy_rank_winner', 'energy_ranking', 'energy_trend',
-    'energy_report', 'facility_efficiency_analysis',
-]);
-const TERMINAL_OUTCOMES = new Set<ChatAnswerabilityOutcome>([
-    'room_not_found', 'room_inactive', 'room_ambiguous', 'no_online_reading',
-    'no_energy_records', 'source_unavailable', 'insufficient_evidence',
-    'clarification_required',
-]);
-const EXACT_ROW_CLAIM_FOCUSES = new Set<ChatQuestionFocus>([
-    'current_temperature', 'last_known_temperature', 'current_humidity',
-    'current_condition', 'device_status', 'ac_power_status', 'ai_auto_apply_status',
-    'schedule_count', 'schedule_list', 'energy_total', 'energy_rank_winner',
-    'energy_ranking', 'energy_trend', 'energy_report',
-    'climate_suggestion', 'recent_events', 'facility_efficiency_analysis',
-]);
-const DETERMINISTIC_DIRECT_FOCUSES = new Set<ChatQuestionFocus>([
-    'room_existence', 'current_temperature', 'last_known_temperature',
-    'current_humidity', 'current_condition', 'device_status', 'ac_power_status',
-    'ai_auto_apply_status', 'schedule_count', 'schedule_list', 'system_help',
-]);
-const NO_VISUAL_DETERMINISTIC_FOCUSES = new Set<ChatQuestionFocus>([
-    'energy_ranking', 'energy_trend', 'energy_report', 'climate_suggestion',
-    'recent_events', 'facility_efficiency_analysis',
-]);
-const GROUNDING_GLUE_TOKENS = new Set([
-    'a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'but', 'by', 'can', 'cannot',
-    'data', 'does', 'each', 'for', 'from', 'had', 'has', 'have', 'in', 'is', 'it',
-    'its', 'of', 'on', 'only', 'or', 'report', 'result', 'results', 'summary', 'than',
-    'that', 'the', 'their', 'these', 'this', 'those', 'through', 'to', 'was', 'were',
-    'which', 'while', 'with', 'without', 'details', 'energy', 'estimated', 'ranking',
-    'reading', 'readings', 'configuration', 'configured', 'schedule', 'schedules',
-    'temperature', 'humidity', 'status',
-]);
+const PLANNER_PRIMARY_MS = 5_000;
+const PLANNER_FALLBACK_MS = 3_000;
+const PLANNING_RESERVE_MS = 6_000;
+const WRITER_MIN_REMAINING_MS = 4_500;
+const WRITER_PRIMARY_MS = 3_000;
+const WRITER_FALLBACK_MS = 2_000;
+const FINALIZATION_RESERVE_MS = 1_000;
+const MAX_PROVIDER_FACTS = 80;
+const MAX_PROVIDER_PACKET_BYTES = 48 * 1024;
+const MAX_PUBLIC_NOTICES = 12;
 const textEncoder = new TextEncoder();
-const geminiProvider = new GeminiProvider();
-const groqProvider = new GroqProvider();
 
-export interface RunChatTurnRequest {
+export interface RunChatTurnInput {
     readonly requestId: string;
     readonly message: string;
-    readonly user: AuthenticatedChatUser;
+    readonly user: ChatPrincipal;
     readonly state: ChatStatePayload | null;
     readonly firebase: FirebaseRestClient;
-    readonly now?: Date;
     readonly abortSignal?: AbortSignal;
+    readonly deadlineAtMs?: number;
 }
 
 export interface ChatTurnCoreResult {
-    readonly questionFocus: ChatQuestionFocus;
-    readonly answer: ChatAnswer;
+    readonly responseContexts: ChatResponseContext[];
+    readonly answerParts: ChatAnswerPart[];
     readonly presentations: ChatPresentation[];
     readonly displayPlan: ChatDisplayDirective[];
+    readonly followUps: ChatFollowUp[];
     readonly partial: boolean;
     readonly notices: string[];
-    readonly stateSummary: string;
-    readonly stateContext: ChatStateContext;
+    readonly evidenceSource: 'facility' | 'application' | 'none';
+    readonly stateTurn: ChatStateTurn;
 }
 
-export async function runChatTurn(request: RunChatTurnRequest): Promise<ChatTurnCoreResult> {
-    const now = request.now ?? new Date();
-    const planned = await generateWithFallback<PlannerResult>(geminiProvider, groqProvider, {
-        systemPrompt: PLANNER_SYSTEM_PROMPT,
-        prompt: buildPlannerPrompt(request.message, request.state, now),
-        schema: PLANNER_OUTPUT_SCHEMA,
-        schemaName: 'ocuguide_semantic_plan',
-        schemaDescription: 'One bounded semantic target with zero to four unique read-only tools.',
-        maxOutputTokens: 750,
-        temperature: 0,
-        timeoutMs: 8_000,
-        reasoningEffort: 'low',
-        abortSignal: request.abortSignal,
-    }, (value) => validatePlannerResult(value, request.state, request.message, now));
-    if (planned.usedFallback) {
-        console.warn('[chat] planner fallback used', {
-            requestId: request.requestId,
-            provider: planned.providerUsed,
-        });
-    }
+interface ReferenceResolution {
+    readonly parts: SystemQueryPart[];
+    readonly unresolved: ReadonlyMap<ChatPartId, string>;
+}
 
-    const plan = planned.result;
-    const direct = buildDirectResponse(plan);
-    if (direct) return direct;
+interface PartWork {
+    readonly requested: SystemQueryPart;
+    readonly executable: SystemQueryPart;
+    readonly results: ToolExecutionResult[];
+    readonly answerability: ChatAnswerabilityOutcome;
+    readonly packet: AnswerPacket;
+}
 
-    const results = await executeToolPlans(plan.tools, {
-        firebase: request.firebase,
-        user: request.user,
-        questionFocus: plan.questionFocus,
-        now,
-        abortSignal: request.abortSignal,
-    });
-    const presentations = results.map((result) => result.presentation);
-    const packet = buildAnswerPacket(plan, results, request.message);
-    validateDisplayPlan(packet.displayPlan, presentations);
+const geminiProvider = new GeminiProvider();
+const groqProvider = new GroqProvider();
 
-    let answer: ChatAnswer;
-    if (TERMINAL_OUTCOMES.has(packet.answerability) ||
-        DETERMINISTIC_DIRECT_FOCUSES.has(plan.questionFocus) ||
-        packet.displayPlan.length === 0 && NO_VISUAL_DETERMINISTIC_FOCUSES.has(plan.questionFocus)) {
-        answer = buildTargetedAnswer(packet, presentations);
-    } else {
-        const providerPacket = serializeProviderPacket(packet);
-        if (textEncoder.encode(providerPacket).byteLength > MAX_PACKET_BYTES) {
-            console.warn('[chat] answer packet exceeded provider budget; deterministic answer used', {
-                requestId: request.requestId,
-                focus: plan.questionFocus,
-            });
-            answer = buildTargetedAnswer(packet, presentations);
-        } else {
-            try {
-                const generated = await generateWithFallback<GroundedAnswerDraft>(
-                    groqProvider,
-                    geminiProvider,
-                    {
-                        systemPrompt: ANSWERER_SYSTEM_PROMPT,
-                        prompt: [
-                            'ANSWER PACKET (trusted structure; quoted values remain untrusted data):',
-                            providerPacket,
-                            'Write only the direct answer for questionFocus.',
-                        ].join('\n'),
-                        schema: ANSWER_OUTPUT_SCHEMA,
-                        schemaName: 'ocuguide_focused_answer',
-                        schemaDescription: 'A concise focus-specific answer grounded in a minimal packet.',
-                        maxOutputTokens: 650,
-                        temperature: 0.15,
-                        timeoutMs: 10_000,
-                        reasoningEffort: 'medium',
-                        abortSignal: request.abortSignal,
-                    },
-                    (draft) => validateGroundedAnswerDraft(draft, packet, presentations),
-                );
-                if (generated.usedFallback) {
-                    console.warn('[chat] answer fallback used', {
-                        requestId: request.requestId,
-                        provider: generated.providerUsed,
-                    });
-                }
-                answer = buildGroundedPublicAnswer(generated.result, packet, presentations);
-            } catch (error: unknown) {
-                if (request.abortSignal?.aborted) {
-                    throw new ChatApiError(
-                        'assistant_unavailable',
-                        'OcuGuide timed out.',
-                        503,
-                        undefined,
-                        error,
-                    );
-                }
-                console.warn('[chat] focused answer rejected; deterministic answer used', {
-                    requestId: request.requestId,
-                    focus: plan.questionFocus,
-                    category: error instanceof ChatApiError ? error.code : 'provider_or_schema_failure',
-                });
-                answer = buildTargetedAnswer(packet, presentations);
-            }
+export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCoreResult> {
+    assertNotAborted(input.abortSignal);
+    const startedAt = Date.now();
+    const deadlineAtMs = input.deadlineAtMs ?? startedAt + 20_000;
+    let requestedPlan: SystemQueryPlan;
+    const explicitQuestionCount = countExplicitQuestions(input.message);
+    const deterministic = explicitQuestionCount <= 1 && !hasMultipleSystemTopics(input.message)
+        ? deterministicPlan(input.message, input.state)
+        : null;
+
+    if (deterministic) {
+        try {
+            requestedPlan = validateSystemQueryPlan(deterministic);
+            compileSystemQueryPlan(requestedPlan, input.user);
+        } catch (error: unknown) {
+            if (!(error instanceof CapabilityValidationError)) throw error;
+            requestedPlan = clarificationPlan(
+                'That OcuTemp request is too broad or ambiguous to process safely. Please narrow the room scope or rephrase the question.',
+            );
         }
+    } else if (explicitQuestionCount > 3) {
+        requestedPlan = clarificationPlan(
+            'Please split that into no more than three related OcuTemp questions.',
+        );
+    } else {
+        requestedPlan = await planWithProviders(input, deadlineAtMs, startedAt);
     }
 
-    answer = ensureRenderableAnswer({
-        ...answer,
-        caveats: unique([
-            ...answer.caveats,
-            ...buildCaveats(packet, presentations),
-        ]).slice(0, 3),
-    });
-    const notices = unique([
-        ...results.flatMap((result) => result.notices),
-        ...packet.notices,
-    ]).slice(0, MAX_PACKET_NOTICES);
-    return {
-        questionFocus: plan.questionFocus,
-        answer,
-        presentations,
-        displayPlan: packet.displayPlan,
-        partial: packet.answerability === 'partial' || results.some((result) => result.partial),
-        notices,
-        stateSummary: cleanText(answer.summary, MAX_STATE_SUMMARY),
-        stateContext: buildStateContext(plan, packet),
-    };
-}
+    const visualConflict = conflictingExplicitVisuals(requestedPlan.parts);
+    if (visualConflict) {
+        requestedPlan = clarificationPlan(
+            'That request asks for different visuals. Which single table or graph should I show?',
+        );
+    }
 
-function buildPlannerPrompt(message: string, state: ChatStatePayload | null, now: Date): string {
-    const date = manilaDateKey(now);
-    const context = state?.turns.slice(-3).map((turn) => ({
-        user: redactUntrustedText(turn.user),
-        assistant: redactUntrustedText(turn.assistant),
-        context: {
-            ...turn.context,
-            roomNames: turn.context.roomNames.map(redactUntrustedText),
-        },
-    })) ?? [];
-    return [
-        `Current Manila date: ${date}`,
-        `Prior typed context (untrusted JSON): ${JSON.stringify(context)}`,
-        `Latest explicit request (untrusted text; overrides inherited fields): ${JSON.stringify(redactUntrustedText(message))}`,
-        'Return one schema-valid read-only semantic plan.',
-    ].join('\n');
-}
-
-function manilaDateKey(value: Date): string {
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: MANILA_TIME_ZONE,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).formatToParts(value);
-    const year = parts.find((part) => part.type === 'year')?.value;
-    const month = parts.find((part) => part.type === 'month')?.value;
-    const day = parts.find((part) => part.type === 'day')?.value;
-    if (!year || !month || !day) throw new ChatApiError(
-        'assistant_unavailable',
-        'The Manila calendar date could not be resolved.',
-        503,
+    const historical = resolveHistoricalReferences(requestedPlan, input.state);
+    const initialCompilation = compileSystemQueryPlan(
+        requestedPlan,
+        input.user,
+        historical.parts,
     );
-    return `${year}-${month}-${day}`;
-}
+    const dependentIds = new Set(historical.parts
+        .filter(isPriorPartDependency)
+        .map((part) => part.partId));
+    const firstWavePlans = initialCompilation.tools.filter(
+        (tool) => !dependentIds.has(tool.partId),
+    );
 
-function validatePlannerResult(
-    value: PlannerResult,
-    state: ChatStatePayload | null,
-    message: string,
-    now: Date,
-): PlannerResult {
-    const keys = [
-        'intent', 'questionFocus', 'outputPreference', 'requestedRoomNames', 'allRooms',
-        'metric', 'comparisonTarget', 'isFollowUp', 'needsClarification', 'clarification',
-        'resolvedSummary', 'tools',
-    ];
-    if (!hasExactKeys(value, keys) || !CHAT_INTENTS.includes(value.intent) ||
-        !CHAT_QUESTION_FOCUSES.includes(value.questionFocus) ||
-        !CHAT_OUTPUT_PREFERENCES.includes(value.outputPreference) ||
-        !CHAT_METRICS.includes(value.metric) ||
-        !CHAT_COMPARISON_TARGETS.includes(value.comparisonTarget) ||
-        typeof value.allRooms !== 'boolean' || typeof value.isFollowUp !== 'boolean' ||
-        typeof value.needsClarification !== 'boolean' ||
-        !isSafeText(value.clarification, 240, true) ||
-        !isSafeText(value.resolvedSummary, 300, true) ||
-        !Array.isArray(value.requestedRoomNames) || value.requestedRoomNames.length > 50 ||
-        !Array.isArray(value.tools) || value.tools.length > MAX_TOOLS) {
-        throw invalidProviderPlan();
-    }
-    const requestedRoomNames = normalizeUniqueNames(value.requestedRoomNames);
-    if (value.allRooms && requestedRoomNames.length > 0) throw invalidProviderPlan();
-    if (value.isFollowUp && !state?.turns.length) throw invalidProviderPlan();
-
-    const seen = new Set<ChatToolName>();
-    const tools = value.tools.map((tool) => validateToolPlan(tool, seen));
-    if (value.needsClarification) {
-        if (!value.clarification.trim() || tools.length > 0 ||
-            ['greeting', 'control', 'unsupported'].includes(value.intent)) throw invalidProviderPlan();
-    } else if (value.clarification.trim()) {
-        throw invalidProviderPlan();
+    const results: ToolExecutionResult[] = [];
+    if (firstWavePlans.length > 0) {
+        const wave = await executeToolPlans(firstWavePlans, {
+            firebase: input.firebase,
+            user: input.user,
+            questionFocus: legacyFocusFor(requestedPlan.parts[0]!),
+            now: new Date(),
+            abortSignal: input.abortSignal,
+        });
+        results.push(...wave);
     }
 
-    validateIntentFocus(value.intent, value.questionFocus, value.needsClarification, tools);
-    validateFocusTools(value.questionFocus, tools, value.needsClarification);
-    validateScope(value, requestedRoomNames, tools);
-    validateMetricAndComparison(value.questionFocus, value.metric, value.comparisonTarget);
-    validateAnalysisRange(value, tools, message);
-    validateExplicitEnergySemantics(value, tools, message, now);
-    validateExplicitOutputPreference(value.outputPreference, message);
-    validateInheritedContext(value, tools, state, message);
+    const sameTurn = resolvePriorPartReferences(
+        historical.parts,
+        historical.unresolved,
+        results,
+    );
+    const finalCompilation = compileSystemQueryPlan(
+        requestedPlan,
+        input.user,
+        sameTurn.parts,
+    );
+    const secondWavePlans = finalCompilation.tools.filter(
+        (tool) => dependentIds.has(tool.partId) && !sameTurn.unresolved.has(tool.partId),
+    );
+    if (secondWavePlans.length > 0) {
+        const wave = await executeToolPlans(secondWavePlans, {
+            firebase: input.firebase,
+            user: input.user,
+            questionFocus: legacyFocusFor(requestedPlan.parts[0]!),
+            now: new Date(),
+            abortSignal: input.abortSignal,
+        });
+        results.push(...wave);
+    }
+
+    const deniedIds = new Set(finalCompilation.deniedParts.map((item) => item.partId));
+    const displayPlan = selectDisplayPlan(sameTurn.parts, results);
+    const partWorks = buildPartWork(
+        requestedPlan.parts,
+        sameTurn.parts,
+        results,
+        sameTurn.unresolved,
+        deniedIds,
+        displayPlan,
+    );
+    const answerParts: ChatAnswerPart[] = [];
+    let remainingFactBudget = MAX_PROVIDER_FACTS;
+
+    for (const work of partWorks) {
+        const deterministicAnswer = buildDeterministicAnswer(work, input.user);
+        let answer = deterministicAnswer;
+        const boundedPacket = boundPacket(work.packet, remainingFactBudget);
+        remainingFactBudget -= boundedPacket.facts.length;
+        if (shouldUseWriter(work) && boundedPacket.facts.length > 0 &&
+            deadlineAtMs - Date.now() >= WRITER_MIN_REMAINING_MS) {
+            answer = await writeWithFallback(
+                input.requestId,
+                work,
+                boundedPacket,
+                deterministicAnswer,
+                deadlineAtMs,
+                input.abortSignal,
+            );
+        }
+        answerParts.push(answer);
+    }
+
+    const responseContexts = partWorks.map((work): ChatResponseContext => ({
+        partId: work.requested.partId,
+        domain: work.requested.domain,
+        operation: work.requested.operation,
+        fields: [...work.requested.fields],
+        scope: work.executable.scope.kind,
+        answerability: work.answerability,
+    }));
+    const presentations = results.map((result) => result.presentation);
+    const notices = uniqueStrings(results.flatMap((result) => result.notices))
+        .slice(0, MAX_PUBLIC_NOTICES);
+    const partial = results.some((result) => result.partial) ||
+        partWorks.some((work) => work.answerability === 'partial');
+    const stateTurn = buildStateTurn(partWorks, finalCompilation.tools, displayPlan);
+
+    logSafe(input.requestId, 'orchestration', {
+        domain: requestedPlan.parts.map((part) => part.domain).join(','),
+        operation: requestedPlan.parts.map((part) => part.operation).join(','),
+        toolCount: new Set(finalCompilation.tools.map((tool) => tool.name)).size,
+        durationBucket: durationBucket(Date.now() - startedAt),
+        fallbackOutcome: deterministic ? 'deterministic_plan' : 'semantic_plan',
+    });
 
     return {
-        ...value,
-        clarification: normalizeText(value.clarification),
-        resolvedSummary: normalizeText(value.resolvedSummary),
-        requestedRoomNames,
-        tools,
+        responseContexts,
+        answerParts,
+        presentations,
+        displayPlan,
+        followUps: buildFollowUps(partWorks),
+        partial,
+        notices,
+        evidenceSource: results.length > 0 ? 'facility'
+            : requestedPlan.parts.some((part) =>
+                ['own_account', 'assistant_capabilities', 'app_help'].includes(part.domain))
+                ? 'application'
+                : 'none',
+        stateTurn,
     };
 }
 
-function validateExplicitOutputPreference(
-    preference: ChatOutputPreference,
-    message: string,
-): void {
-    const normalized = normalizeForComparison(message);
-    const negatedTable = /\b(?:(?:do\s+not|don['’]?t|dont|never)\s+(?:show|use|give|display)|(?:show|use|give|display)\s+no)\b.{0,20}\btable\b|\bwithout\s+(?:a\s+)?table\b/u.test(normalized);
-    const negatedGraph = /\b(?:(?:do\s+not|don['’]?t|dont|never)\s+(?:show|use|give|display)|(?:show|use|give|display)\s+no)\b.{0,20}\b(?:graph|chart)\b|\bwithout\s+(?:a\s+)?(?:graph|chart)\b/u.test(normalized);
-    const textOnly = /\btext\s*only\b|\bno\s+(?:table|graph|chart|visual)\b/u.test(normalized) ||
-        negatedTable || negatedGraph;
-    const showTable = !negatedTable && /\b(?:show|use|give|display)\b.{0,20}\btable\b/u.test(normalized);
-    const showGraph = !negatedGraph && /\b(?:show|use|give|display)\b.{0,20}\b(?:graph|chart)\b/u.test(normalized);
-    if (showTable && showGraph) throw invalidProviderPlan();
-    const expected: ChatOutputPreference | null = showTable ? 'table'
-        : showGraph ? 'graph'
-            : textOnly ? 'text' : null;
-    if (expected !== null && preference !== expected) throw invalidProviderPlan();
+async function planWithProviders(
+    input: RunChatTurnInput,
+    deadlineAtMs: number,
+    startedAt: number,
+): Promise<SystemQueryPlan> {
+    const prompt = JSON.stringify({
+        currentManilaDate: manilaDateKey(new Date()),
+        callerRole: input.user.role,
+        permittedSemanticCapabilities: plannerCapabilitySlice(input.user.role),
+        typedConversationContext: safeStateForPlanner(input.state),
+        untrustedUserMessage: input.message,
+    });
+    try {
+        const generated = await generateWithFallback<SystemQueryPlan>(
+            geminiProvider,
+            groqProvider,
+            {
+                systemPrompt: PLANNER_SYSTEM_PROMPT,
+                prompt,
+                schema: PLANNER_OUTPUT_SCHEMA,
+                schemaName: 'system_query_plan',
+                schemaDescription: 'A bounded semantic OcuTemp query plan.',
+                maxOutputTokens: 2_400,
+                temperature: 0,
+                timeoutMs: PLANNER_PRIMARY_MS,
+                reasoningEffort: 'low',
+                abortSignal: input.abortSignal,
+            },
+            (rawPlan) => {
+                const plan = validateSystemQueryPlan(rawPlan);
+                compileSystemQueryPlan(plan, input.user);
+                return plan;
+            },
+            {
+                fallbackTimeoutMs: PLANNER_FALLBACK_MS,
+                deadlineAtMs,
+                reserveMs: PLANNING_RESERVE_MS,
+            },
+        );
+        logSafe(input.requestId, 'planning', {
+            provider: generated.providerUsed,
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: generated.usedFallback ? 'fallback_succeeded' : 'primary_succeeded',
+        });
+        return generated.result;
+    } catch (error: unknown) {
+        if (input.abortSignal?.aborted) throw error;
+        if (isSemanticPlanningFailure(error)) {
+            logSafe(input.requestId, 'planning', {
+                provider: 'none',
+                durationBucket: durationBucket(Date.now() - startedAt),
+                fallbackOutcome: 'invalid_plan_clarified',
+            });
+            return clarificationPlan(
+                'I could not safely interpret that OcuTemp request. Please name the system data you want and, if relevant, the room or period.',
+            );
+        }
+        throw error;
+    }
 }
 
-function validateInheritedContext(
-    plan: PlannerResult,
-    tools: readonly PlannerToolPlan[],
+async function writeWithFallback(
+    requestId: string,
+    work: PartWork,
+    packet: AnswerPacket,
+    deterministicAnswer: ChatAnswerPart,
+    deadlineAtMs: number,
+    abortSignal?: AbortSignal,
+): Promise<ChatAnswerPart> {
+    const startedAt = Date.now();
+    const allowFallback = deadlineAtMs - Date.now() >=
+        WRITER_PRIMARY_MS + WRITER_FALLBACK_MS + FINALIZATION_RESERVE_MS;
+    try {
+        const generated = await generateWithFallback<GroundedAnswerDraft>(
+            groqProvider,
+            geminiProvider,
+            {
+                systemPrompt: ANSWERER_SYSTEM_PROMPT,
+                prompt: JSON.stringify({ answerPacket: packet }),
+                schema: ANSWER_OUTPUT_SCHEMA,
+                schemaName: 'grounded_answer',
+                schemaDescription: 'A concise answer supported by supplied fact IDs.',
+                maxOutputTokens: 1_200,
+                temperature: 0.15,
+                timeoutMs: WRITER_PRIMARY_MS,
+                reasoningEffort: 'low',
+                abortSignal,
+            },
+            (draft) => validateWriterDraft(draft, packet),
+            {
+                fallbackTimeoutMs: WRITER_FALLBACK_MS,
+                deadlineAtMs,
+                reserveMs: FINALIZATION_RESERVE_MS,
+                allowFallback,
+            },
+        );
+        logSafe(requestId, 'writing', {
+            provider: generated.providerUsed,
+            domain: work.requested.domain,
+            operation: work.requested.operation,
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: generated.usedFallback ? 'fallback_succeeded' : 'primary_succeeded',
+        });
+        return answerPartFromDraft(work, generated.result);
+    } catch (error: unknown) {
+        if (abortSignal?.aborted) throw error;
+        logSafe(requestId, 'writing', {
+            provider: 'none',
+            domain: work.requested.domain,
+            operation: work.requested.operation,
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: 'deterministic_fallback',
+        });
+        return deterministicAnswer;
+    }
+}
+
+function resolveHistoricalReferences(
+    plan: SystemQueryPlan,
     state: ChatStatePayload | null,
-    message: string,
-): void {
-    const previous = state?.turns.at(-1)?.context;
-    if (plan.questionFocus === 'energy_rank_winner' && !hasExplicitEnergyPeriod(message)) {
-        const canInheritEnergyScope = previous?.toolNames.includes('get_energy_report') === true;
-        if (!canInheritEnergyScope) {
-            if (!plan.needsClarification || plan.isFollowUp ||
-                !plan.allRooms && plan.requestedRoomNames.length === 0) throw invalidProviderPlan();
-            return;
+): ReferenceResolution {
+    const unresolved = new Map<ChatPartId, string>();
+    const latest = state?.turns[state.turns.length - 1];
+    const parts = plan.parts.map((part): SystemQueryPart => {
+        if (part.scope.kind === 'prior_part' ||
+            part.followUpReference.kind === 'prior_part') return part;
+        const referenceKind = part.scope.kind === 'previous_request' ||
+            part.scope.kind === 'previous_result'
+            ? part.scope.kind
+            : part.followUpReference.kind === 'previous_request' ||
+                part.followUpReference.kind === 'previous_result'
+                ? part.followUpReference.kind
+                : null;
+        if (!referenceKind) return part;
+        if (!latest) {
+            return unresolvedPart(part, unresolved,
+                'I do not have a verified previous result for that reference. Please name the rooms or scope.');
         }
-        if (plan.needsClarification || !plan.isFollowUp) throw invalidProviderPlan();
-    }
-    if (!plan.isFollowUp) return;
-    if (!previous) throw invalidProviderPlan();
-    if (!hasExplicitRoomScope(message)) {
-        if (plan.allRooms !== previous.allRooms) throw invalidProviderPlan();
-        if (!plan.allRooms && !sameNames(plan.requestedRoomNames, previous.roomNames)) {
-            throw invalidProviderPlan();
-        }
-    }
-    if (ENERGY_FOCUSES.has(plan.questionFocus) && !hasExplicitEnergyPeriod(message)) {
-        const energy = tools.find((tool) => tool.name === 'get_energy_report');
-        if (!energy) throw invalidProviderPlan();
-        if (previous.toolNames.includes('get_energy_report')) {
-            if (energy.rangePreset !== previous.rangePreset ||
-                energy.startDate !== previous.startDate || energy.endDate !== previous.endDate ||
-                energy.bucket !== previous.bucket) throw invalidProviderPlan();
-        } else {
-            const defaultPreset = plan.questionFocus === 'facility_efficiency_analysis'
-                ? 'this_year'
-                : 'this_month';
-            if (energy.rangePreset !== defaultPreset) throw invalidProviderPlan();
-        }
-    }
-}
 
-function validateAnalysisRange(
-    plan: PlannerResult,
-    tools: readonly PlannerToolPlan[],
-    message: string,
-): void {
-    if (plan.questionFocus !== 'facility_efficiency_analysis') return;
-    const energy = tools.find((tool) => tool.name === 'get_energy_report');
-    if (!energy) throw invalidProviderPlan();
-    if (!plan.isFollowUp && !hasExplicitEnergyPeriod(message) && energy.rangePreset !== 'this_year') {
-        throw invalidProviderPlan();
-    }
-    const events = tools.find((tool) => tool.name === 'get_recent_room_events');
-    if (events && (events.rangePreset !== energy.rangePreset ||
-        events.startDate !== energy.startDate || events.endDate !== energy.endDate ||
-        events.bucket !== energy.bucket)) throw invalidProviderPlan();
-}
-
-function validateExplicitEnergySemantics(
-    plan: PlannerResult,
-    tools: readonly PlannerToolPlan[],
-    message: string,
-    now: Date,
-): void {
-    const energy = tools.find((tool) => tool.name === 'get_energy_report');
-    if (!energy) return;
-    const normalized = normalizeForComparison(message);
-    const today = manilaDateKey(now);
-    const currentYear = Number(today.slice(0, 4));
-    let fullYearRangeRequested = false;
-    const dateKeys = normalized.match(/\b\d{4}-\d{2}-\d{2}\b/gu) ?? [];
-    if (dateKeys.length >= 2) {
-        assertCustomEnergyRange(energy, dateKeys[0]!, dateKeys[1]!);
-    } else if (dateKeys.length === 1) {
-        const date = dateKeys[0]!;
-        const escapedDate = date.replace(/-/gu, '\\-');
-        if (new RegExp(`\\b(?:since|from|starting(?:\\s+on)?)\\s+${escapedDate}\\b`, 'u').test(normalized)) {
-            assertCustomEnergyRange(energy, date, today);
-        } else if (new RegExp(
-            `\\b(?:before|after|through|until|ending(?:\\s+on)?)\\s+${escapedDate}\\b`,
-            'u',
-        ).test(normalized)) {
-            throw invalidProviderPlan();
-        } else {
-            assertCustomEnergyRange(energy, date, date);
-        }
-    } else {
-        const withoutDates = normalized.replace(/\b\d{4}-\d{2}-\d{2}\b/gu, ' ');
-        const years = unique(withoutDates.match(/\b(?:19|20)\d{2}\b/gu) ?? [])
-            .map(Number)
-            .sort((left, right) => left - right);
-        const quarter = withoutDates.match(/\bq([1-4])(?:\s+of)?\s+((?:19|20)\d{2})\b/u);
-        const reversedQuarter = withoutDates.match(/\b((?:19|20)\d{2})\s+q([1-4])\b/u);
-        const month = withoutDates.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:of\s+)?((?:19|20)\d{2})\b/u) ??
-            withoutDates.match(/\b((?:19|20)\d{2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/u);
-        if (quarter || reversedQuarter) {
-            const quarterNumber = Number(quarter?.[1] ?? reversedQuarter?.[2]);
-            const year = Number(quarter?.[2] ?? reversedQuarter?.[1]);
-            const startMonth = (quarterNumber - 1) * 3 + 1;
-            const endMonth = startMonth + 2;
-            const start = `${year}-${String(startMonth).padStart(2, '0')}-01`;
-            const calendarEnd = `${year}-${String(endMonth).padStart(2, '0')}-${String(daysInMonth(year, endMonth)).padStart(2, '0')}`;
-            assertCustomEnergyRange(energy, start, calendarEnd > today ? today : calendarEnd);
-        } else if (month) {
-            const monthFirst = month[1]?.match(/^\d{4}$/u) ? month[2]! : month[1]!;
-            const yearText = month[1]?.match(/^\d{4}$/u) ? month[1]! : month[2]!;
-            const monthNumber = namedMonthNumber(monthFirst);
-            const year = Number(yearText);
-            const start = `${year}-${String(monthNumber).padStart(2, '0')}-01`;
-            const calendarEnd = `${year}-${String(monthNumber).padStart(2, '0')}-${String(daysInMonth(year, monthNumber)).padStart(2, '0')}`;
-            assertCustomEnergyRange(energy, start, calendarEnd > today ? today : calendarEnd);
-        } else if (years.length > 0) {
-            fullYearRangeRequested = true;
-            const firstYear = years[0]!;
-            const lastYear = years.at(-1)!;
-            const expectedStart = `${firstYear}-01-01`;
-            const expectedEnd = lastYear === currentYear ? today : `${lastYear}-12-31`;
-            if (firstYear === currentYear && lastYear === currentYear) {
-                if (energy.rangePreset !== 'this_year' &&
-                    !(energy.rangePreset === 'custom' && energy.startDate === expectedStart &&
-                        energy.endDate === expectedEnd)) throw invalidProviderPlan();
-            } else {
-                assertCustomEnergyRange(energy, expectedStart, expectedEnd);
+        if (referenceKind === 'previous_request') {
+            const candidates = latest.contexts.filter((context) =>
+                context.domain === part.domain || latest.contexts.length === 1);
+            const context = candidates[candidates.length - 1];
+            if (!context || !['facility', 'named_rooms'].includes(context.requestedScope.kind)) {
+                return unresolvedPart(part, unresolved,
+                    'The previous request does not provide one unambiguous room scope. Please name the rooms.');
             }
-        } else {
-            const expectedPreset = explicitPreset(normalized);
-            if (expectedPreset && energy.rangePreset !== expectedPreset) throw invalidProviderPlan();
-            if (expectedPreset === 'this_year') fullYearRangeRequested = true;
-            if (/\byesterday\b/u.test(normalized)) {
-                const yesterday = addDateKeyDays(today, -1);
-                assertCustomEnergyRange(energy, yesterday, yesterday);
-            }
-            if (/\b(?:last|previous)\s+year\b/u.test(normalized)) {
-                fullYearRangeRequested = true;
-                const year = currentYear - 1;
-                assertCustomEnergyRange(energy, `${year}-01-01`, `${year}-12-31`);
-            }
+            return {
+                ...part,
+                scope: { ...context.requestedScope },
+                timeRange: part.domain === 'energy' ? { ...context.timeRange } : part.timeRange,
+            };
         }
+
+        const candidates = latest.referents.filter((referent) =>
+            latest.contexts.find((context) => context.partId === referent.sourcePartId)?.domain ===
+                part.domain || latest.referents.length === 1);
+        const referent = candidates[candidates.length - 1];
+        if (!referent || referent.roomNames.length === 0 ||
+            (!referent.complete && part.followUpReference.ordinal === 0)) {
+            return unresolvedPart(part, unresolved,
+                'The previous result does not contain one complete, unambiguous room set. Please name the rooms.');
+        }
+        const ordinal = part.followUpReference.ordinal;
+        const roomNames = ordinal > 0
+            ? referent.roomNames[ordinal - 1]
+                ? [referent.roomNames[ordinal - 1]!]
+                : []
+            : referent.roomNames;
+        if (roomNames.length === 0) {
+            return unresolvedPart(part, unresolved,
+                'That numbered room is not present in the previous verified result.');
+        }
+        return {
+            ...part,
+            scope: {
+                kind: 'named_rooms', roomNames: [...roomNames],
+                inventory: part.scope.inventory, referencePartId: '',
+            },
+        };
+    });
+    return { parts, unresolved };
+}
+
+function resolvePriorPartReferences(
+    parts: readonly SystemQueryPart[],
+    existingUnresolved: ReadonlyMap<ChatPartId, string>,
+    results: readonly ToolExecutionResult[],
+): ReferenceResolution {
+    const unresolved = new Map(existingUnresolved);
+    const resolved = parts.map((part): SystemQueryPart => {
+        if (!isPriorPartDependency(part)) return part;
+        const referencePartId = part.scope.referencePartId || part.followUpReference.partId;
+        const referenced = results.filter((result) => result.partId === referencePartId);
+        if (referenced.length === 0) {
+            return unresolvedPart(part, unresolved,
+                'The earlier part did not produce a verified room result for this follow-up.');
+        }
+        const names = uniqueStrings(referenced.flatMap((result) =>
+            result.scope.matchedRoomNames));
+        const incomplete = referenced.some((result) => result.partial);
+        if (names.length === 0) {
+            return unresolvedPart(part, unresolved,
+                'There are no rooms in the earlier verified result to use for this part.');
+        }
+        if (names.length > 50 || incomplete) {
+            return unresolvedPart(part, unresolved,
+                'The earlier result is incomplete or too large to use safely as “those rooms.” Please name the rooms.');
+        }
+        const ordinal = part.followUpReference.ordinal;
+        const selected = ordinal > 0 ? names[ordinal - 1] ? [names[ordinal - 1]!] : [] : names;
+        if (selected.length === 0) {
+            return unresolvedPart(part, unresolved,
+                'That numbered room is not present in the earlier verified result.');
+        }
+        return {
+            ...part,
+            scope: {
+                kind: 'named_rooms', roomNames: selected,
+                inventory: part.scope.inventory, referencePartId: '',
+            },
+        };
+    });
+    return { parts: resolved, unresolved };
+}
+
+function unresolvedPart(
+    part: SystemQueryPart,
+    unresolved: Map<ChatPartId, string>,
+    message: string,
+): SystemQueryPart {
+    unresolved.set(part.partId, message);
+    return {
+        ...part,
+        scope: { kind: 'facility', roomNames: [], inventory: part.scope.inventory,
+            referencePartId: '' },
+        needsClarification: true,
+        clarification: message,
+    };
+}
+
+function deterministicPlan(message: string, state: ChatStatePayload | null): SystemQueryPlan | null {
+    const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    const roomNames = explicitRoomNames(message);
+    const namedScope = roomNames.length > 0
+        ? scope('named_rooms', roomNames, 'all')
+        : scope('facility', [], 'active');
+
+    if (/^(hi|hello|hey|good (morning|afternoon|evening))[!. ]*$/u.test(normalized)) {
+        return onePart(part({ domain: 'conversation', operation: 'greet',
+            fields: ['capabilities'] }));
     }
-
-    const explicitBucket: EnergyBucket | null = /\b(?:daily|by\s+day|per\s+day)\b/u.test(normalized)
-        ? 'day'
-        : /\b(?:weekly|by\s+week|per\s+week)\b/u.test(normalized)
-            ? 'week'
-            : /\b(?:monthly|by\s+month|per\s+month)\b/u.test(normalized)
-                ? 'month'
-                : /\b(?:by\s+year|per\s+year)\b/u.test(normalized)
-                    ? 'year'
-                    : null;
-    if (explicitBucket && energy.bucket !== explicitBucket) throw invalidProviderPlan();
-    if ((plan.questionFocus === 'energy_report' || plan.questionFocus === 'energy_trend') &&
-        fullYearRangeRequested && explicitBucket === null &&
-        energy.bucket !== 'auto' && energy.bucket !== 'month') throw invalidProviderPlan();
-}
-
-function assertCustomEnergyRange(
-    tool: PlannerToolPlan,
-    startDate: string,
-    endDate: string,
-): void {
-    if (tool.rangePreset !== 'custom' || tool.startDate !== startDate ||
-        tool.endDate !== endDate) throw invalidProviderPlan();
-}
-
-function explicitPreset(value: string): EnergyRangePreset | null {
-    if (/\b(?:last|past)\s+12\s+months\b/u.test(value)) return 'last_12_months';
-    if (/\b(?:last|past)\s+7\s+days\b/u.test(value)) return 'last_7_days';
-    if (/\b(?:last|previous)\s+week\b/u.test(value)) return 'last_week';
-    if (/\bthis\s+week\b/u.test(value)) return 'this_week';
-    if (/\b(?:last|previous)\s+month\b/u.test(value)) return 'last_month';
-    if (/\bthis\s+month\b/u.test(value)) return 'this_month';
-    if (/\b(?:whole[- ]year|this\s+year|current\s+year)\b/u.test(value) ||
-        /\b(?:annual|yearly)\b/u.test(value) &&
-        !/\b(?:last|previous)\s+year\b/u.test(value)) return 'this_year';
-    if (/\btoday\b/u.test(value)) return 'today';
+    if (/\b(what (can|do) you do|what (is|are) your (job|role|capabilit)|how can you help)\b/u
+        .test(normalized)) {
+        return onePart(part({ domain: 'assistant_capabilities', operation: 'list',
+            fields: ['capabilities'] }));
+    }
+    const helpTopic = deterministicHelpTopic(normalized);
+    if (helpTopic) {
+        return onePart(part({ domain: 'app_help', operation: 'how_to', fields: ['help_topic'],
+            filters: [stringFilter('help_topic', helpTopic)] }));
+    }
+    if (/^(please\s+)?(turn|set|change|delete|create|remove|approve|apply|disable|enable)\b/u
+        .test(normalized)) {
+        return onePart(part({ domain: 'conversation', operation: 'deny',
+            fields: ['capabilities'] }));
+    }
+    if (/\b(my (name|email|role)|who am i|is my account approved|my account status)\b/u
+        .test(normalized)) {
+        const fields: SystemField[] = [];
+        if (/name|who am i/u.test(normalized)) fields.push('account_name');
+        if (/email/u.test(normalized)) fields.push('account_email');
+        if (/role|who am i/u.test(normalized)) fields.push('account_role');
+        if (/approved|status/u.test(normalized)) fields.push('account_approval');
+        return onePart(part({ domain: 'own_account', operation: 'detail', fields,
+            scope: scope('own_account', [], 'all') }));
+    }
+    if (/\b(how many|total|count).*(users?|accounts?|admins?|staff)\b/u.test(normalized)) {
+        const fields: SystemField[] = [];
+        if (/users?|accounts?/u.test(normalized)) fields.push('user_total');
+        if (/admins?/u.test(normalized)) fields.push('admin_count');
+        if (/pending/u.test(normalized)) fields.push('pending_staff_count');
+        if (/approved/u.test(normalized)) fields.push('approved_staff_count');
+        if (fields.length === 0) fields.push('user_total');
+        return onePart(part({ domain: 'admin_user_aggregates', operation: 'count', fields }));
+    }
+    if (/\b(how many|total|count).*(rooms?)\b/u.test(normalized)) {
+        return onePart(part({ domain: 'rooms', operation: 'count',
+            fields: ['room_count'], scope: scope('facility', [], 'all') }));
+    }
+    if (/\b(how many|total|count).*(devices?)\b/u.test(normalized)) {
+        return onePart(part({ domain: 'devices', operation: 'count',
+            fields: ['device_count'], scope: scope('facility', [], 'all') }));
+    }
+    if (/\b(schedule|timetable)\b/u.test(normalized)) {
+        const isCount = /\b(how many|count|total)\b/u.test(normalized);
+        const those = /\b(those rooms|them)\b/u.test(normalized);
+        return onePart(part({
+            domain: 'schedules', operation: isCount ? 'count' : 'list',
+            fields: isCount ? ['schedule_count'] : ['room_name', 'schedules'],
+            scope: those ? scope('previous_result', [], 'all') :
+                roomNames.length > 0 ? namedScope : scope('facility', [], 'all'),
+            followUpReference: those ? follow('previous_result') : undefined,
+            limit: 50,
+        }));
+    }
+    if (/\b(occupancy|occupied|occupants?)\b/u.test(normalized)) {
+        const lastKnown = /\b(last[- ]?known|historical|previous)\b/u.test(normalized);
+        return onePart(part({ domain: 'occupancy', operation: roomNames.length > 1 ? 'compare' : 'status',
+            fields: ['room_name', lastKnown ? 'last_known_occupancy' : 'occupancy', 'device_status'],
+            scope: namedScope }));
+    }
+    if (/\b(active override|overrides?)\b/u.test(normalized)) {
+        const activeOnly = /\b(active|currently)\b/u.test(normalized);
+        return onePart(part({ domain: 'overrides', operation: /which|what room|list/u.test(normalized)
+            ? 'list' : 'status', fields: ['room_name', 'override_active',
+                'override_target_temperature', 'override_until'],
+            filters: activeOnly ? [booleanFilter('override_active', true)] : [],
+            scope: roomNames.length > 0 ? namedScope : scope('facility', [], 'all') }));
+    }
+    if (/\b(ai auto[- ]?apply|auto[- ]?apply|ai toggle)\b/u.test(normalized)) {
+        const enabledOnly = /\b(which|what room|enabled rooms?)\b/u.test(normalized);
+        return onePart(part({ domain: 'ai_auto_apply', operation: enabledOnly ? 'list' : 'status',
+            fields: ['room_name', 'ai_auto_apply'],
+            filters: enabledOnly ? [booleanFilter('ai_auto_apply', true)] : [],
+            scope: roomNames.length > 0 ? namedScope : scope('facility', [], 'all') }));
+    }
+    if (/\b(floor[ -]?plan|map layout|assigned cells?)\b/u.test(normalized)) {
+        const layout = /map layout|shapes?|dynamic/u.test(normalized);
+        return onePart(part({ domain: 'floor_plan', operation: /how many|count/u.test(normalized)
+            ? 'count' : 'list', fields: ['room_name', layout ? 'floor_plan_layout' :
+                'floor_plan_assignment'], scope: scope('facility', [], 'all') }));
+    }
+    if (/\b(climate suggestion|ml suggestion|temperature suggestion)\b/u.test(normalized)) {
+        return onePart(part({ domain: 'climate_suggestions', operation: 'list',
+            fields: ['room_name', 'climate_suggestion'], scope: namedScope }));
+    }
+    if (/\b(recent events?|decision events?|operational logs?)\b/u.test(normalized)) {
+        return onePart(part({ domain: 'decision_events', operation: 'list',
+            fields: ['room_name', 'decision_event'], scope: namedScope,
+            timeRange: energyRangeFor(normalized), limit: 25 }));
+    }
+    if (/\b(energy|kwh|waste|efficien)/u.test(normalized) ||
+        /\b(ranked? first|rank(ing)?|top consumer)\b/u.test(normalized)) {
+        const winner = /\b(ranked? first|who (is|was) first|top consumer|rank one)\b/u
+            .test(normalized);
+        const ranking = winner || /\b(rank|ranking|compare)\b/u.test(normalized);
+        const efficiency = /\b(waste|efficien|reduce)\b/u.test(normalized);
+        const report = /\breport\b/u.test(normalized);
+        const trend = /\b(trend|over time)\b/u.test(normalized);
+        const inherit = winner && roomNames.length === 0 && state !== null &&
+            !hasExplicitEnergyRange(normalized);
+        return onePart(part({
+            domain: 'energy',
+            operation: efficiency ? 'explain' : report ? 'report' : ranking ? 'compare' :
+                trend ? 'detail' : 'summarize',
+            fields: report
+                ? ['estimated_kwh', 'runtime_seconds', 'session_count', 'energy_rank', 'energy_trend']
+                : ranking ? ['room_name', 'estimated_kwh', 'energy_rank']
+                    : trend ? ['estimated_kwh', 'energy_trend']
+                        : ['estimated_kwh', 'runtime_seconds', 'session_count'],
+            scope: inherit ? scope('previous_request', [], 'active') : namedScope,
+            timeRange: energyRangeFor(normalized),
+            sort: ranking ? { field: 'estimated_kwh', direction: 'desc' } : undefined,
+            followUpReference: inherit ? follow('previous_request') : undefined,
+            limit: winner ? 1 : 50,
+        }));
+    }
+    if (/\b(temperature|humidity|hot|heat|condition)\b/u.test(normalized)) {
+        const lastKnown = /\b(last[- ]?known|historical|previous)\b/u.test(normalized);
+        const fields: SystemField[] = ['room_name', 'device_status'];
+        if (/temperature|hot|heat|condition/u.test(normalized)) {
+            fields.push(lastKnown ? 'last_known_temperature' : 'temperature');
+        }
+        if (/humidity/u.test(normalized)) {
+            fields.push(lastKnown ? 'last_known_humidity' : 'humidity');
+        }
+        if (/hot|heat|condition|why/u.test(normalized)) fields.push('condition');
+        return onePart(part({ domain: 'measurements', operation: /why|cause/u.test(normalized)
+            ? 'explain' : roomNames.length === 1 ? 'detail' : 'compare', fields,
+            scope: namedScope }));
+    }
+    if (/\b(ac (power|state|status)|aircon (on|off)|air conditioner (on|off))\b/u
+        .test(normalized)) {
+        return onePart(part({ domain: 'ac_control', operation: roomNames.length === 1
+            ? 'status' : 'list', fields: ['room_name', 'ac_power', 'device_status'],
+            scope: namedScope }));
+    }
+    if (/\b(device status|online rooms?|offline rooms?|room status|list rooms?)\b/u
+        .test(normalized)) {
+        const domain: SystemDomain = /device|online|offline/u.test(normalized) ? 'devices' : 'rooms';
+        const inventory = /\binactive\b/u.test(normalized) ? 'inactive'
+            : /\b(all|every|configured)\b/u.test(normalized) ? 'all' : 'active';
+        const statusFilters: SystemFilter[] = domain === 'devices' && /\boffline\b/u.test(normalized)
+            ? [stringFilter('device_status', 'offline')]
+            : domain === 'devices' && /\bonline\b/u.test(normalized)
+                ? [stringFilter('device_status', 'online')]
+                : [];
+        return onePart(part({ domain, operation: /list|which|what room/u.test(normalized)
+            ? 'list' : 'status', fields: domain === 'devices'
+                ? ['room_name', 'device_status', 'last_seen']
+                : ['room_name', 'room_status', 'device_assignment'],
+            filters: statusFilters,
+            scope: roomNames.length > 0 ? namedScope : scope('facility', [], inventory) }));
+    }
     return null;
 }
 
-function namedMonthNumber(value: string): number {
-    const month = [
-        'january', 'february', 'march', 'april', 'may', 'june',
-        'july', 'august', 'september', 'october', 'november', 'december',
-    ].indexOf(value);
-    if (month < 0) throw invalidProviderPlan();
-    return month + 1;
+interface PartOptions {
+    readonly domain: SystemDomain;
+    readonly operation: SystemOperation;
+    readonly fields: SystemField[];
+    readonly filters?: SystemFilter[];
+    readonly scope?: SystemQueryPart['scope'];
+    readonly timeRange?: SystemTimeRange;
+    readonly sort?: SystemQueryPart['sort'];
+    readonly outputPreference?: SystemQueryPart['outputPreference'];
+    readonly followUpReference?: SystemQueryPart['followUpReference'];
+    readonly limit?: number;
+    readonly clarification?: string;
 }
 
-function daysInMonth(year: number, month: number): number {
-    return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-function addDateKeyDays(value: string, days: number): string {
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    parsed.setUTCDate(parsed.getUTCDate() + days);
-    return parsed.toISOString().slice(0, 10);
-}
-
-function validateToolPlan(tool: PlannerToolPlan, seen: Set<ChatToolName>): PlannerToolPlan {
-    if (!hasExactKeys(tool, [
-        'name', 'roomNames', 'rangePreset', 'startDate', 'endDate', 'bucket',
-        'topic', 'limit', 'includeLastKnown',
-    ]) || !CHAT_TOOL_NAMES.includes(tool.name) || seen.has(tool.name) ||
-        !Array.isArray(tool.roomNames) || tool.roomNames.length > 50 ||
-        !ENERGY_RANGE_PRESETS.includes(tool.rangePreset) ||
-        !ENERGY_BUCKETS.includes(tool.bucket) ||
-        !isSafeText(tool.startDate, 10, true) || !isSafeText(tool.endDate, 10, true) ||
-        !isSafeText(tool.topic, 64, true) ||
-        !Number.isInteger(tool.limit) || tool.limit < 1 || tool.limit > 25 ||
-        typeof tool.includeLastKnown !== 'boolean') throw invalidProviderPlan();
-    seen.add(tool.name);
-    const roomNames = normalizeUniqueNames(tool.roomNames);
-    if (tool.rangePreset === 'custom') {
-        if (!isIsoCalendarDate(tool.startDate) || !isIsoCalendarDate(tool.endDate) ||
-            tool.startDate > tool.endDate) throw invalidProviderPlan();
-    } else if (tool.startDate || tool.endDate) throw invalidProviderPlan();
-    const topic = normalizeText(tool.topic).toLocaleLowerCase('en-US').replace(/[\s_]+/gu, '-');
-    if (tool.name === 'get_system_help' && !SYSTEM_HELP_TOPICS.has(topic)) throw invalidProviderPlan();
-    return { ...tool, roomNames, topic };
-}
-
-function validateIntentFocus(
-    intent: ChatIntent,
-    focus: ChatQuestionFocus,
-    clarification: boolean,
-    tools: readonly PlannerToolPlan[],
-): void {
-    const expected: ChatIntent = focus === 'system_help' ? 'help'
-        : focus === 'greeting' ? 'greeting'
-            : focus === 'control_request' ? 'control'
-                : focus === 'unsupported' ? 'unsupported'
-                    : 'data';
-    if (intent !== expected) throw invalidProviderPlan();
-    if (clarification) return;
-    if (['greeting', 'control', 'unsupported'].includes(intent) && tools.length > 0) {
-        throw invalidProviderPlan();
-    }
-}
-
-function validateFocusTools(
-    focus: ChatQuestionFocus,
-    tools: readonly PlannerToolPlan[],
-    clarification: boolean,
-): void {
-    if (clarification) return;
-    const names = new Set(tools.map((tool) => tool.name));
-    const exactly = (name: ChatToolName): boolean => names.size === 1 && names.has(name);
-    if (TELEMETRY_FOCUSES.has(focus) && !exactly('get_room_telemetry')) throw invalidProviderPlan();
-    if (ENERGY_FOCUSES.has(focus)) {
-        if (!names.has('get_energy_report')) throw invalidProviderPlan();
-        if (focus === 'facility_efficiency_analysis') {
-            if (!names.has('get_room_telemetry') || names.has('get_system_help') ||
-                names.has('get_climate_prediction_logs')) throw invalidProviderPlan();
-        } else if (!exactly('get_energy_report')) throw invalidProviderPlan();
-    }
-    if (focus === 'climate_suggestion' && !exactly('get_climate_prediction_logs')) {
-        throw invalidProviderPlan();
-    }
-    if (focus === 'recent_events' && !exactly('get_recent_room_events')) throw invalidProviderPlan();
-    if (focus === 'system_help' && !exactly('get_system_help')) throw invalidProviderPlan();
-    if (['greeting', 'control_request', 'unsupported'].includes(focus) && names.size > 0) {
-        throw invalidProviderPlan();
-    }
-}
-
-function validateScope(
-    plan: PlannerResult,
-    names: readonly string[],
-    tools: readonly PlannerToolPlan[],
-): void {
-    const dataFocus = !['greeting', 'control_request', 'unsupported', 'system_help'].includes(
-        plan.questionFocus,
-    );
-    if (!dataFocus && (plan.allRooms || names.length > 0)) throw invalidProviderPlan();
-    if (!plan.needsClarification && dataFocus && !plan.allRooms && names.length === 0) {
-        throw invalidProviderPlan();
-    }
-    for (const tool of tools) {
-        if (tool.name === 'get_system_help') continue;
-        if (plan.allRooms) {
-            if (tool.roomNames.length > 0) throw invalidProviderPlan();
-        } else if (!sameNames(tool.roomNames, names)) throw invalidProviderPlan();
-        if (tool.includeLastKnown !== (plan.questionFocus === 'last_known_temperature')) {
-            throw invalidProviderPlan();
-        }
-    }
-}
-
-function validateMetricAndComparison(
-    focus: ChatQuestionFocus,
-    metric: ChatMetric,
-    comparison: ChatComparisonTarget,
-): void {
-    const expectedMetric: Partial<Record<ChatQuestionFocus, ChatMetric>> = {
-        current_temperature: 'temperature', last_known_temperature: 'temperature',
-        current_humidity: 'humidity', current_condition: 'condition', device_status: 'device_status',
-        ac_power_status: 'ac_power', ai_auto_apply_status: 'ai_auto_apply',
-        schedule_count: 'schedule_count', energy_total: 'estimated_kwh',
-        energy_rank_winner: 'estimated_kwh', energy_ranking: 'estimated_kwh',
-        energy_trend: 'estimated_kwh', energy_report: 'estimated_kwh',
-        facility_efficiency_analysis: 'estimated_kwh',
-    };
-    if ((expectedMetric[focus] ?? 'none') !== metric) throw invalidProviderPlan();
-    const expectedComparison: ChatComparisonTarget = focus === 'energy_rank_winner' ? 'winner'
-        : focus === 'energy_trend' ? 'trend'
-            : focus === 'energy_ranking' ? 'rooms'
-                : 'none';
-    if (comparison !== expectedComparison) throw invalidProviderPlan();
-}
-
-function buildDirectResponse(plan: PlannerResult): ChatTurnCoreResult | null {
-    let headline: string;
-    let summary: string;
-    let answerability: ChatAnswerabilityOutcome;
-    if (plan.needsClarification) {
-        headline = 'One detail is needed';
-        summary = plan.clarification;
-        answerability = 'clarification_required';
-    } else if (plan.questionFocus === 'greeting') {
-        headline = 'How can I help?';
-        summary = 'I can check OcuTemp room status, current readings, schedules, AI auto-apply configuration, estimated energy, recent events, and verified app guidance.';
-        answerability = 'not_applicable';
-    } else if (plan.questionFocus === 'control_request') {
-        headline = 'Read-only assistance';
-        summary = 'I cannot change AC controls or facility data. I can check the room’s verified status before you use the authorized OcuTemp controls.';
-        answerability = 'not_applicable';
-    } else if (plan.questionFocus === 'unsupported') {
-        headline = 'Outside OcuGuide’s scope';
-        summary = 'I can answer only from verified OcuTemp facility data or verified OcuTemp help.';
-        answerability = 'not_applicable';
-    } else return null;
-
-    const packet: AnswerPacket = {
-        questionFocus: plan.questionFocus,
-        scope: emptyScope(plan.requestedRoomNames),
-        range: null,
-        answerability,
-        freshness: 'not_applicable',
-        facts: [],
-        recommendations: [],
-        notices: [],
-        displayPlan: [],
-    };
+function part(options: PartOptions, partId: ChatPartId = 'part-1'): SystemQueryPart {
+    const clarification = cleanText(options.clarification ?? '', 240);
     return {
-        questionFocus: plan.questionFocus,
-        answer: ensureRenderableAnswer({
-            headline,
-            summary,
-            blocks: [],
-            highlights: [],
-            caveats: [],
-        }),
-        presentations: [],
-        displayPlan: [],
-        partial: false,
-        notices: [],
-        stateSummary: summary,
-        stateContext: buildStateContext(plan, packet),
+        partId,
+        domain: options.domain,
+        operation: options.operation,
+        fields: options.fields,
+        filters: options.filters ?? [],
+        sort: options.sort ?? { field: options.fields[0]!, direction: 'none' },
+        scope: options.scope ?? scope('facility', [], 'all'),
+        timeRange: options.timeRange ?? defaultTimeRange(),
+        outputPreference: options.outputPreference ?? 'auto',
+        followUpReference: options.followUpReference ?? follow('none'),
+        limit: options.limit ?? 25,
+        needsClarification: clarification.length > 0,
+        clarification,
     };
 }
 
-function buildAnswerPacket(
-    plan: PlannerResult,
+function onePart(value: SystemQueryPart): SystemQueryPlan { return { parts: [value] }; }
+
+function clarificationPlan(message: string): SystemQueryPlan {
+    return onePart(part({ domain: 'conversation', operation: 'clarify',
+        fields: ['capabilities'], clarification: message }));
+}
+
+function scope(
+    kind: SystemQueryPart['scope']['kind'],
+    roomNames: string[],
+    inventory: SystemQueryPart['scope']['inventory'],
+): SystemQueryPart['scope'] {
+    return { kind, roomNames, inventory, referencePartId: '' };
+}
+
+function follow(kind: SystemQueryPart['followUpReference']['kind']): SystemQueryPart['followUpReference'] {
+    return { kind, partId: '', ordinal: 0 };
+}
+
+function defaultTimeRange(): SystemTimeRange {
+    return { preset: 'this_month', startDate: '', endDate: '', bucket: 'auto' };
+}
+
+function booleanFilter(field: SystemField, value: boolean): SystemFilter {
+    return { field, operator: 'eq', valueType: 'boolean', stringValue: '',
+        numberValue: 0, booleanValue: value, stringValues: [] };
+}
+
+function stringFilter(field: SystemField, value: string): SystemFilter {
+    return { field, operator: 'eq', valueType: 'string', stringValue: value,
+        numberValue: 0, booleanValue: false, stringValues: [] };
+}
+
+function buildPartWork(
+    requestedParts: readonly SystemQueryPart[],
+    executableParts: readonly SystemQueryPart[],
     results: readonly ToolExecutionResult[],
-    userMessage: string,
-): AnswerPacket {
-    const presentations = results.map((result) => result.presentation);
-    const scope = mergeScopes(results.map((result) => result.scope), plan.requestedRoomNames);
-    const notices = unique(results.flatMap((result) => result.notices)).slice(0, MAX_PACKET_NOTICES);
-    const facts: GroundingFact[] = [];
-    const recommendations: EvidenceBackedRecommendation[] = [];
-    const addFact = (id: string, statement: string): string => {
-        if (facts.length < MAX_PACKET_FACTS) facts.push({ id, statement: cleanText(statement, 700) });
-        return id;
-    };
-
-    let answerability: ChatAnswerabilityOutcome = requiredResultsUnavailable(
-        plan.questionFocus,
-        results,
-    )
-        ? 'source_unavailable'
-        : scopeAnswerability(scope, plan);
-    const scopePartial = scope.matchedRoomNames.length > 0 &&
-        (scope.missingRoomNames.length > 0 || scope.inactiveRoomNames.length > 0 ||
-            scope.ambiguousRoomNames.length > 0);
-    let freshness: ChatFreshnessOutcome = 'not_applicable';
-    let range: EnergyRange | null = null;
-    if (answerability === 'room_not_found') {
-        addFact('scope.not_found', notFoundStatement(scope));
-    } else if (answerability === 'room_inactive') {
-        addFact('scope.inactive', inactiveStatement(scope));
-    } else if (answerability === 'room_ambiguous') {
-        addFact('scope.ambiguous', ambiguousStatement(scope));
-    } else if (answerability === 'source_unavailable') {
-        addFact('source.unavailable', 'The requested OcuTemp data source is temporarily unavailable; no missing value was treated as zero or off.');
-    } else {
-        if (scope.missingRoomNames.length > 0) addFact(
-            'scope.partial_missing',
-            `${joinNames(scope.missingRoomNames)} ${scope.missingRoomNames.length === 1 ? 'is' : 'are'} not configured in OcuTemp; only verified matched rooms were used.`,
-        );
-        if (scope.inactiveRoomNames.length > 0) addFact(
-            'scope.partial_inactive',
-            `${joinNames(scope.inactiveRoomNames)} ${scope.inactiveRoomNames.length === 1 ? 'exists' : 'exist'} but ${scope.inactiveRoomNames.length === 1 ? 'is' : 'are'} inactive; only verified active matches were used.`,
-        );
-        if (scope.ambiguousRoomNames.length > 0) addFact(
-            'scope.partial_ambiguous',
-            `${joinNames(scope.ambiguousRoomNames)} ${scope.ambiguousRoomNames.length === 1 ? 'matches' : 'match'} more than one configured room and ${scope.ambiguousRoomNames.length === 1 ? 'was' : 'were'} not selected; only unambiguous verified matches were used.`,
-        );
-        const telemetry = findPresentation(presentations, 'room-telemetry');
-        const energy = findPresentation(presentations, 'energy-report');
-        const climate = findPresentation(presentations, 'climate-suggestions');
-        const events = findPresentation(presentations, 'recent-events');
-        const help = findPresentation(presentations, 'system-help');
-        range = energy?.range ?? null;
-        const derived = selectFocusFacts({
-            plan, telemetry, energy, climate, events, help, userMessage,
-            addFact, recommendations,
-        });
-        answerability = derived.answerability;
-        freshness = derived.freshness;
-    }
-
-    if (scopePartial && answerability === 'answerable') answerability = 'partial';
-    if (results.some((result) => result.partial) && answerability === 'answerable') {
-        answerability = 'partial';
-    }
-    const displayPlan = deriveDisplayPlan(plan, answerability, presentations);
-    return {
-        questionFocus: plan.questionFocus,
-        scope,
-        range,
-        answerability,
-        freshness,
-        facts: facts.slice(0, MAX_PACKET_FACTS),
-        recommendations: recommendations.slice(0, 5),
-        notices,
-        displayPlan,
-    };
-}
-
-interface FocusSelectionInput {
-    readonly plan: PlannerResult;
-    readonly telemetry: RoomTelemetryPresentation | undefined;
-    readonly energy: EnergyReportPresentation | undefined;
-    readonly climate: ClimateSuggestionsPresentation | undefined;
-    readonly events: RecentEventsPresentation | undefined;
-    readonly help: SystemHelpPresentation | undefined;
-    readonly userMessage: string;
-    readonly addFact: (id: string, statement: string) => string;
-    readonly recommendations: EvidenceBackedRecommendation[];
-}
-
-function selectFocusFacts(input: FocusSelectionInput): {
-    readonly answerability: ChatAnswerabilityOutcome;
-    readonly freshness: ChatFreshnessOutcome;
-} {
-    const { plan, telemetry, energy, climate, events, help, addFact, recommendations } = input;
-    if (TELEMETRY_FOCUSES.has(plan.questionFocus)) {
-        if (!telemetry) return unavailableSelection();
-        const freshness = telemetryFreshness(telemetry);
-        if (CURRENT_MEASUREMENT_FOCUSES.has(plan.questionFocus)) {
-            const usable = telemetry.rooms.filter((room) => room.measurementStatus === 'current' &&
-                (plan.questionFocus === 'current_temperature' ? room.temperature !== null
-                    : plan.questionFocus === 'current_humidity' ? room.humidity !== null
-                        : plan.questionFocus === 'current_condition' ? room.condition !== 'unknown'
-                            : room.acPower !== null));
-            if (usable.length === 0) {
-                addFact('telemetry.no_current', `No current ${focusMeasurementLabel(plan.questionFocus)} can be reported because none of the ${telemetry.rooms.length} selected active ${plural(telemetry.rooms.length, 'room')} has an online device with that current measurement.`);
-                return { answerability: 'no_online_reading', freshness };
-            }
-            for (const [index, room] of usable.entries()) {
-                const value = plan.questionFocus === 'current_temperature' ? `${room.temperature} °C`
-                    : plan.questionFocus === 'current_humidity' ? `${room.humidity}% relative humidity`
-                        : plan.questionFocus === 'current_condition' ? room.condition
-                            : room.acPower ? 'on' : 'off';
-                const conditionReadings = plan.questionFocus === 'current_condition'
-                    ? `${room.temperature === null ? '' : `; current temperature is ${room.temperature} °C`}${room.humidity === null ? '' : `; current humidity is ${room.humidity}%`}`
-                    : '';
-                addFact(`telemetry.current.${index + 1}`, `${room.roomName}'s current ${focusMeasurementLabel(plan.questionFocus)} is ${value}${conditionReadings}; its device is online${room.lastSeen ? ` with last contact at ${room.lastSeen}` : ''}.`);
-            }
-            const unavailableCount = telemetry.rooms.length - usable.length;
-            if (unavailableCount > 0) {
-                addFact('telemetry.current.partial', `${unavailableCount} of ${telemetry.rooms.length} selected active ${plural(telemetry.rooms.length, 'room')} ${unavailableCount === 1 ? 'does' : 'do'} not have a current online ${focusMeasurementLabel(plan.questionFocus)} available.`);
-            }
-            if (plan.questionFocus === 'current_condition' && /\bwhy\b/iu.test(input.userMessage)) {
-                const hot = usable.filter((room) => room.condition === 'hot' || room.condition === 'critical');
-                if (hot.length === 0) addFact(
-                    'telemetry.not_hot',
-                    `${usable.length === 1 ? usable[0]!.roomName : 'The selected online rooms'} ${usable.length === 1 ? 'is' : 'are'} not currently classified as hot or critical by OcuTemp.`,
-                );
-                else addFact('telemetry.cause_unknown', 'OcuTemp has a verified current hot or critical observation, but the available evidence does not establish its cause.');
-            }
-            return { answerability: unavailableCount > 0 ? 'partial' : 'answerable', freshness };
-        }
-        if (plan.questionFocus === 'last_known_temperature') {
-            const rows = telemetry.rooms.filter((room) => room.temperature !== null && room.lastSeen !== null);
-            if (rows.length === 0) {
-                addFact('telemetry.no_last_known', 'No valid last-known temperature with a timestamp is available for the selected active room scope.');
-                return { answerability: 'insufficient_evidence', freshness };
-            }
-            rows.forEach((room, index) => addFact(
-                `telemetry.last_known.${index + 1}`,
-                room.measurementStatus === 'current'
-                    ? `${room.roomName}'s latest temperature is ${room.temperature} °C from ${room.lastSeen}; it is a current reading and the device is online.`
-                    : `${room.roomName}'s last-known temperature is ${room.temperature} °C from ${room.lastSeen}; it is not a current reading and the device state is ${room.onlineState}.`,
-            ));
-            return { answerability: rows.length < telemetry.rooms.length ? 'partial' : 'answerable', freshness };
-        }
-        if (plan.questionFocus === 'room_existence') {
-            addFact('scope.exists', telemetry.rooms.length === 1
-                ? `${telemetry.rooms[0]!.roomName} is configured and active in OcuTemp.`
-                : `${telemetry.rooms.length} requested rooms are configured and active in OcuTemp: ${joinNames(telemetry.rooms.map((room) => room.roomName))}.`);
-        } else if (plan.questionFocus === 'device_status') {
-            telemetry.rooms.forEach((room, index) => addFact(
-                `telemetry.status.${index + 1}`,
-                room.deviceAssignmentStatus === 'not_assigned'
-                    ? `${room.roomName} has no assigned device in OcuTemp.`
-                    : room.deviceAssignmentStatus === 'unavailable'
-                        ? `${room.roomName} has an assigned device, but its device data is unavailable.`
-                        : `${room.roomName}'s assigned device status is ${room.onlineState}${room.lastSeen ? `; last contact was ${room.lastSeen}` : '; no valid last-contact timestamp is available'}.`,
-            ));
-        } else if (plan.questionFocus === 'ai_auto_apply_status') {
-            telemetry.rooms.forEach((room, index) => addFact(
-                `telemetry.ai.${index + 1}`,
-                room.deviceAssignmentStatus === 'not_assigned'
-                    ? `${room.roomName} has no assigned device, so no device AI auto-apply configuration is available.`
-                    : room.deviceAssignmentStatus === 'unavailable'
-                        ? `${room.roomName} has an assigned device, but its AI auto-apply configuration is unavailable.`
-                        : `${room.roomName}'s stored OcuTemp AI auto-apply configuration is ${room.aiAutoApply === null ? 'unknown' : room.aiAutoApply ? 'enabled' : 'disabled'}; its device status is ${room.onlineState}${room.onlineState === 'online' ? '' : ', so current device application cannot be confirmed'}.`,
-            ));
-        } else if (plan.questionFocus === 'schedule_count') {
-            const total = telemetry.rooms.reduce((sum, room) => sum + room.schedules.length, 0);
-            addFact('schedule.total', `${total} valid configured ${plural(total, 'schedule')} ${total === 1 ? 'is' : 'are'} stored across ${telemetry.rooms.length} selected active ${plural(telemetry.rooms.length, 'room')}.`);
-            telemetry.rooms.forEach((room, index) => addFact(
-                `schedule.count.${index + 1}`,
-                `${room.roomName} has ${room.schedules.length} valid configured ${plural(room.schedules.length, 'schedule')}.`,
-            ));
-        } else if (plan.questionFocus === 'schedule_list') {
-            const total = telemetry.rooms.reduce((sum, room) => sum + room.schedules.length, 0);
-            addFact('schedule.total', `${total} valid configured ${plural(total, 'schedule')} ${total === 1 ? 'is' : 'are'} stored across ${telemetry.rooms.length} selected active ${plural(telemetry.rooms.length, 'room')}.`);
-            telemetry.rooms.forEach((room, roomIndex) => {
-                if (room.schedules.length === 0) addFact(`schedule.none.${roomIndex + 1}`, `${room.roomName} has no valid configured schedules.`);
-                room.schedules.forEach((schedule, scheduleIndex) => addFact(
-                    `schedule.item.${roomIndex + 1}.${scheduleIndex + 1}`,
-                    `${room.roomName}: ${schedule.day}, ${schedule.startTime}–${schedule.endTime}, ${schedule.subject}.`,
-                ));
-                addFact(`schedule.count.${roomIndex + 1}`, `${room.roomName} has ${room.schedules.length} valid configured ${plural(room.schedules.length, 'schedule')}.`);
-            });
-        }
-        return { answerability: 'answerable', freshness };
-    }
-
-    if (ENERGY_FOCUSES.has(plan.questionFocus)) {
-        if (!energy) return unavailableSelection();
-        if (energy.metrics.roomsWithRecords === 0 || energy.metrics.totalKwh === null) {
-            const noDevice = energy.rooms.filter((room) => room.status === 'no_device');
-            if (noDevice.length > 0 && noDevice.length === energy.rooms.length) {
-                addFact('energy.no_devices', `${joinNames(noDevice.map((room) => room.roomName))} ${noDevice.length === 1 ? 'has' : 'have'} no assigned device, so no room energy source exists for the selected scope.`);
-                return { answerability: 'insufficient_evidence', freshness: 'not_applicable' };
-            }
-            addFact('energy.no_records', `No recorded estimated energy is available for the selected active room scope from ${energy.range.start} through ${energy.range.end}; no zero total or ranking can be inferred.`);
-            if (plan.questionFocus === 'facility_efficiency_analysis') {
-                const ref = addFact('energy.collect', 'Facility-specific energy-waste analysis requires recorded energy evidence in the selected period.');
-                recommendations.push({
-                    category: 'collect_missing_energy_data',
-                    text: 'Collect missing energy data before drawing a facility-specific waste conclusion.',
-                    evidenceRefs: [ref],
-                });
-            }
-            return { answerability: 'no_energy_records', freshness: 'not_applicable' };
-        }
-        const coverageRef = addFact(
-            'energy.coverage',
-            `From ${energy.range.start} through ${energy.range.end}, ${energy.metrics.roomsWithRecords} of ${energy.metrics.activeRooms} active ${plural(energy.metrics.activeRooms, 'room')} have recorded energy, and records exist on ${energy.metrics.recordedDays} of ${energy.metrics.expectedDays} calendar days (${energy.metrics.dataCoveragePercent}% temporal data coverage). Energy values are estimated and not billing-grade.`,
-        );
-        const recorded = energy.rooms.filter((room) => room.status === 'recorded' && room.estimatedKwh !== null);
-        const leaders = recorded.filter((room) => room.rank === 1);
-        if (plan.questionFocus === 'energy_total' || plan.questionFocus === 'energy_report') {
-            const runtime = energy.metrics.runtimeSeconds === null
-                ? 'a complete runtime total is unavailable'
-                : `${energy.metrics.runtimeSeconds} runtime seconds`;
-            const sessions = energy.metrics.sessionCount === null
-                ? 'a complete session total is unavailable'
-                : `${energy.metrics.sessionCount} recorded sessions`;
-            addFact('energy.total', `The selected period's recorded total is an estimated ${energy.metrics.totalKwh} kWh from ${energy.range.start} through ${energy.range.end}; ${runtime}, and ${sessions}.`);
-            if (plan.questionFocus === 'energy_report' && leaders.length > 0) {
-                addFact('energy.leader', leaderStatement(leaders, energy));
-            }
-        } else if (plan.questionFocus === 'energy_rank_winner') {
-            addFact('energy.winner', leaderStatement(leaders, energy));
-        } else if (plan.questionFocus === 'energy_ranking') {
-            recorded.sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999)).forEach((room, index) => addFact(
-                `energy.rank.${index + 1}`,
-                `${room.roomName} ranks ${room.rank} with an estimated ${room.estimatedKwh} kWh (${room.sharePercent}% of the recorded total) from ${energy.range.start} through ${energy.range.end}.`,
-            ));
-        } else if (plan.questionFocus === 'energy_trend') {
-            const points = energy.trend.filter((point) => point.estimatedKwh !== null);
-            if (points.length === 0) {
-                addFact('energy.no_trend', `No recorded trend point is available from ${energy.range.start} through ${energy.range.end}.`);
-                return { answerability: 'no_energy_records', freshness: 'not_applicable' };
-            }
-            points.forEach((point, index) => addFact(
-                `energy.trend.${index + 1}`,
-                `${point.label} (${point.start} through ${point.end}) has an estimated ${point.estimatedKwh} kWh from records on ${point.recordedDays} of ${point.expectedDays} calendar days.`,
-            ));
-        } else if (plan.questionFocus === 'facility_efficiency_analysis') {
-            if (leaders.length > 0 && energy.metrics.totalKwh !== null &&
-                energy.metrics.totalKwh > 0) {
-                const leaderRef = addFact('energy.analysis.leader', leaderStatement(leaders, energy));
-                const leaderNames = joinNames(leaders.map((room) => room.roomName));
-                recommendations.push({
-                    category: 'inspect_high_runtime_room',
-                    text: `Review ${leaderNames} first because ${leaders.length === 1 ? 'it has' : 'they tie for'} the highest estimated energy in the available records for the selected period; this prioritizes incomplete evidence and is not proof of waste.`,
-                    evidenceRefs: [leaderRef],
-                });
-            }
-            if (energy.metrics.dataCoveragePercent < 100) {
-                recommendations.push({
-                    category: 'collect_missing_energy_data',
-                    text: 'Collect the missing period data before treating this as a complete facility-wide waste analysis.',
-                    evidenceRefs: [coverageRef],
-                });
-            }
-            if (input.telemetry) {
-                const offline = input.telemetry.rooms.filter((room) =>
-                    room.onlineState === 'stale' || room.onlineState === 'offline');
-                if (offline.length > 0) {
-                    const ref = addFact('telemetry.analysis.offline', `${offline.length} selected ${plural(offline.length, 'room')} ${offline.length === 1 ? 'does' : 'do'} not have an online device: ${joinNames(offline.map((room) => room.roomName))}. Current operating behavior cannot be confirmed for those rooms.`);
-                    recommendations.push({
-                        category: 'investigate_offline_device',
-                        text: 'Investigate the offline devices before relying on current operating behavior in the energy review.',
-                        evidenceRefs: [ref],
-                    });
-                }
-            }
-        }
-        const partial = energy.metrics.coveragePercent < 100 ||
-            energy.metrics.dataCoveragePercent < 100 || input.telemetry?.rooms.some((room) => room.onlineState !== 'online');
-        return { answerability: partial ? 'partial' : 'answerable', freshness: 'not_applicable' };
-    }
-
-    if (plan.questionFocus === 'climate_suggestion') {
-        if (!climate) return unavailableSelection();
-        const available = climate.rooms.filter((room) => room.status === 'available');
-        if (available.length === 0) {
-            addFact('climate.none', 'No valid stored climate suggestion is available for the selected active room scope.');
-            return { answerability: 'insufficient_evidence', freshness: 'not_applicable' };
-        }
-        available.forEach((room, index) => addFact(
-            `climate.${index + 1}`,
-            `${room.roomName} has a stored suggestion of ${room.suggestedTemp} °C${room.reason ? ` with stored reason: ${room.reason}` : ''}; applied state is ${room.applied === null ? 'unknown' : room.applied ? 'yes' : 'no'} and AI auto-apply configuration is ${room.autoApplyEnabled === null ? 'unknown' : room.autoApplyEnabled ? 'enabled' : 'disabled'}.`,
-        ));
-        return { answerability: available.length < climate.rooms.length ? 'partial' : 'answerable', freshness: 'not_applicable' };
-    }
-
-    if (plan.questionFocus === 'recent_events') {
-        if (!events) return unavailableSelection();
-        if (events.events.length === 0) {
-            addFact('events.none', 'No valid recent operational events matched the selected active room scope.');
-            return { answerability: 'insufficient_evidence', freshness: 'not_applicable' };
-        }
-        events.events.forEach((event, index) => addFact(
-            `events.${index + 1}`,
-            `${event.roomName}: ${event.eventType} at ${event.updatedAt}${event.mode ? `, mode ${event.mode}` : ''}${event.applied === null ? '' : `, applied ${event.applied ? 'yes' : 'no'}`}; ${event.detail}.`,
-        ));
-        return { answerability: 'answerable', freshness: 'not_applicable' };
-    }
-
-    if (plan.questionFocus === 'system_help') {
-        if (!help) return unavailableSelection();
-        if (help.restricted) addFact('help.restricted', `${help.title} requires administrator access in OcuTemp.`);
-        else if (help.steps.length === 0) addFact('help.none', 'No exact verified OcuTemp help entry matched this request.');
-        else {
-            addFact('help.summary', `${help.title} has ${help.steps.length} verified OcuTemp steps.`);
-            help.steps.forEach((step, index) => addFact(`help.step.${index + 1}`, `${index + 1}. ${step}`));
-        }
-        return { answerability: help.steps.length > 0 ? 'answerable' : 'insufficient_evidence', freshness: 'not_applicable' };
-    }
-    return unavailableSelection();
-}
-
-function deriveDisplayPlan(
-    plan: PlannerResult,
-    outcome: ChatAnswerabilityOutcome,
-    presentations: readonly ChatPresentation[],
-): ChatDisplayDirective[] {
-    if (plan.outputPreference === 'text' || TERMINAL_OUTCOMES.has(outcome)) return [];
-    const telemetry = findPresentation(presentations, 'room-telemetry');
-    const energy = findPresentation(presentations, 'energy-report');
-    const climate = findPresentation(presentations, 'climate-suggestions');
-    const events = findPresentation(presentations, 'recent-events');
-    let directive: ChatDisplayDirective | null = null;
-    switch (plan.questionFocus) {
-        case 'current_temperature':
-        case 'current_humidity':
-        case 'current_condition': {
-            const currentCount = telemetry?.rooms.filter((room) =>
-                room.measurementStatus === 'current' &&
-                (plan.questionFocus === 'current_temperature' ? room.temperature !== null
-                    : plan.questionFocus === 'current_humidity' ? room.humidity !== null
-                        : room.condition !== 'unknown')).length ?? 0;
-            if (currentCount >= 2 && (plan.allRooms || plan.outputPreference === 'table')) {
-                directive = telemetry ? { presentationId: telemetry.id, mode: 'table' } : null;
-            }
-            break;
-        }
-        case 'last_known_temperature': {
-            const readable = telemetry?.rooms.filter((room) =>
-                room.temperature !== null && room.lastSeen !== null).length ?? 0;
-            if (telemetry && readable >= 2 &&
-                (plan.allRooms || plan.outputPreference === 'table')) directive = {
-                presentationId: telemetry.id,
-                mode: 'table',
-            };
-            break;
-        }
-        case 'device_status':
-            if (telemetry && telemetry.rooms.length >= 2 &&
-                (plan.allRooms || plan.outputPreference === 'table')) directive = {
-                presentationId: telemetry.id,
-                mode: 'table',
-            };
-            break;
-        case 'ac_power_status': {
-            const readable = telemetry?.rooms.filter((room) =>
-                room.measurementStatus === 'current' && room.acPower !== null).length ?? 0;
-            if (telemetry && readable >= 2 &&
-                (plan.allRooms || plan.outputPreference === 'table')) directive = {
-                presentationId: telemetry.id,
-                mode: 'table',
-            };
-            break;
-        }
-        case 'ai_auto_apply_status': {
-            const values = new Set(telemetry?.rooms.map((room) => room.aiAutoApply) ?? []);
-            if (telemetry && telemetry.rooms.length > 1 &&
-                (plan.outputPreference === 'table' || values.size > 1)) {
-                directive = { presentationId: telemetry.id, mode: 'table' };
-            }
-            break;
-        }
-        case 'schedule_list':
-            if (telemetry && telemetry.rooms.length > 1 &&
-                telemetry.rooms.some((room) => room.schedules.length > 0)) directive = {
-                presentationId: telemetry.id,
-                mode: 'table',
-            };
-            break;
-        case 'energy_total':
-            if (energy && plan.outputPreference !== 'auto') directive = {
-                presentationId: energy.id,
-                mode: plan.outputPreference === 'table' ? 'table'
-                    : 'trend_chart',
-            };
-            break;
-        case 'energy_rank_winner':
-            if (energy && plan.outputPreference !== 'auto') directive = {
-                presentationId: energy.id,
-                mode: plan.outputPreference === 'graph' ? 'ranking_chart' : 'table',
-            };
-            break;
-        case 'energy_ranking':
-            if (energy) {
-                const recordedRooms = energy.rooms.filter((room) =>
-                    room.status === 'recorded' && room.estimatedKwh !== null).length;
-                directive = {
-                    presentationId: energy.id,
-                    mode: plan.outputPreference === 'graph' ||
-                        plan.outputPreference === 'auto' && recordedRooms <= 10
-                        ? 'ranking_chart'
-                        : 'table',
-                };
-            }
-            break;
-        case 'energy_trend':
-            if (energy) directive = {
-                presentationId: energy.id,
-                mode: plan.outputPreference === 'table' ? 'table' : 'trend_chart',
-            };
-            break;
-        case 'energy_report':
-            if (energy) directive = {
-                presentationId: energy.id,
-                mode: plan.outputPreference === 'table' ? 'table'
-                    : plan.outputPreference === 'graph' ? 'trend_chart' : 'full_report',
-            };
-            break;
-        case 'facility_efficiency_analysis':
-            if (energy && plan.outputPreference !== 'auto') directive = {
-                presentationId: energy.id,
-                mode: plan.outputPreference === 'graph' ? 'ranking_chart' : 'table',
-            };
-            break;
-        case 'climate_suggestion':
-            if (climate && (climate.rooms.length > 1 || plan.outputPreference === 'table')) {
-                directive = { presentationId: climate.id, mode: 'table' };
-            }
-            break;
-        case 'recent_events':
-            if (events && events.events.length > 1) directive = { presentationId: events.id, mode: 'table' };
-            break;
-        case 'system_help':
-            break;
-        default:
-            break;
-    }
-    if (directive) {
-        const selectedDirective = directive;
-        const presentation = presentations.find((item) => item.id === selectedDirective.presentationId);
-        if (!presentation || presentation.availability !== 'available' ||
-            !displayCompatible(selectedDirective.mode, presentation)) directive = null;
-    }
-    const candidate = directive ? [directive] : [];
-    validateDisplayPlan(candidate, presentations);
-    return candidate;
-}
-
-function validateDisplayPlan(
-    directives: readonly ChatDisplayDirective[],
-    presentations: readonly ChatPresentation[],
-): void {
-    if (!Array.isArray(directives) || directives.length > 1) throw invalidDisplayPlan();
-    const ids = new Set<string>();
-    for (const directive of directives) {
-        const directiveKeys = Object.keys(directive);
-        if (directiveKeys.length !== 2 ||
-            !directiveKeys.every((key) => key === 'presentationId' || key === 'mode') ||
-            typeof directive.presentationId !== 'string' || ids.has(directive.presentationId)) {
-            throw invalidDisplayPlan();
-        }
-        ids.add(directive.presentationId);
-        const presentation = presentations.find((item) => item.id === directive.presentationId);
-        if (!presentation || presentation.availability !== 'available' ||
-            !displayCompatible(directive.mode, presentation)) throw invalidDisplayPlan();
-    }
-}
-
-function displayCompatible(mode: ChatDisplayMode, presentation: ChatPresentation): boolean {
-    if (mode === 'compact_metrics') return presentation.kind === 'energy-report' &&
-        presentation.metrics.roomsWithRecords > 0;
-    if (mode === 'key_value') return presentation.kind === 'room-telemetry' && presentation.rooms.length > 0;
-    if (mode === 'bullet_list') return (presentation.kind === 'room-telemetry' &&
-        presentation.rooms.some((room) => room.schedules.length > 0)) ||
-        (presentation.kind === 'system-help' && presentation.steps.length > 0);
-    if (mode === 'table') {
-        if (presentation.kind === 'energy-report') return presentation.rooms.length > 0;
-        if (presentation.kind === 'room-telemetry') return presentation.rooms.length > 0;
-        if (presentation.kind === 'climate-suggestions') return presentation.rooms.length > 0;
-        if (presentation.kind === 'recent-events') return presentation.events.length > 0;
-        return false;
-    }
-    if (mode === 'ranking_chart') return presentation.kind === 'energy-report' &&
-        presentation.rooms.filter((room) => room.status === 'recorded').length >= 2;
-    if (mode === 'trend_chart') return presentation.kind === 'energy-report' &&
-        presentation.trend.some((point) => point.estimatedKwh !== null);
-    return mode === 'full_report' && presentation.kind === 'energy-report' &&
-        presentation.metrics.roomsWithRecords > 0;
-}
-
-function validateGroundedAnswerDraft(
-    draft: GroundedAnswerDraft,
-    packet: AnswerPacket,
-    presentations: readonly ChatPresentation[],
-): GroundedAnswerDraft {
-    if (!hasExactKeys(draft, [
-        'headline', 'headlineEvidenceRefs', 'summary', 'summaryEvidenceRefs',
-        'highlights', 'recommendations',
-    ]) || !isSafeText(draft.headline, 160, false) || !isSafeText(draft.summary, 800, false) ||
-        !Array.isArray(draft.highlights) || draft.highlights.length > 6 ||
-        !Array.isArray(draft.recommendations) || draft.recommendations.length > 5) {
-        throw invalidGeneratedAnswer();
-    }
-    const factMap = new Map(packet.facts.map((fact) => [fact.id, fact.statement]));
-    validateGroundedText(draft.headline, draft.headlineEvidenceRefs, factMap, packet);
-    validateGroundedText(draft.summary, draft.summaryEvidenceRefs, factMap, packet);
-    for (const highlight of draft.highlights) {
-        if (!hasExactKeys(highlight, ['text', 'evidenceRefs']) ||
-            !isSafeText(highlight.text, 300, false)) throw invalidGeneratedAnswer();
-        validateGroundedText(highlight.text, highlight.evidenceRefs, factMap, packet);
-    }
-    const allowedRecommendations = new Map(packet.recommendations.map((item) => [
-        `${item.category}\u0000${item.text}\u0000${item.evidenceRefs.join(',')}`,
-        item,
-    ]));
-    for (const recommendation of draft.recommendations) {
-        if (!hasExactKeys(recommendation, ['category', 'text', 'evidenceRefs']) ||
-            !RECOMMENDATION_CATEGORIES.includes(recommendation.category) ||
-            !isSafeText(recommendation.text, 300, false) ||
-            !Array.isArray(recommendation.evidenceRefs)) throw invalidGeneratedAnswer();
-        const key = `${recommendation.category}\u0000${recommendation.text}\u0000${recommendation.evidenceRefs.join(',')}`;
-        if (!allowedRecommendations.has(key)) throw invalidGeneratedAnswer();
-    }
-    const normalized: GroundedAnswerDraft = {
-        headline: cleanText(draft.headline, 160),
-        headlineEvidenceRefs: unique(draft.headlineEvidenceRefs),
-        summary: cleanText(draft.summary, 800),
-        summaryEvidenceRefs: unique(draft.summaryEvidenceRefs),
-        highlights: draft.highlights.map((item) => ({
-            text: cleanText(item.text, 300),
-            evidenceRefs: unique(item.evidenceRefs),
-        })),
-        recommendations: draft.recommendations.map((item) => ({
-            category: item.category,
-            text: cleanText(item.text, 300),
-            evidenceRefs: unique(item.evidenceRefs),
-        })),
-    };
-    validateFocusSpecificAnswer(normalized, packet, presentations);
-    return normalized;
-}
-
-function validateGroundedText(
-    text: string,
-    refs: readonly string[],
-    factMap: ReadonlyMap<string, string>,
-    packet: AnswerPacket,
-): void {
-    if (!Array.isArray(refs) || refs.length < 1 || refs.length > 12 ||
-        new Set(refs).size !== refs.length || refs.some((ref) =>
-            typeof ref !== 'string' || ref.length > 80 || !factMap.has(ref))) {
-        throw invalidGeneratedAnswer();
-    }
-    const supportedStatements = refs.map((ref) => factMap.get(ref)!);
-    const evidence = supportedStatements.join(' ');
-    if (/<[^>]+>|```|https?:\/\/|(?:firebase|database)\s*(?:path|url)|system prompt|api[_ -]?key|bearer\s+[a-z0-9]/iu.test(text) ||
-        /\b(?:i|we|ocuguide)\s+(?:turned|switched|set|changed|applied|updated|deleted|controlled|fixed|wrote)\b/iu.test(text) ||
-        /\b(?:caused|causes|because of|due to|resulted in|led to|as a result of)\b/iu.test(text)) {
-        throw invalidGeneratedAnswer();
-    }
-    const evidenceNumbers = new Set(extractNumbers(evidence));
-    if (extractNumbers(text).some((number) => !evidenceNumbers.has(number))) throw invalidGeneratedAnswer();
-    validateNumericAssociations(text, evidence);
-    const normalizedEvidence = normalizeForComparison(evidence);
-    for (const status of ['online', 'offline', 'stale', 'hot', 'critical', 'comfortable', 'enabled', 'disabled', 'unknown', 'on', 'off']) {
-        if (hasWord(text, status) && !hasWord(normalizedEvidence, status)) throw invalidGeneratedAnswer();
-    }
-    const claimedRooms = extractMentionedRoomKeys(text, packet.scope.activeRoomNames);
-    const supportedRooms = extractMentionedRoomKeys(evidence, packet.scope.activeRoomNames);
-    for (const roomKey of claimedRooms) {
-        if (!supportedRooms.has(roomKey)) throw invalidGeneratedAnswer();
-    }
-    const hasSpecificRowClaim = extractNumbers(text).length > 0 || claimedRooms.size > 0 ||
-        /\b(?:online|offline|stale|hot|critical|comfortable|enabled|disabled|unknown|on|off)\b/iu.test(text);
-    if (EXACT_ROW_CLAIM_FOCUSES.has(packet.questionFocus) && hasSpecificRowClaim &&
-        !supportedStatements.some((statement) => sameNormalizedClaim(text, statement))) {
-        throw invalidGeneratedAnswer();
-    }
-    const evidenceTokens = new Set(extractClaimTokens(evidence));
-    for (const token of extractClaimTokens(text)) {
-        if (!evidenceTokens.has(token) && !GROUNDING_GLUE_TOKENS.has(token)) {
-            throw invalidGeneratedAnswer();
-        }
-    }
-    if (/\b(?:wast(?:e|es|ed|ing)|inefficien\w*|uncomfortable|excessive|faulty|broken|poor|unsafe|maintenance|servic(?:e|ing)|repair|filter|insulation|refrigerant)\b/iu.test(text) &&
-        !/\b(?:wast(?:e|es|ed|ing)|inefficien\w*|uncomfortable|excessive|faulty|broken|poor|unsafe|maintenance|servic(?:e|ing)|repair|filter|insulation|refrigerant)\b/iu.test(evidence)) {
-        throw invalidGeneratedAnswer();
-    }
-    if (packet.displayPlan.length === 0 && /\b(?:table|chart|graph|visual)\b/iu.test(text)) {
-        throw invalidGeneratedAnswer();
-    }
-}
-
-function validateFocusSpecificAnswer(
-    draft: GroundedAnswerDraft,
-    packet: AnswerPacket,
-    presentations: readonly ChatPresentation[],
-): void {
-    const text = normalizeForComparison([
-        draft.headline, draft.summary, ...draft.highlights.map((item) => item.text),
-        ...draft.recommendations.map((item) => item.text),
-    ].join(' '));
-    if (packet.answerability === 'room_not_found' && !/\b(?:not configured|not found|does not exist)\b/u.test(text)) {
-        throw invalidGeneratedAnswer();
-    }
-    if (packet.answerability === 'no_online_reading' &&
-        !/\b(?:no current|cannot report|not online|no room is online|none).*(?:current|online)|(?:current).*(?:unavailable|cannot)/u.test(text)) {
-        throw invalidGeneratedAnswer();
-    }
-    if (packet.questionFocus === 'energy_rank_winner') {
-        const energy = findPresentation(presentations, 'energy-report');
-        const leaders = energy?.rooms.filter((room) => room.rank === 1 && room.estimatedKwh !== null) ?? [];
-        if (leaders.length === 0 || !energy ||
-            !containsPhrase(text, leaderStatement(leaders, energy)) ||
-            leaders.some((leader) => !containsPhrase(text, leader.roomName)) ||
-            leaders.some((leader) => !containsPhrase(text, String(leader.estimatedKwh))) ||
-            !containsPhrase(text, energy.range.start) ||
-            !containsPhrase(text, energy.range.end) ||
-            !/\bestimated\b/u.test(text) || !/\bkwh\b/u.test(text) ||
-            !/\b(?:first|rank|tie)\b/u.test(text) ||
-            (leaders.length > 1 && !/\btie\b/u.test(text))) throw invalidGeneratedAnswer();
-    }
-    if (packet.questionFocus === 'energy_total' || packet.questionFocus === 'energy_report') {
-        const total = packet.facts.find((fact) => fact.id === 'energy.total');
-        if (total && !containsPhrase(text, total.statement)) throw invalidGeneratedAnswer();
-    }
-    if (packet.questionFocus === 'energy_total') {
-        const energy = findPresentation(presentations, 'energy-report');
-        if (!energy || energy.metrics.totalKwh === null ||
-            !extractNumbers(text).includes(String(energy.metrics.totalKwh)) ||
-            !containsPhrase(text, energy.range.start) || !containsPhrase(text, energy.range.end) ||
-            !/\bestimated\b/u.test(text) || !/\bkwh\b/u.test(text)) {
-            throw invalidGeneratedAnswer();
-        }
-    }
-    if (packet.questionFocus === 'ai_auto_apply_status' && !/\b(?:configured|configuration|stored)\b/u.test(text)) {
-        throw invalidGeneratedAnswer();
-    }
-    if (packet.questionFocus === 'facility_efficiency_analysis') {
-        const allowed = new Set(packet.recommendations.map((item) => item.text));
-        if (draft.recommendations.some((item) => !allowed.has(item.text))) throw invalidGeneratedAnswer();
-        if (packet.recommendations.length > 0 && draft.recommendations.length === 0) {
-            throw invalidGeneratedAnswer();
-        }
-        if (/\b(?:filter|insulation|seal leaks|service|maintenance|setpoint|refrigerant)\b/u.test(text)) {
-            throw invalidGeneratedAnswer();
-        }
-    }
-}
-
-function buildGroundedPublicAnswer(
-    draft: GroundedAnswerDraft,
-    packet: AnswerPacket,
-    presentations: readonly ChatPresentation[],
-): ChatAnswer {
-    const highlights = unique(draft.highlights.map((item) => cleanText(item.text, 300)))
-        .filter(Boolean).slice(0, 6).map((text) => ({ text }));
-    const recommendationItems = draft.recommendations.map((item) => cleanText(item.text, 240));
-    const blocks: ChatAnswerBlock[] = [];
-    if (recommendationItems.length > 0) blocks.push({
-        kind: recommendationItems.length === 1 ? 'callout' : 'bullet-list',
-        text: recommendationItems.length === 1 ? recommendationItems[0]! : 'Evidence-based next steps',
-        items: recommendationItems.length === 1 ? [] : recommendationItems,
-        entries: [],
-        tone: 'info',
+    unresolved: ReadonlyMap<ChatPartId, string>,
+    deniedIds: ReadonlySet<ChatPartId>,
+    displayPlan: readonly ChatDisplayDirective[],
+): PartWork[] {
+    return requestedParts.map((requested, index): PartWork => {
+        const executable = executableParts[index]!;
+        const partResults = results.filter((result) => result.partId === requested.partId);
+        const answerability = deniedIds.has(requested.partId) ? 'permission_denied'
+            : unresolved.has(requested.partId) || executable.needsClarification
+                ? 'clarification_required'
+                : determineAnswerability(requested, partResults);
+        const facts = partResults.flatMap((result) => result.facts)
+            .filter((fact) => fact.partId === requested.partId);
+        const scopeResolution = mergeScopes(partResults.map((result) => result.scope));
+        const range = partResults.map((result) => result.presentation)
+            .find((presentation): presentation is EnergyReportPresentation =>
+                presentation.kind === 'energy-report')?.range ?? null;
+        const recommendations = buildRecommendations(requested, partResults);
+        const packet: AnswerPacket = {
+            partId: requested.partId,
+            domain: requested.domain,
+            operation: requested.operation,
+            fields: [...requested.fields],
+            scope: scopeResolution,
+            range,
+            answerability,
+            freshness: determineFreshness(partResults),
+            facts,
+            recommendations,
+            notices: uniqueStrings(partResults.flatMap((result) => result.notices)).slice(0, 6),
+            displayPlan: displayPlan.filter((directive) => directive.partId === requested.partId),
+        };
+        return { requested, executable, results: partResults, answerability, packet };
     });
-    else if (highlights.length >= 2) blocks.push({
-        kind: 'bullet-list', text: 'Key details',
-        items: highlights.map((item) => item.text).slice(0, 8), entries: [], tone: 'neutral',
-    });
-    return {
-        headline: cleanText(draft.headline, 160),
-        summary: cleanText(draft.summary, 800),
-        blocks,
-        highlights,
-        caveats: buildCaveats(packet, presentations),
-    };
 }
 
-function buildTargetedAnswer(packet: AnswerPacket, presentations: readonly ChatPresentation[]): ChatAnswer {
-    const telemetry = findPresentation(presentations, 'room-telemetry');
-    const energy = findPresentation(presentations, 'energy-report');
-    const climate = findPresentation(presentations, 'climate-suggestions');
-    const events = findPresentation(presentations, 'recent-events');
-    const help = findPresentation(presentations, 'system-help');
-    if (packet.answerability === 'room_not_found') return simpleAnswer('Room not found', notFoundStatement(packet.scope));
-    if (packet.answerability === 'room_inactive') return simpleAnswer('Room inactive', inactiveStatement(packet.scope));
-    if (packet.answerability === 'room_ambiguous') return simpleAnswer('Room name is ambiguous', ambiguousStatement(packet.scope));
-    if (packet.answerability === 'source_unavailable') return simpleAnswer(
-        'Data temporarily unavailable',
-        'I cannot safely read the requested OcuTemp data right now, so I cannot answer this question yet.',
-        buildCaveats(packet, presentations),
-    );
-    if (packet.answerability === 'no_online_reading') return simpleAnswer(
-        'No current reading available',
-        `I cannot report a current ${focusMeasurementLabel(packet.questionFocus)} because no selected room has an online device with that current measurement.`,
-        buildCaveats(packet, presentations),
-    );
-    if (packet.answerability === 'no_energy_records') return simpleAnswer(
-        'No recorded energy for this period',
-        energy ? `No recorded estimated energy is available from ${energy.range.start} through ${energy.range.end}, so I cannot calculate a total, ranking, trend, or facility-specific waste conclusion.` : 'No recorded estimated energy is available for the selected period.',
-        buildCaveats(packet, presentations),
-    );
-    if (packet.answerability === 'insufficient_evidence') {
-        const noDevices = packet.facts.find((fact) => fact.id === 'energy.no_devices');
-        if (noDevices) return simpleAnswer('No assigned energy source', noDevices.statement, buildCaveats(packet, presentations));
-        if (packet.questionFocus === 'recent_events') return simpleAnswer('No matching recent events', 'No valid recent operational events matched the selected room scope.', buildCaveats(packet, presentations));
-        if (packet.questionFocus === 'climate_suggestion') return simpleAnswer('No stored suggestion available', 'No valid stored climate suggestion is available for the selected room scope.', buildCaveats(packet, presentations));
-        return simpleAnswer('Not enough verified data', 'OcuTemp does not have enough verified data to answer this question safely.', buildCaveats(packet, presentations));
+function determineAnswerability(
+    part: SystemQueryPart,
+    results: readonly ToolExecutionResult[],
+): ChatAnswerabilityOutcome {
+    if (results.length === 0) return deterministicDomain(part.domain) ? 'not_applicable'
+        : 'insufficient_evidence';
+    const outcomes = results.map((result) => result.outcome);
+    if (outcomes.includes('ok') && (results.some((result) => result.partial) ||
+        outcomes.some((outcome) =>
+            outcome === 'source_unavailable' || outcome === 'insufficient_evidence'))) {
+        return 'partial';
     }
+    const priority: readonly ToolOutcome[] = [
+        'permission_denied', 'room_ambiguous', 'room_not_found', 'room_inactive',
+        'no_online_reading', 'no_energy_records', 'source_unavailable',
+        'insufficient_evidence', 'ok',
+    ];
+    const selected = priority.find((outcome) => outcomes.includes(outcome)) ?? 'ok';
+    if (selected === 'ok' && results.some((result) => result.partial)) return 'partial';
+    if (selected !== 'ok') return selected;
 
-    switch (packet.questionFocus) {
-        case 'room_existence':
-            return simpleAnswer('Room is configured', packet.facts.find((fact) =>
-                fact.id === 'scope.exists')?.statement ?? 'The requested room is configured and active in OcuTemp.');
-        case 'current_temperature':
-        case 'current_humidity':
-        case 'current_condition':
-        case 'ac_power_status':
-        case 'last_known_temperature':
-            return currentTelemetryAnswer(telemetry, packet, presentations);
-        case 'device_status':
-            return factsAnswer('Device status', packet.facts.filter((fact) => fact.id.startsWith('telemetry.status.')), packet, presentations);
-        case 'ai_auto_apply_status':
-            return aiToggleAnswer(telemetry, packet, presentations);
-        case 'schedule_count': {
-            const countFacts = packet.facts.filter((fact) => fact.id.startsWith('schedule.count.'));
-            const summary = countFacts.length === 1 ? countFacts[0]!.statement
-                : packet.facts.find((fact) => fact.id === 'schedule.total')?.statement ?? 'No schedule count is available.';
-            return simpleAnswer('Configured schedules', summary);
-        }
-        case 'schedule_list': {
-            const allItems = telemetry?.rooms.flatMap((room) => room.schedules.map((schedule) =>
-                `${room.roomName}: ${schedule.day}, ${schedule.startTime}–${schedule.endTime}, ${schedule.subject}.`)) ?? [];
-            const items = allItems.slice(0, 40);
-            const baseSummary = packet.facts.find((fact) => fact.id === 'schedule.total')?.statement ?? 'Configured schedules';
-            const summary = allItems.length > items.length
-                ? `${baseSummary} The text response shows the first ${items.length} because answer output is bounded.`
-                : baseSummary;
-            const blocks = packet.displayPlan.length > 0 ? [] : chunkStrings(items, 8).slice(0, 5).map(
-                (chunk): ChatAnswerBlock => ({
-                    kind: chunk.length === 1 ? 'paragraph' : 'bullet-list',
-                    text: chunk.length === 1 ? chunk[0]! : '',
-                    items: chunk.length === 1 ? [] : chunk,
-                    entries: [],
-                    tone: 'neutral',
-                }),
-            );
-            return {
-                headline: 'Configured schedules', summary,
-                blocks,
-                highlights: [], caveats: [],
-            };
-        }
-        case 'energy_total':
-            return simpleAnswer('Estimated energy total', packet.facts.find((fact) => fact.id === 'energy.total')?.statement ?? 'No total is available.', buildCaveats(packet, presentations));
-        case 'energy_rank_winner':
-            return simpleAnswer(energy?.rooms.filter((room) => room.rank === 1).length === 1 ? 'First-ranked room' : 'First-place tie', packet.facts.find((fact) => fact.id === 'energy.winner')?.statement ?? 'No winner can be determined.', buildCaveats(packet, presentations));
-        case 'energy_ranking':
-            return factsAnswer('Estimated energy ranking', packet.facts.filter((fact) => fact.id.startsWith('energy.rank.')), packet, presentations);
-        case 'energy_trend':
-            return factsAnswer('Estimated energy trend', packet.facts.filter((fact) => fact.id.startsWith('energy.trend.')), packet, presentations);
-        case 'energy_report': {
-            const total = packet.facts.find((fact) => fact.id === 'energy.total')?.statement ?? 'The report is available.';
-            return simpleAnswer('Estimated energy report', total, buildCaveats(packet, presentations));
-        }
-        case 'facility_efficiency_analysis': {
-            const items = packet.recommendations.map((item) => item.text);
-            return {
-                headline: 'Facility-specific energy review',
-                summary: items.length > 0 ? 'The verified OcuTemp data supports these bounded next steps; it does not prove that any configuration caused energy waste.' : 'The available OcuTemp evidence does not support a specific energy-waste recommendation.',
-                blocks: items.length === 1 ? [{ kind: 'callout', text: items[0]!, items: [], entries: [], tone: 'info' }]
-                    : items.length > 1 ? [{ kind: 'bullet-list', text: 'Evidence-based next steps', items, entries: [], tone: 'neutral' }] : [],
-                highlights: [], caveats: buildCaveats(packet, presentations),
-            };
-        }
-        case 'climate_suggestion':
-            return factsAnswer('Stored climate suggestions', packet.facts.filter((fact) => fact.id.startsWith('climate.')), packet, presentations);
-        case 'recent_events':
-            return factsAnswer('Recent operational events', packet.facts.filter((fact) => fact.id.startsWith('events.')), packet, presentations);
-        case 'system_help':
-            return helpAnswer(help);
-        default:
-            return simpleAnswer('OcuGuide', packet.facts[0]?.statement ?? 'No verified answer is available.');
-    }
-}
-
-function factsAnswer(
-    headline: string,
-    facts: readonly GroundingFact[],
-    packet: AnswerPacket,
-    presentations: readonly ChatPresentation[],
-): ChatAnswer {
-    if (facts.length === 0) return simpleAnswer(headline, 'No verified answer is available.', buildCaveats(packet, presentations));
-    const summary = facts.length === 1 ? facts[0]!.statement : `${facts.length} verified results are available for the requested scope.`;
-    const items = facts.map((fact) => fact.statement);
-    return {
-        headline, summary,
-        blocks: items.length >= 2 ? [{ kind: 'bullet-list', text: '', items: items.slice(0, 8), entries: [], tone: 'neutral' }] : [],
-        highlights: items.slice(0, 6).map((text) => ({ text })),
-        caveats: buildCaveats(packet, presentations),
-    };
-}
-
-function helpAnswer(help: SystemHelpPresentation | undefined): ChatAnswer {
-    if (!help || help.availability === 'unavailable') return simpleAnswer('Help unavailable', 'Verified OcuTemp help is temporarily unavailable.');
-    if (help.restricted) return simpleAnswer(help.title, 'This OcuTemp help topic requires administrator access.');
-    if (help.steps.length === 0) return simpleAnswer('Help topic not found', 'No exact verified OcuTemp help topic matched this request.');
-    return {
-        headline: help.title,
-        summary: 'Follow these verified OcuTemp steps:',
-        blocks: [{ kind: 'numbered-list', text: '', items: help.steps.slice(0, 8), entries: [], tone: 'neutral' }],
-        highlights: [], caveats: [],
-    };
-}
-
-function currentTelemetryAnswer(
-    telemetry: RoomTelemetryPresentation | undefined,
-    packet: AnswerPacket,
-    presentations: readonly ChatPresentation[],
-): ChatAnswer {
-    const rows = telemetry?.rooms.filter((room) =>
-        packet.questionFocus === 'last_known_temperature'
-            ? room.temperature !== null && room.lastSeen !== null
-            : room.measurementStatus === 'current' &&
-                (packet.questionFocus === 'current_temperature' ? room.temperature !== null
-                    : packet.questionFocus === 'current_humidity' ? room.humidity !== null
-                        : packet.questionFocus === 'current_condition' ? room.condition !== 'unknown'
-                            : room.acPower !== null)) ?? [];
-    if (rows.length === 0) return simpleAnswer(
-        focusHeadline(packet.questionFocus),
-        `No verified ${focusMeasurementLabel(packet.questionFocus)} is available for the selected room scope.`,
-    );
-    const describe = (room: RoomTelemetryPresentation['rooms'][number]): string => {
-        if (packet.questionFocus === 'last_known_temperature') {
-            return room.measurementStatus === 'current'
-                ? `${room.roomName}'s latest temperature is ${room.temperature} °C from ${room.lastSeen}; this is a current reading.`
-                : `${room.roomName}'s last-known temperature is ${room.temperature} °C from ${room.lastSeen}; this is not a current reading.`;
-        }
-        if (packet.questionFocus === 'current_temperature') return `${room.roomName}'s current temperature is ${room.temperature} °C.`;
-        if (packet.questionFocus === 'current_humidity') return `${room.roomName}'s current humidity is ${room.humidity}%.`;
-        if (packet.questionFocus === 'ac_power_status') return `${room.roomName}'s current AC power status is ${room.acPower ? 'on' : 'off'}.`;
-        const observation = `${room.roomName}'s current condition is ${room.condition}${room.temperature === null ? '' : ` at ${room.temperature} °C`}${room.humidity === null ? '' : ` and ${room.humidity}% humidity`}.`;
-        if (packet.facts.some((fact) => fact.id === 'telemetry.not_hot')) {
-            return `${observation} It is not currently classified as hot or critical by OcuTemp.`;
-        }
-        if (packet.facts.some((fact) => fact.id === 'telemetry.cause_unknown')) {
-            return `${observation} OcuTemp's available evidence does not establish why.`;
-        }
-        return observation;
-    };
-    const items = rows.map(describe);
-    return {
-        headline: focusHeadline(packet.questionFocus),
-        summary: items.length === 1 ? items[0]! : `${items.length} verified ${focusMeasurementLabel(packet.questionFocus)} results are available for the requested scope.`,
-        blocks: items.length >= 2 ? [{
-            kind: 'bullet-list', text: '', items: items.slice(0, 8), entries: [], tone: 'neutral',
-        }] : [],
-        highlights: items.slice(0, 6).map((text) => ({ text })),
-        caveats: buildCaveats(packet, presentations),
-    };
-}
-
-function aiToggleAnswer(
-    telemetry: RoomTelemetryPresentation | undefined,
-    packet: AnswerPacket,
-    presentations: readonly ChatPresentation[],
-): ChatAnswer {
-    const rows = telemetry?.rooms ?? [];
-    if (rows.length === 0) {
-        return simpleAnswer('AI auto-apply configuration', 'No verified AI auto-apply configuration is available for the selected room scope.');
-    }
-    const setting = (value: boolean | null): string => value === null
-        ? 'unknown'
-        : value ? 'enabled' : 'disabled';
-    const offline = rows.filter((row) => row.deviceAssignmentStatus === 'assigned' &&
-        (row.onlineState === 'stale' || row.onlineState === 'offline'));
-    const notAssigned = rows.filter((row) => row.deviceAssignmentStatus === 'not_assigned');
-    const unavailable = rows.filter((row) => row.deviceAssignmentStatus === 'unavailable');
-    if (rows.length === 1) {
-        const row = rows[0]!;
-        if (row.deviceAssignmentStatus === 'not_assigned') return simpleAnswer(
-            'AI auto-apply configuration',
-            `${row.roomName} has no assigned device, so no device AI auto-apply configuration is available.`,
-            buildCaveats(packet, presentations),
-        );
-        if (row.deviceAssignmentStatus === 'unavailable') return simpleAnswer(
-            'AI auto-apply configuration',
-            `${row.roomName} has an assigned device, but its AI auto-apply configuration is unavailable.`,
-            buildCaveats(packet, presentations),
-        );
-        const qualifier = row.onlineState === 'online'
-            ? ''
-            : ` Its device is ${row.onlineState}, so current device application cannot be confirmed.`;
-        return simpleAnswer(
-            'AI auto-apply configuration',
-            `${row.roomName}'s stored OcuTemp AI auto-apply configuration is ${setting(row.aiAutoApply)}.${qualifier}`,
-            buildCaveats(packet, presentations),
-        );
-    }
-    const enabled = rows.filter((row) => row.aiAutoApply === true);
-    const disabled = rows.filter((row) => row.aiAutoApply === false);
-    const unknown = rows.filter((row) => row.aiAutoApply === null);
-    let summary: string;
-    const sharedState = enabled.length === rows.length || disabled.length === rows.length ||
-        unknown.length === rows.length;
-    if (sharedState) {
-        const state = enabled.length === rows.length
-            ? 'enabled'
-            : disabled.length === rows.length ? 'disabled' : 'unknown';
-        summary = state === 'unknown'
-            ? `AI auto-apply configuration is unknown for all ${rows.length} selected rooms.`
-            : `AI auto-apply is configured as ${state} in all ${rows.length} selected rooms.`;
-    } else {
-        const parts = [
-            `${enabled.length} enabled`,
-            `${disabled.length} disabled`,
-            ...(unknown.length > 0 ? [`${unknown.length} unknown`] : []),
-        ];
-        summary = `Stored AI auto-apply configuration is mixed across ${rows.length} selected rooms: ${parts.join(', ')}.`;
-    }
-    if (offline.length > 0) {
-        summary += ` ${offline.length} selected ${plural(offline.length, 'room')} ${offline.length === 1 ? 'does' : 'do'} not have an online device, so current device application cannot be confirmed there.`;
-    }
-    if (notAssigned.length > 0) {
-        summary += ` ${notAssigned.length} selected ${plural(notAssigned.length, 'room')} ${notAssigned.length === 1 ? 'has' : 'have'} no assigned device.`;
-    }
-    if (unavailable.length > 0) {
-        summary += ` Assigned-device configuration data is unavailable for ${unavailable.length} selected ${plural(unavailable.length, 'room')}.`;
-    }
-    return {
-        headline: 'AI auto-apply configuration',
-        summary,
-        blocks: sharedState || packet.displayPlan.length > 0 ? [] : [{
-            kind: 'key-value',
-            text: 'Stored configuration',
-            items: [],
-            entries: rows.slice(0, 8).map((row) => ({
-                label: row.roomName,
-                value: row.deviceAssignmentStatus === 'not_assigned'
-                    ? 'No assigned device'
-                    : row.deviceAssignmentStatus === 'unavailable'
-                        ? 'Assigned-device data unavailable'
-                        : `${setting(row.aiAutoApply)}; device ${row.onlineState}`,
-            })),
-            tone: 'neutral',
-        }],
-        highlights: [],
-        caveats: buildCaveats(packet, presentations),
-    };
-}
-
-function simpleAnswer(headline: string, summary: string, caveats: string[] = []): ChatAnswer {
-    return {
-        headline: cleanText(headline, 160),
-        summary: cleanText(summary, 800),
-        blocks: [], highlights: [], caveats: unique(caveats).slice(0, 3),
-    };
-}
-
-function ensureRenderableAnswer(answer: ChatAnswer): ChatAnswer {
-    if (answer.blocks.length > 0) return answer;
-    return {
-        ...answer,
-        blocks: [{
-            kind: 'paragraph',
-            text: answer.summary,
-            items: [],
-            entries: [],
-            tone: 'neutral',
-        }],
-    };
-}
-
-function buildCaveats(packet: AnswerPacket, presentations: readonly ChatPresentation[]): string[] {
-    const caveats: string[] = packet.facts
-        .filter((fact) => fact.id.startsWith('scope.partial_') ||
-            fact.id === 'telemetry.current.partial')
-        .map((fact) => fact.statement);
-    const energy = findPresentation(presentations, 'energy-report');
-    const hasRecordedEnergy = energy?.availability === 'available' &&
-        energy.metrics.roomsWithRecords > 0 && energy.metrics.totalKwh !== null;
-    if (hasRecordedEnergy) caveats.push('Energy values are estimates and are not billing-grade measurements.');
-    const hasTemporalCoverageNotice = hasRecordedEnergy && packet.notices.some((notice) =>
-        notice.includes(`${energy.metrics.recordedDays} of ${energy.metrics.expectedDays} calendar days`) &&
-        /temporal coverage/iu.test(notice));
-    if (hasRecordedEnergy && energy.metrics.dataCoveragePercent < 100 && !hasTemporalCoverageNotice) caveats.push(
-        `Temporal coverage is partial: records exist on ${energy.metrics.recordedDays} of ${energy.metrics.expectedDays} calendar days.`,
-    );
-    if (packet.answerability === 'partial') caveats.push('Some requested OcuTemp evidence is incomplete or unavailable.');
-    return unique(caveats.map((item) => cleanText(item, 240))).slice(0, 3);
-}
-
-function buildStateContext(plan: PlannerResult, packet: AnswerPacket): ChatStateContext {
-    const energyTool = plan.tools.find((tool) => tool.name === 'get_energy_report');
-    const resolvedRange = packet.range;
-    return {
-        questionFocus: plan.questionFocus,
-        metric: plan.metric,
-        roomNames: plan.allRooms
-            ? []
-            : packet.scope.matchedRoomNames.length > 0
-                ? packet.scope.matchedRoomNames.slice(0, 50)
-                : plan.requestedRoomNames.slice(0, 50),
-        allRooms: plan.allRooms,
-        rangePreset: resolvedRange ? 'custom' : energyTool?.rangePreset ?? 'this_month',
-        startDate: resolvedRange?.start ?? energyTool?.startDate ?? '',
-        endDate: resolvedRange?.end ?? energyTool?.endDate ?? '',
-        bucket: resolvedRange?.bucket ?? energyTool?.bucket ?? 'auto',
-        toolNames: plan.tools.map((tool) => tool.name),
-        answerability: packet.answerability,
-        hadVisual: packet.displayPlan.length > 0,
-    };
-}
-
-function serializeProviderPacket(packet: AnswerPacket): string {
-    const safe = {
-        questionFocus: packet.questionFocus,
-        answerability: packet.answerability,
-        freshness: packet.freshness,
-        scope: {
-            requestedNames: packet.scope.requestedNames.map(redactUntrustedText),
-            matchedRoomNames: packet.scope.matchedRoomNames.map(redactUntrustedText),
-        },
-        range: packet.range,
-        facts: packet.facts.map((fact) => ({
-            id: fact.id,
-            statement: redactUntrustedText(fact.statement),
-        })),
-        recommendations: packet.recommendations.map((item) => ({
-            ...item,
-            text: redactUntrustedText(item.text),
-        })),
-        displayPlan: packet.displayPlan,
-        notices: packet.notices.map(redactUntrustedText),
-    };
-    return JSON.stringify(safe);
-}
-
-function scopeAnswerability(scope: RoomScopeResolution, plan: PlannerResult): ChatAnswerabilityOutcome {
-    if (scope.ambiguousRoomNames.length > 0 && scope.matchedRoomNames.length === 0) {
-        return 'room_ambiguous';
-    }
-    if (plan.requestedRoomNames.length > 0 && scope.matchedRoomNames.length === 0) {
-        if (scope.inactiveRoomNames.length > 0 && scope.missingRoomNames.length === 0) return 'room_inactive';
-        return 'room_not_found';
+    if (requiresCurrentReading(part)) {
+        const roomPresentations = results.map((result) => result.presentation)
+            .filter((presentation): presentation is RoomDataPresentation =>
+                presentation.kind === 'room-data');
+        const currentValues = roomPresentations.flatMap((presentation) => presentation.rooms)
+            .flatMap((room) => room.values)
+            .filter((value) => part.fields.includes(value.field));
+        if (currentValues.length > 0 && !currentValues.some((value) =>
+            value.state === 'current' && value.value !== null)) return 'no_online_reading';
     }
     return 'answerable';
 }
 
-function mergeScopes(scopes: readonly RoomScopeResolution[], requested: readonly string[]): RoomScopeResolution {
-    if (scopes.length === 0) return emptyScope(requested);
-    return {
-        requestedNames: unique(scopes.flatMap((scope) => scope.requestedNames)),
-        matchedRoomNames: unique(scopes.flatMap((scope) => scope.matchedRoomNames)),
-        inactiveRoomNames: unique(scopes.flatMap((scope) => scope.inactiveRoomNames)),
-        missingRoomNames: unique(scopes.flatMap((scope) => scope.missingRoomNames)),
-        ambiguousRoomNames: unique(scopes.flatMap((scope) => scope.ambiguousRoomNames)),
-        activeRoomNames: unique(scopes.flatMap((scope) => scope.activeRoomNames)),
-    };
+function determineFreshness(results: readonly ToolExecutionResult[]): AnswerPacket['freshness'] {
+    const states = results.flatMap((result) => {
+        const presentation = result.presentation;
+        if (presentation.kind === 'room-data') {
+            return presentation.rooms.flatMap((room) => room.values.map((value) => value.state));
+        }
+        if (presentation.kind === 'metric-summary') {
+            return presentation.metrics.map((value) => value.state);
+        }
+        return [];
+    });
+    if (states.length === 0) return 'not_applicable';
+    if (states.every((state) => state === 'current')) return 'current';
+    if (states.some((state) => state === 'current')) return 'mixed';
+    if (states.some((state) => state === 'historical' || state === 'expired')) return 'stale';
+    if (states.every((state) => state === 'unavailable' || state === 'unknown')) return 'unavailable';
+    return 'mixed';
 }
 
-function emptyScope(requested: readonly string[]): RoomScopeResolution {
-    return {
-        requestedNames: [...requested], matchedRoomNames: [], inactiveRoomNames: [],
-        missingRoomNames: [], ambiguousRoomNames: [], activeRoomNames: [],
-    };
-}
-
-function notFoundStatement(scope: RoomScopeResolution): string {
-    const names = scope.missingRoomNames.length > 0 ? scope.missingRoomNames : scope.requestedNames;
-    const subject = names.length === 1 ? names[0]! : joinNames(names);
-    const base = names.length === 1
-        ? `${subject} is not configured in OcuTemp.`
-        : `${subject} are not configured in OcuTemp.`;
-    const inactive = scope.inactiveRoomNames.length === 0 ? ''
-        : scope.inactiveRoomNames.length === 1
-            ? ` ${scope.inactiveRoomNames[0]} exists in OcuTemp but is inactive.`
-            : ` ${joinNames(scope.inactiveRoomNames)} exist in OcuTemp but are inactive.`;
-    const active = scope.activeRoomNames.length > 0
-        ? ` The active rooms are ${joinNames(scope.activeRoomNames)}.`
-        : '';
-    return `${base}${inactive}${active}`;
-}
-
-function inactiveStatement(scope: RoomScopeResolution): string {
-    return scope.inactiveRoomNames.length === 1
-        ? `${scope.inactiveRoomNames[0]} exists in OcuTemp but is inactive.`
-        : `${joinNames(scope.inactiveRoomNames)} exist in OcuTemp but are inactive.`;
-}
-
-function ambiguousStatement(scope: RoomScopeResolution): string {
-    return `The name ${joinNames(scope.ambiguousRoomNames)} matches more than one configured room, so OcuGuide did not choose one.`;
-}
-
-function leaderStatement(leaders: EnergyReportPresentation['rooms'], energy: EnergyReportPresentation): string {
-    if (leaders.length === 1) {
-        const leader = leaders[0]!;
-        return `${leader.roomName} ranks first from ${energy.range.start} through ${energy.range.end} with an estimated ${leader.estimatedKwh} kWh (${leader.sharePercent}% of the recorded total).`;
-    }
-    return `${joinNames(leaders.map((room) => room.roomName))} tie for first from ${energy.range.start} through ${energy.range.end} at an estimated ${leaders[0]?.estimatedKwh} kWh each.`;
-}
-
-function telemetryFreshness(telemetry: RoomTelemetryPresentation): ChatFreshnessOutcome {
-    const statuses = new Set(telemetry.rooms.map((room) => room.measurementStatus));
-    if (statuses.size > 1) return 'mixed';
-    const status = telemetry.rooms[0]?.measurementStatus;
-    if (status === 'current') return 'current';
-    if (status === 'stale') return 'stale';
-    if (status === 'offline') return 'offline';
-    return 'unavailable';
-}
-
-function requiredResultsUnavailable(
-    focus: ChatQuestionFocus,
+function buildRecommendations(
+    part: SystemQueryPart,
     results: readonly ToolExecutionResult[],
-): boolean {
-    const requiredTool: ChatToolName | null = TELEMETRY_FOCUSES.has(focus)
-        ? 'get_room_telemetry'
-        : ENERGY_FOCUSES.has(focus)
-            ? 'get_energy_report'
-            : focus === 'climate_suggestion'
-                ? 'get_climate_prediction_logs'
-                : focus === 'recent_events'
-                    ? 'get_recent_room_events'
-                    : focus === 'system_help'
-                        ? 'get_system_help'
-                        : null;
-    if (requiredTool === null) return false;
-    const result = results.find((candidate) => candidate.name === requiredTool);
-    return !result || result.outcome === 'source_unavailable' ||
-        result.presentation.availability === 'unavailable';
-}
-
-function unavailableSelection(): { answerability: 'source_unavailable'; freshness: 'unavailable' } {
-    return { answerability: 'source_unavailable', freshness: 'unavailable' };
-}
-
-function focusMeasurementLabel(focus: ChatQuestionFocus): string {
-    switch (focus) {
-        case 'current_temperature': case 'last_known_temperature': return 'temperature';
-        case 'current_humidity': return 'humidity';
-        case 'current_condition': return 'room condition';
-        case 'ac_power_status': return 'AC power status';
-        default: return 'reading';
-    }
-}
-
-function focusHeadline(focus: ChatQuestionFocus): string {
-    switch (focus) {
-        case 'current_temperature': return 'Current temperature';
-        case 'last_known_temperature': return 'Last-known temperature';
-        case 'current_humidity': return 'Current humidity';
-        case 'current_condition': return 'Current room condition';
-        case 'ac_power_status': return 'Current AC power status';
-        default: return 'OcuGuide result';
-    }
-}
-
-function findPresentation<K extends ChatPresentation['kind']>(
-    presentations: readonly ChatPresentation[],
-    kind: K,
-): Extract<ChatPresentation, { kind: K }> | undefined {
-    return presentations.find((presentation): presentation is Extract<ChatPresentation, { kind: K }> =>
-        presentation.kind === kind);
-}
-
-function extractNumbers(text: string): string[] {
-    return text.match(/-?\d+(?:\.\d+)?/gu) ?? [];
-}
-
-function validateNumericAssociations(text: string, evidence: string): void {
-    const normalizedText = normalizeForComparison(text);
-    const normalizedEvidence = normalizeForComparison(evidence);
-    const exactPatterns = [
-        /\b-?\d+(?:\.\d+)?\s*kwh\b/gu,
-        /\b-?\d+(?:\.\d+)?%\b/gu,
-        /\b-?\d+(?:\.\d+)?\s*°\s*c\b/gu,
-        /\b\d+\s+of\s+\d+\b/gu,
-        /\b\d+\s+runtime\s+seconds\b/gu,
-    ];
-    for (const pattern of exactPatterns) {
-        for (const association of normalizedText.match(pattern) ?? []) {
-            if (!normalizedEvidence.includes(association)) throw invalidGeneratedAnswer();
+): EvidenceBackedRecommendation[] {
+    if (part.domain !== 'energy' || part.operation !== 'explain') return [];
+    const facts = results.flatMap((result) => result.facts);
+    const recommendations: EvidenceBackedRecommendation[] = [];
+    const energy = results.map((result) => result.presentation)
+        .find((presentation): presentation is EnergyReportPresentation =>
+            presentation.kind === 'energy-report');
+    if (energy) {
+        const coverageFact = facts.find((fact) => /coverage|recorded day/iu.test(fact.statement));
+        if (energy.metrics.dataCoveragePercent < 100 && coverageFact) {
+            recommendations.push({
+                category: 'collect_missing_energy_data',
+                text: 'Review the missing OcuTemp energy records before treating this as a complete facility comparison.',
+                evidenceRefs: [coverageFact.id],
+            });
+        }
+        const highest = energy.rooms.filter((room) => room.status === 'recorded' &&
+            room.runtimeSeconds !== null).sort((left, right) =>
+            (right.runtimeSeconds ?? 0) - (left.runtimeSeconds ?? 0))[0];
+        const highestFact = highest ? facts.find((fact) =>
+            fact.statement.includes(highest.roomName) && /runtime/iu.test(fact.statement)) : undefined;
+        if (highest && highestFact) {
+            recommendations.push({
+                category: 'inspect_high_runtime_room',
+                text: `Review ${highest.roomName}'s recorded OcuTemp runtime and configured schedule for the selected period.`,
+                evidenceRefs: [highestFact.id],
+            });
         }
     }
-    for (const match of normalizedText.matchAll(/\b(\d+)\s+(?:recorded\s+)?sessions\b/gu)) {
-        const value = match[1];
-        if (!value || !new RegExp(`\\b${value}\\s+(?:recorded\\s+)?sessions\\b`, 'u')
-            .test(normalizedEvidence)) throw invalidGeneratedAnswer();
+    const offlineFact = facts.find((fact) => /offline|unavailable assigned-device/iu.test(fact.statement));
+    if (offlineFact) {
+        recommendations.push({
+            category: 'investigate_offline_device',
+            text: 'Investigate the OcuTemp rooms whose assigned devices are offline or unavailable before comparing live operation.',
+            evidenceRefs: [offlineFact.id],
+        });
     }
+    return recommendations.slice(0, 5);
 }
 
-function extractClaimTokens(text: string): string[] {
-    return unique(normalizeForComparison(text).match(/[\p{L}][\p{L}\p{N}_-]*/gu) ?? []);
-}
-
-function hasWord(text: string, word: string): boolean {
-    return new RegExp(`(?:^|[^\\p{L}\\p{N}_-])${word}(?:$|[^\\p{L}\\p{N}_-])`, 'iu').test(text);
-}
-
-function containsPhrase(text: string, phrase: string): boolean {
-    return normalizeForComparison(text).includes(normalizeForComparison(phrase));
-}
-
-function extractMentionedRoomKeys(text: string, roomNames: readonly string[]): Set<string> {
-    const normalizedText = normalizeForComparison(text);
-    const occupied: Array<{ readonly start: number; readonly end: number }> = [];
-    const found = new Set<string>();
-    const candidates = [...roomNames]
-        .map((roomName) => normalizeForComparison(roomName))
-        .filter(Boolean)
-        .sort((left, right) => right.length - left.length || left.localeCompare(right));
-
-    for (const roomName of candidates) {
-        const escaped = roomName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-        const pattern = new RegExp(
-            `(?:^|[^\\p{L}\\p{N}_-])(${escaped})(?=$|[^\\p{L}\\p{N}_-])`,
-            'gu',
+function buildDeterministicAnswer(work: PartWork, user: ChatPrincipal): ChatAnswerPart {
+    const caveats = uniqueStrings(work.packet.notices).slice(0, 3);
+    const base = (text: string, blocks: ChatAnswerBlock[] = []): ChatAnswerPart => ({
+        partId: work.requested.partId,
+        text,
+        blocks,
+        highlights: [],
+        caveats,
+    });
+    if (work.answerability === 'permission_denied') {
+        return base('Your OcuTemp role does not permit access to that information.');
+    }
+    if (work.answerability === 'clarification_required') {
+        return base(work.executable.clarification ||
+            'Please clarify the OcuTemp room, scope, or period you want me to use.');
+    }
+    if (work.answerability === 'room_not_found') {
+        const names = work.packet.scope.missingRoomNames;
+        return base(`${formatNames(names)} ${names.length === 1 ? 'is' : 'are'} not configured in OcuTemp, so I cannot assess the requested system data.`);
+    }
+    if (work.answerability === 'room_inactive') {
+        const names = work.packet.scope.inactiveRoomNames;
+        return base(`${formatNames(names)} ${names.length === 1 ? 'exists' : 'exist'} in OcuTemp but ${names.length === 1 ? 'is' : 'are'} inactive.`);
+    }
+    if (work.answerability === 'room_ambiguous') {
+        return base(`More than one configured room matches ${formatNames(work.packet.scope.ambiguousRoomNames)}. Please use the exact room name.`);
+    }
+    if (work.answerability === 'no_online_reading') {
+        return base('No selected room has an online device with a current reading, so I cannot answer that as a current measurement. You can ask for the last-known value instead.');
+    }
+    if (work.answerability === 'no_energy_records') {
+        const period = work.packet.range?.label ?? 'the selected period';
+        return base(`There are no recorded OcuTemp energy values for ${period}.`);
+    }
+    if (work.answerability === 'source_unavailable') {
+        return base('The requested OcuTemp data could not be read safely right now. Please try again shortly.');
+    }
+    if (work.requested.domain === 'conversation') {
+        return work.requested.operation === 'greet'
+            ? base('Hi! What would you like to know about your OcuTemp system?')
+            : work.requested.operation === 'deny'
+                ? base('I can inspect permitted OcuTemp data, but I cannot perform controls, writes, approvals, or configuration changes from chat.')
+                : base(work.executable.clarification || 'Please clarify the OcuTemp question you want me to answer.');
+    }
+    if (work.requested.domain === 'unsupported') {
+        return base('I can answer questions grounded in your permitted OcuTemp system data, but I cannot answer that outside-system request.');
+    }
+    if (work.requested.domain === 'assistant_capabilities') {
+        const domains = capabilitiesForRole(user.role)
+            .map((capability) => domainLabel(capability.domain));
+        const items = uniqueStrings(domains).filter((domain) =>
+            !['Conversation', 'Unsupported'].includes(domain));
+        return base(
+            'I can answer read-only questions about the OcuTemp data your role is allowed to access.',
+            [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'info' }],
         );
-        for (const match of normalizedText.matchAll(pattern)) {
-            const value = match[1];
-            if (!value || match.index === undefined) continue;
-            const start = match.index + match[0].indexOf(value);
-            const end = start + value.length;
-            if (occupied.some((span) => start < span.end && end > span.start)) continue;
-            occupied.push({ start, end });
-            found.add(roomName);
+    }
+    if (work.requested.domain === 'own_account') return ownAccountAnswer(work, user);
+
+    const presentation = work.results[0]?.presentation;
+    if (!presentation) return base('There is not enough verified OcuTemp data to answer that question.');
+    switch (presentation.kind) {
+        case 'metric-summary': return metricAnswer(work, presentation, caveats);
+        case 'room-data': return roomDataAnswer(work, presentation, caveats);
+        case 'schedule-data': return scheduleAnswer(work, presentation, caveats);
+        case 'energy-report': return energyAnswer(work, presentation, caveats);
+        case 'climate-suggestions': return climateAnswer(work, presentation, caveats);
+        case 'recent-events': return eventsAnswer(work, presentation, caveats);
+        case 'system-help': return helpAnswer(work, presentation, caveats);
+        case 'room-telemetry':
+            return base('The verified room result is available, but it could not be projected into the current answer format.');
+    }
+}
+
+function ownAccountAnswer(work: PartWork, user: ChatPrincipal): ChatAnswerPart {
+    const entries: Array<{ label: string; value: string }> = [];
+    for (const field of work.requested.fields) {
+        if (field === 'account_name') entries.push({ label: 'Name', value: user.fullName ?? 'Not available' });
+        if (field === 'account_email') entries.push({ label: 'Email', value: user.email ?? 'Not available' });
+        if (field === 'account_role') entries.push({ label: 'Role', value: user.role === 'admin' ? 'Administrator' : 'Staff' });
+        if (field === 'account_approval') entries.push({ label: 'Approval', value: 'Approved' });
+    }
+    return {
+        partId: work.requested.partId,
+        text: entries.map((entry) => `${entry.label}: ${entry.value}`).join(' · '),
+        blocks: [{ kind: 'key-value', text: '', items: [], entries, tone: 'neutral' }],
+        highlights: [], caveats: [],
+    };
+}
+
+function metricAnswer(
+    work: PartWork,
+    presentation: MetricSummaryPresentation,
+    caveats: string[],
+): ChatAnswerPart {
+    const scopeNames = work.packet.scope.matchedRoomNames;
+    if (work.requested.operation === 'list' && scopeNames.length > 0) {
+        return answer(work.requested.partId,
+            `${scopeNames.length} ${scopeNames.length === 1 ? 'room matches' : 'rooms match'}: ${formatNames(scopeNames)}.`, [], caveats);
+    }
+    const metrics = presentation.metrics.filter((metric) =>
+        work.requested.fields.includes(metric.field));
+    if (metrics.length === 0) {
+        return answer(work.requested.partId,
+            'The requested OcuTemp value is unknown or unavailable.', [], caveats);
+    }
+    const text = metrics.map((metric) => `${metric.label}: ${formatProjectedValue(metric)}`).join(' · ');
+    return answer(work.requested.partId, text, [{ kind: 'key-value', text: '', items: [],
+        entries: metrics.map((metric) => ({ label: metric.label,
+            value: formatProjectedValue(metric) })), tone: 'neutral' }], caveats);
+}
+
+function roomDataAnswer(
+    work: PartWork,
+    presentation: RoomDataPresentation,
+    caveats: string[],
+): ChatAnswerPart {
+    if (presentation.rooms.length === 0) {
+        return answer(work.requested.partId, 'No rooms matched the requested OcuTemp scope.', [], caveats);
+    }
+    const relevant = presentation.rooms.map((room) => ({
+        roomName: room.roomName,
+        values: room.values.filter((value) => work.requested.fields.includes(value.field)),
+    }));
+    if (relevant.length === 1) {
+        const room = relevant[0]!;
+        const values = room.values.map((value) => `${value.label}: ${formatProjectedValue(value)}`);
+        const causeBoundary = work.requested.operation === 'explain' &&
+            work.requested.domain === 'measurements'
+            ? ' OcuTemp does not contain verified data that identifies the cause.'
+            : '';
+        return answer(work.requested.partId,
+            `${room.roomName} — ${values.join(' · ')}.${causeBoundary}`,
+            [], caveats);
+    }
+    const items = relevant.slice(0, 8).map((room) =>
+        `${room.roomName}: ${room.values.map((value) =>
+            `${value.label} ${formatProjectedValue(value)}`).join(', ')}`);
+    return answer(work.requested.partId,
+        `${relevant.length} rooms have verified projected results for this request.`,
+        items.length <= 6
+            ? [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'neutral' }]
+            : [], caveats);
+}
+
+function scheduleAnswer(
+    work: PartWork,
+    presentation: ScheduleDataPresentation,
+    caveats: string[],
+): ChatAnswerPart {
+    if (presentation.schedules.length === 0) {
+        return answer(work.requested.partId,
+            'There are no valid configured schedules in the selected room scope.', [], caveats);
+    }
+    const items = presentation.schedules.slice(0, 8).map((schedule) =>
+        `${schedule.roomName}: ${schedule.day}, ${schedule.startTime}–${schedule.endTime}` +
+        (schedule.subject ? ` (${schedule.subject})` : ''));
+    return answer(work.requested.partId,
+        `${presentation.schedules.length} configured ${presentation.schedules.length === 1 ? 'schedule is' : 'schedules are'} available.`,
+        presentation.schedules.length <= 8
+            ? [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'neutral' }]
+            : [], caveats);
+}
+
+function energyAnswer(
+    work: PartWork,
+    presentation: EnergyReportPresentation,
+    caveats: string[],
+): ChatAnswerPart {
+    const recorded = presentation.rooms.filter((room) => room.status === 'recorded');
+    if (recorded.length === 0 || presentation.metrics.totalKwh === null) {
+        return answer(work.requested.partId,
+            `There are no recorded estimated energy values for ${presentation.range.label}.`, [], caveats);
+    }
+    if (work.requested.operation === 'compare' && work.requested.limit === 1) {
+        const rank = Math.min(...recorded.map((room) => room.rank ?? Number.MAX_SAFE_INTEGER));
+        const winners = recorded.filter((room) => room.rank === rank);
+        const value = winners[0]?.estimatedKwh;
+        return answer(work.requested.partId,
+            `${formatNames(winners.map((room) => room.roomName))} ${winners.length === 1 ? 'ranked' : 'tied for'} first for ${presentation.range.label}` +
+            `${value === null || value === undefined ? '' : ` at ${formatNumber(value)} kWh`} (estimated).`, [], caveats);
+    }
+    if (work.requested.operation === 'compare') {
+        const top = [...recorded].sort((left, right) =>
+            (left.rank ?? 999) - (right.rank ?? 999)).slice(0, 3);
+        return answer(work.requested.partId,
+            `${recorded.length} rooms have recorded estimated energy for ${presentation.range.label}.`,
+            [{ kind: 'bullet-list', text: '', items: top.map((room) =>
+                `#${room.rank ?? '—'} ${room.roomName}: ${formatNumber(room.estimatedKwh ?? 0)} kWh`),
+            entries: [], tone: 'neutral' }], caveats);
+    }
+    return answer(work.requested.partId,
+        `Estimated OcuTemp energy for ${presentation.range.label} is ${formatNumber(presentation.metrics.totalKwh)} kWh across ${presentation.metrics.roomsWithRecords} rooms with records.`,
+        [], caveats);
+}
+
+function climateAnswer(
+    work: PartWork,
+    presentation: ClimateSuggestionsPresentation,
+    caveats: string[],
+): ChatAnswerPart {
+    const available = presentation.rooms.filter((room) => room.status === 'available');
+    if (available.length === 0) {
+        return answer(work.requested.partId,
+            'No stored climate suggestion is available for the selected rooms.', [], caveats);
+    }
+    const items = available.slice(0, 6).map((row) =>
+        `${row.roomName}: ${row.suggestedTemp === null ? 'unknown' : `${formatNumber(row.suggestedTemp)} °C`}` +
+        `${row.reason ? ` — ${row.reason}` : ''}`);
+    return answer(work.requested.partId,
+        `${available.length} ${available.length === 1 ? 'room has' : 'rooms have'} a stored climate suggestion.`,
+        [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'neutral' }], caveats);
+}
+
+function eventsAnswer(
+    work: PartWork,
+    presentation: RecentEventsPresentation,
+    caveats: string[],
+): ChatAnswerPart {
+    if (presentation.events.length === 0) {
+        return answer(work.requested.partId,
+            'No matching recorded OcuTemp decision events were found in the selected scope and period.', [], caveats);
+    }
+    const items = presentation.events.slice(0, 6).map((event) =>
+        `${event.roomName}: ${event.eventType} — ${event.detail}`);
+    return answer(work.requested.partId,
+        `${presentation.events.length} matching recorded ${presentation.events.length === 1 ? 'event was' : 'events were'} found.`,
+        [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'neutral' }], caveats);
+}
+
+function helpAnswer(
+    work: PartWork,
+    presentation: Extract<ChatPresentation, { kind: 'system-help' }>,
+    caveats: string[],
+): ChatAnswerPart {
+    if (presentation.restricted) {
+        return answer(work.requested.partId,
+            'That OcuTemp task is restricted to administrators.', [], caveats);
+    }
+    if (presentation.steps.length === 0) {
+        return answer(work.requested.partId,
+            'No verified OcuTemp guidance matched that topic.', [], caveats);
+    }
+    return answer(work.requested.partId, presentation.title,
+        [{ kind: 'numbered-list', text: '', items: [...presentation.steps], entries: [],
+            tone: 'info' }], caveats);
+}
+
+function answer(
+    partId: ChatPartId,
+    text: string,
+    blocks: ChatAnswerBlock[],
+    caveats: string[],
+): ChatAnswerPart {
+    return { partId, text: cleanText(text, 1_500), blocks, highlights: [], caveats };
+}
+
+function selectDisplayPlan(
+    parts: readonly SystemQueryPart[],
+    results: readonly ToolExecutionResult[],
+): ChatDisplayDirective[] {
+    for (const part of parts) {
+        if (part.outputPreference === 'text' || part.needsClarification) continue;
+        const partResults = results.filter((result) => result.partId === part.partId);
+        if (!partResults.some((result) => result.outcome === 'ok')) continue;
+        if (requiresCurrentReading(part)) {
+            const requestedCurrentFields = part.fields.filter((field) =>
+                ['temperature', 'humidity', 'condition', 'occupancy', 'ac_power'].includes(field));
+            const hasCurrentValue = partResults.some((result) =>
+                result.presentation.kind === 'room-data' &&
+                result.presentation.rooms.some((room) => room.values.some((value) =>
+                    requestedCurrentFields.includes(value.field) &&
+                    value.state === 'current' && value.value !== null)));
+            if (!hasCurrentValue) continue;
+        }
+        const presentations = partResults
+            .map((result) => result.presentation);
+        for (const presentation of presentations) {
+            const mode = compatibleDisplayMode(part, presentation);
+            if (mode) return [{ partId: part.partId, presentationId: presentation.id, mode }];
         }
     }
-    return found;
+    return [];
 }
 
-function normalizeForComparison(text: string): string {
-    return text.normalize('NFKC').toLocaleLowerCase('en-US');
-}
-
-function sameNormalizedClaim(left: string, right: string): boolean {
-    const normalize = (value: string): string => normalizeForComparison(value)
-        .replace(/\s+/gu, ' ')
-        .replace(/[.!?]+$/gu, '')
-        .trim();
-    return normalize(left) === normalize(right);
-}
-
-function normalizeUniqueNames(values: readonly unknown[]): string[] {
-    const names: string[] = [];
-    const keys = new Set<string>();
-    for (const value of values) {
-        if (!isSafeText(value, 100, false)) throw invalidProviderPlan();
-        const name = normalizeText(value);
-        const key = name.toLocaleLowerCase('en-US');
-        if (keys.has(key)) throw invalidProviderPlan();
-        keys.add(key);
-        names.push(name);
+function compatibleDisplayMode(
+    part: SystemQueryPart,
+    presentation: ChatPresentation,
+): ChatDisplayMode | null {
+    if (presentation.availability === 'unavailable') return null;
+    if (part.outputPreference === 'table') {
+        return hasMeaningfulRows(presentation) ? 'table' : null;
     }
-    return names;
+    if (part.outputPreference === 'graph') {
+        if (presentation.kind !== 'energy-report') return null;
+        if (part.fields.includes('energy_trend') &&
+            presentation.trend.filter((point) => point.estimatedKwh !== null).length >= 2) {
+            return 'trend_chart';
+        }
+        const recorded = presentation.rooms.filter((room) => room.status === 'recorded').length;
+        return recorded >= 2 && recorded <= 20 ? 'ranking_chart' : null;
+    }
+    if (part.operation === 'report' && presentation.kind === 'energy-report') {
+        return 'full_report';
+    }
+    if (part.operation === 'compare' && presentation.kind === 'energy-report') {
+        const recorded = presentation.rooms.filter((room) => room.status === 'recorded').length;
+        if (part.limit === 1) return null;
+        return recorded >= 2 && recorded <= 20 ? 'ranking_chart' : null;
+    }
+    if (part.fields.includes('energy_trend') && presentation.kind === 'energy-report' &&
+        presentation.trend.filter((point) => point.estimatedKwh !== null).length >= 2) {
+        return 'trend_chart';
+    }
+    if (presentation.kind === 'room-data' && presentation.rooms.length >= 2 &&
+        presentation.rooms.some((room) => room.values.length >= 2)) return 'table';
+    if (presentation.kind === 'schedule-data' && presentation.schedules.length > 8) return 'table';
+    return null;
 }
 
-function sameNames(left: readonly string[], right: readonly string[]): boolean {
-    if (left.length !== right.length) return false;
-    const keys = new Set(left.map((name) => normalizeForComparison(name)));
-    return right.every((name) => keys.has(normalizeForComparison(name)));
+function hasMeaningfulRows(presentation: ChatPresentation): boolean {
+    if (presentation.kind === 'room-data') return presentation.rooms.length >= 2;
+    if (presentation.kind === 'schedule-data') return presentation.schedules.length >= 2;
+    if (presentation.kind === 'energy-report') return presentation.rooms.length >= 2;
+    if (presentation.kind === 'climate-suggestions') return presentation.rooms.length >= 2;
+    if (presentation.kind === 'recent-events') return presentation.events.length >= 2;
+    return false;
 }
 
-function joinNames(names: readonly string[]): string {
-    if (names.length === 0) return 'no rooms';
+function conflictingExplicitVisuals(parts: readonly SystemQueryPart[]): boolean {
+    const requested = parts.filter((part) =>
+        part.outputPreference === 'table' || part.outputPreference === 'graph')
+        .map((part) => part.outputPreference === 'table' ? 'table'
+            : part.fields.includes('energy_trend') ? 'trend_graph' : 'ranking_graph');
+    return new Set(requested).size > 1;
+}
+
+function validateWriterDraft(
+    value: GroundedAnswerDraft,
+    packet: AnswerPacket,
+): GroundedAnswerDraft {
+    if (!isRecord(value) || !hasExactKeys(value, ['text', 'evidenceRefs', 'highlights',
+        'recommendations']) || typeof value['text'] !== 'string' ||
+        !Array.isArray(value['evidenceRefs']) || !Array.isArray(value['highlights']) ||
+        !Array.isArray(value['recommendations'])) throw new Error('invalid_writer_shape');
+    const factById = new Map(packet.facts.map((fact) => [fact.id, fact]));
+    const text = validateGroundedText(value['text'], value['evidenceRefs'], factById,
+        packet.scope.matchedRoomNames);
+    const highlights = value['highlights'].map((highlight) => {
+        if (!isRecord(highlight) || !hasExactKeys(highlight, ['text', 'evidenceRefs']) ||
+            typeof highlight['text'] !== 'string' || !Array.isArray(highlight['evidenceRefs'])) {
+            throw new Error('invalid_highlight');
+        }
+        return {
+            text: validateGroundedText(highlight['text'], highlight['evidenceRefs'], factById,
+                packet.scope.matchedRoomNames),
+            evidenceRefs: validateEvidenceRefs(highlight['evidenceRefs'], factById),
+        };
+    }).slice(0, 6);
+    const evidenceRefs = validateEvidenceRefs(value['evidenceRefs'], factById);
+    const recommendations = value['recommendations'].map((recommendation) => {
+        if (!isRecord(recommendation)) throw new Error('invalid_recommendation');
+        const exact = packet.recommendations.find((allowed) =>
+            recommendation['category'] === allowed.category &&
+            recommendation['text'] === allowed.text &&
+            JSON.stringify(recommendation['evidenceRefs']) === JSON.stringify(allowed.evidenceRefs));
+        if (!exact) throw new Error('unapproved_recommendation');
+        return { ...exact };
+    });
+    return { text, evidenceRefs, highlights, recommendations };
+}
+
+function validateGroundedText(
+    rawText: string,
+    rawRefs: unknown[],
+    factById: ReadonlyMap<string, GroundingFact>,
+    roomNames: readonly string[],
+): string {
+    const text = cleanText(rawText, 1_200);
+    if (!text || /```|<\/?[a-z]|\b(filters?|insulation|refrigerant|electrical repair|service the|setpoint)\b/iu
+        .test(text)) throw new Error('unsafe_writer_text');
+    const refs = validateEvidenceRefs(rawRefs, factById);
+    const support = refs.map((ref) => factById.get(ref)!.statement).join(' ');
+    const supportedNumbers = new Set(numberTokens(support));
+    if (numberTokens(text).some((number) => !supportedNumbers.has(number))) {
+        throw new Error('invented_number');
+    }
+    const supportedUnitClaims = new Set(numericUnitClaims(support));
+    if (numericUnitClaims(text).some((claim) => !supportedUnitClaims.has(claim))) {
+        throw new Error('invented_value_unit_association');
+    }
+    for (const match of text.matchAll(/\broom\s+\d[\p{L}\p{N}_-]{0,40}\b/giu)) {
+        if (!support.toLocaleLowerCase('en-US').includes(
+            match[0].toLocaleLowerCase('en-US'),
+        )) throw new Error('invented_room_reference');
+    }
+    for (const roomName of roomNames) {
+        const normalizedRoomName = roomName.toLocaleLowerCase('en-US');
+        if (text.toLocaleLowerCase('en-US').includes(normalizedRoomName) &&
+            !support.toLocaleLowerCase('en-US').includes(normalizedRoomName)) {
+            throw new Error('room_fact_mismatch');
+        }
+        const relatedSupport = refs.map((ref) => factById.get(ref)!.statement)
+            .filter((statement) => statement.toLocaleLowerCase('en-US').includes(normalizedRoomName))
+            .join(' ');
+        if (!relatedSupport) continue;
+        const relatedClaims = new Set(numericUnitClaims(relatedSupport));
+        for (const sentence of text.split(/[.!?\n]+/u)) {
+            if (!sentence.toLocaleLowerCase('en-US').includes(normalizedRoomName)) continue;
+            if (numericUnitClaims(sentence).some((claim) => !relatedClaims.has(claim))) {
+                throw new Error('room_value_association_mismatch');
+            }
+        }
+    }
+    return text;
+}
+
+function validateEvidenceRefs(
+    values: unknown[],
+    factById: ReadonlyMap<string, GroundingFact>,
+): string[] {
+    if (values.length < 1 || values.length > 12 || values.some((value) =>
+        typeof value !== 'string' || !factById.has(value))) throw new Error('invalid_evidence');
+    const refs = [...new Set(values as string[])];
+    if (refs.length !== values.length) throw new Error('duplicate_evidence');
+    return refs;
+}
+
+function answerPartFromDraft(work: PartWork, draft: GroundedAnswerDraft): ChatAnswerPart {
+    const blocks: ChatAnswerBlock[] = draft.recommendations.length > 0 ? [{
+        kind: 'bullet-list', text: 'Grounded next steps',
+        items: draft.recommendations.map((recommendation) => recommendation.text),
+        entries: [], tone: 'info',
+    }] : [];
+    return {
+        partId: work.requested.partId,
+        text: draft.text,
+        blocks,
+        highlights: draft.highlights.map((highlight) => ({ text: highlight.text })),
+        caveats: work.packet.notices.slice(0, 3),
+    };
+}
+
+function shouldUseWriter(work: PartWork): boolean {
+    return ['compare', 'summarize', 'report', 'explain'].includes(work.requested.operation) &&
+        (work.answerability === 'answerable' || work.answerability === 'partial') &&
+        work.requested.domain !== 'own_account';
+}
+
+function boundPacket(packet: AnswerPacket, factLimit: number): AnswerPacket {
+    let facts = packet.facts.slice(0, Math.max(0, factLimit));
+    const validIds = new Set(facts.map((fact) => fact.id));
+    let recommendations = packet.recommendations.filter((recommendation) =>
+        recommendation.evidenceRefs.every((ref) => validIds.has(ref)));
+    let candidate: AnswerPacket = { ...packet, facts, recommendations };
+    while (facts.length > 0 && textEncoder.encode(JSON.stringify(candidate)).byteLength >
+        MAX_PROVIDER_PACKET_BYTES) {
+        facts = facts.slice(0, -1);
+        const ids = new Set(facts.map((fact) => fact.id));
+        recommendations = recommendations.filter((recommendation) =>
+            recommendation.evidenceRefs.every((ref) => ids.has(ref)));
+        candidate = { ...candidate, facts, recommendations };
+    }
+    return candidate;
+}
+
+function buildStateTurn(
+    works: readonly PartWork[],
+    tools: readonly PlannerToolPlan[],
+    displayPlan: readonly ChatDisplayDirective[],
+): ChatStateTurn {
+    const contexts: ChatStateContext[] = works.map((work) => ({
+        partId: work.requested.partId,
+        domain: work.requested.domain,
+        operation: work.requested.operation,
+        fields: [...work.requested.fields],
+        requestedScope: { ...work.executable.scope,
+            roomNames: [...work.executable.scope.roomNames] },
+        timeRange: { ...work.executable.timeRange },
+        toolNames: uniqueStrings(tools.filter((tool) => tool.partId === work.requested.partId)
+            .map((tool) => tool.name)) as ChatToolName[],
+        answerability: work.answerability,
+        hadVisual: displayPlan.some((directive) => directive.partId === work.requested.partId),
+    }));
+    const referents: ChatStateReferent[] = works.map((work): ChatStateReferent | null => {
+        const energy = work.results.map((result) => result.presentation)
+            .find((presentation): presentation is EnergyReportPresentation =>
+                presentation.kind === 'energy-report');
+        const orderedNames = energy
+            ? energy.rooms.filter((room) => room.status === 'recorded')
+                .sort((left, right) => (left.rank ?? 999) - (right.rank ?? 999))
+                .map((room) => room.roomName)
+            : work.packet.scope.matchedRoomNames;
+        const names = uniqueStrings(orderedNames).slice(0, 50);
+        if (names.length === 0) return null;
+        return {
+            sourcePartId: work.requested.partId,
+            kind: 'room_result',
+            roomNames: names,
+            complete: !work.results.some((result) => result.partial) && orderedNames.length <= 50,
+            ordering: energy ? 'ranking' : 'query',
+        };
+    }).filter((referent): referent is ChatStateReferent => referent !== null);
+    return { contexts, referents };
+}
+
+function buildFollowUps(works: readonly PartWork[]): ChatFollowUp[] {
+    const result: ChatFollowUp[] = [];
+    for (const work of works) {
+        if (!['answerable', 'partial'].includes(work.answerability)) continue;
+        if (work.requested.domain === 'energy' && work.requested.operation !== 'compare') {
+            result.push({ label: 'Top-ranked room',
+                prompt: 'Which room ranked first for that same energy period?' });
+        }
+        const rooms = work.packet.scope.matchedRoomNames;
+        if (rooms.length > 0 && rooms.length <= 10 && work.requested.domain !== 'schedules') {
+            result.push({ label: 'Room schedules',
+                prompt: 'List the configured schedules for those rooms.' });
+        }
+        if (rooms.length > 0 && work.requested.domain !== 'ai_auto_apply') {
+            result.push({ label: 'AI auto-apply',
+                prompt: 'Which of those rooms have AI auto-apply enabled?' });
+        }
+    }
+    const seen = new Set<string>();
+    return result.filter((item) => {
+        const key = item.prompt.toLocaleLowerCase('en-US');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    }).slice(0, 3);
+}
+
+function mergeScopes(scopes: readonly RoomScopeResolution[]): RoomScopeResolution {
+    return {
+        requestedNames: uniqueStrings(scopes.flatMap((scopeValue) => scopeValue.requestedNames)),
+        matchedRoomNames: uniqueStrings(scopes.flatMap((scopeValue) => scopeValue.matchedRoomNames)),
+        inactiveRoomNames: uniqueStrings(scopes.flatMap((scopeValue) => scopeValue.inactiveRoomNames)),
+        missingRoomNames: uniqueStrings(scopes.flatMap((scopeValue) => scopeValue.missingRoomNames)),
+        ambiguousRoomNames: uniqueStrings(scopes.flatMap((scopeValue) => scopeValue.ambiguousRoomNames)),
+        activeRoomNames: uniqueStrings(scopes.flatMap((scopeValue) => scopeValue.activeRoomNames)),
+    };
+}
+
+function emptyScopeResolution(): RoomScopeResolution {
+    return { requestedNames: [], matchedRoomNames: [], inactiveRoomNames: [],
+        missingRoomNames: [], ambiguousRoomNames: [], activeRoomNames: [] };
+}
+
+function safeStateForPlanner(state: ChatStatePayload | null): unknown {
+    if (!state) return null;
+    return state.turns.map((turn) => ({
+        contexts: turn.contexts.map((context) => ({
+            partId: context.partId,
+            domain: context.domain,
+            operation: context.operation,
+            fields: context.fields,
+            requestedScope: context.requestedScope,
+            timeRange: context.timeRange,
+            answerability: context.answerability,
+        })),
+        referents: turn.referents,
+    }));
+}
+
+function isSemanticPlanningFailure(error: unknown): boolean {
+    if (error instanceof ProviderResponseError) return true;
+    if (!(error instanceof BothProvidersFailedError)) return false;
+    return error.primaryError instanceof ProviderResponseError ||
+        error.fallbackError instanceof ProviderResponseError ||
+        error.primaryError instanceof CapabilityValidationError ||
+        error.fallbackError instanceof CapabilityValidationError;
+}
+
+function deterministicHelpTopic(message: string): string | null {
+    if (!/\b(how (do|can) i|where (do|can) i|steps? to)\b/u.test(message)) return null;
+    if (/change.*password/u.test(message)) return 'change-password';
+    if (/add|create.*room/u.test(message)) return 'add-room';
+    if (/edit|update.*room/u.test(message)) return 'edit-room';
+    if (/assign.*floor|floor.*assign/u.test(message)) return 'assign-floor-plan-cell';
+    if (/floor.*legend/u.test(message)) return 'floor-plan-legend';
+    if (/schedule/u.test(message)) return 'manage-schedules';
+    if (/approve.*staff/u.test(message)) return 'approve-staff';
+    if (/energy.*report|report.*energy/u.test(message)) return 'view-energy-reports';
+    if (/forced?.*off/u.test(message)) return 'forced-off';
+    if (/override/u.test(message)) return 'manual-override';
+    if (/ocu.?guide|chat/u.test(message)) return 'ocu-guide';
+    return null;
+}
+
+function explicitRoomNames(message: string): string[] {
+    const values: string[] = [];
+    for (const match of message.matchAll(/\broom\s+([\p{L}\p{N}][\p{L}\p{N}_-]{0,40})\b/giu)) {
+        values.push(`Room ${match[1]}`);
+    }
+    for (const match of message.matchAll(/["“]([^"”]{1,100})["”]/gu)) {
+        if (/room/iu.test(match[1]!)) values.push(match[1]!);
+    }
+    return uniqueStrings(values.map((value) => cleanText(value, 100)));
+}
+
+function energyRangeFor(message: string): SystemTimeRange {
+    let preset: SystemTimeRange['preset'] = 'this_month';
+    if (/\btoday\b/u.test(message)) preset = 'today';
+    else if (/\blast 7 days?\b/u.test(message)) preset = 'last_7_days';
+    else if (/\blast week\b/u.test(message)) preset = 'last_week';
+    else if (/\bthis week\b/u.test(message)) preset = 'this_week';
+    else if (/\blast month\b/u.test(message)) preset = 'last_month';
+    else if (/\b(last 12 months?|past year)\b/u.test(message)) preset = 'last_12_months';
+    else if (/\b(this|whole|current) year|\byearly\b|\bannual\b/u.test(message)) preset = 'this_year';
+    const dates = message.match(/\b\d{4}-\d{2}-\d{2}\b/gu) ?? [];
+    if (dates.length === 1) {
+        return { preset: 'custom', startDate: dates[0]!, endDate: dates[0]!, bucket: 'day' };
+    }
+    if (dates.length >= 2) {
+        return { preset: 'custom', startDate: dates[0]!, endDate: dates[1]!,
+            bucket: requestedBucket(message) };
+    }
+    return { preset, startDate: '', endDate: '', bucket: requestedBucket(message) };
+}
+
+function requestedBucket(message: string): SystemTimeRange['bucket'] {
+    if (/\bdaily\b/u.test(message)) return 'day';
+    if (/\bweekly\b/u.test(message)) return 'week';
+    if (/\bmonthly\b/u.test(message)) return 'month';
+    if (/\byearly\b|\bannual\b/u.test(message)) return 'year';
+    return 'auto';
+}
+
+function hasExplicitEnergyRange(message: string): boolean {
+    return /\b(today|week|month|year|annual|\d{4}-\d{2}-\d{2})\b/u.test(message);
+}
+
+function formatProjectedValue(value: ProjectedValue): string {
+    if (value.value === null) return value.state === 'expired' ? 'expired'
+        : value.state === 'unavailable' ? 'unavailable' : 'unknown';
+    let formatted: string;
+    if (typeof value.value === 'boolean') formatted = value.value ? 'Yes' : 'No';
+    else if (typeof value.value === 'number') formatted = formatNumber(value.value);
+    else formatted = value.value;
+    if (value.unit === 'celsius') formatted += ' °C';
+    if (value.unit === 'percent') formatted += '%';
+    if (value.unit === 'kwh') formatted += ' kWh';
+    if (value.unit === 'seconds') formatted += ' seconds';
+    if (value.state === 'historical') formatted += ' (last known)';
+    if (value.state === 'configured') formatted += ' (configured)';
+    if (value.state === 'expired') formatted += ' (expired)';
+    return formatted;
+}
+
+function formatNames(names: readonly string[]): string {
+    if (names.length === 0) return 'The requested room';
     if (names.length === 1) return names[0]!;
     if (names.length === 2) return `${names[0]} and ${names[1]}`;
-    return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`;
+    return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
 }
 
-function plural(count: number, singular: string): string {
-    return count === 1 ? singular : `${singular}s`;
+function formatNumber(value: number): string {
+    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value);
 }
 
-function chunkStrings(values: readonly string[], size: number): string[][] {
-    const chunks: string[][] = [];
-    for (let index = 0; index < values.length; index += size) {
-        chunks.push(values.slice(index, index + size));
+function domainLabel(domain: SystemDomain): string {
+    const labels: Partial<Record<SystemDomain, string>> = {
+        rooms: 'Rooms and room inventory', devices: 'Devices and connectivity',
+        measurements: 'Current and last-known room readings', occupancy: 'Occupancy readings',
+        ac_control: 'AC power state', overrides: 'Stored override configuration',
+        ai_auto_apply: 'AI auto-apply configuration', schedules: 'Configured schedules',
+        energy: 'Estimated energy reports and rankings',
+        climate_suggestions: 'Stored climate suggestions',
+        decision_events: 'Recorded decision events', floor_plan: 'Floor-plan assignments',
+        own_account: 'Your own account facts', admin_user_aggregates: 'Aggregate user counts',
+        app_help: 'Verified OcuTemp how-to guidance',
+        assistant_capabilities: 'Assistant capabilities', conversation: 'Conversation',
+        unsupported: 'Unsupported',
+    };
+    return labels[domain] ?? domain;
+}
+
+function requiresCurrentReading(part: SystemQueryPart): boolean {
+    return part.fields.some((field) =>
+        ['temperature', 'humidity', 'condition', 'occupancy', 'ac_power'].includes(field));
+}
+
+function deterministicDomain(domain: SystemDomain): boolean {
+    return ['conversation', 'unsupported', 'assistant_capabilities', 'own_account'].includes(domain);
+}
+
+function isPriorPartDependency(part: SystemQueryPart): boolean {
+    return part.scope.kind === 'prior_part' || part.followUpReference.kind === 'prior_part';
+}
+
+function legacyFocusFor(part: SystemQueryPart): ChatQuestionFocus {
+    if (part.domain === 'measurements') {
+        if (part.fields.includes('last_known_temperature')) return 'last_known_temperature';
+        if (part.fields.includes('humidity')) return 'current_humidity';
+        if (part.fields.includes('condition')) return 'current_condition';
+        return 'current_temperature';
     }
-    return chunks;
+    if (part.domain === 'energy') {
+        if (part.operation === 'report') return 'energy_report';
+        if (part.operation === 'compare' && part.limit === 1) return 'energy_rank_winner';
+        if (part.operation === 'compare') return 'energy_ranking';
+        if (part.fields.includes('energy_trend')) return 'energy_trend';
+        if (part.operation === 'explain') return 'facility_efficiency_analysis';
+        return 'energy_total';
+    }
+    if (part.domain === 'schedules') return part.operation === 'count'
+        ? 'schedule_count' : 'schedule_list';
+    if (part.domain === 'ai_auto_apply') return 'ai_auto_apply_status';
+    if (part.domain === 'devices') return 'device_status';
+    if (part.domain === 'ac_control') return 'ac_power_status';
+    if (part.domain === 'app_help') return 'system_help';
+    if (part.domain === 'conversation' && part.operation === 'greet') return 'greeting';
+    if (part.domain === 'conversation' && part.operation === 'deny') return 'control_request';
+    return 'unsupported';
+}
+
+function numberTokens(value: string): string[] {
+    return value.match(/-?\d+(?:\.\d+)?/gu) ?? [];
+}
+
+function numericUnitClaims(value: string): string[] {
+    return [...value.matchAll(
+        /(-?\d+(?:\.\d+)?)\s*(°\s*c|degrees?\s+c(?:elsius)?|%|kwh|seconds?|minutes?|hours?)/giu,
+    )].map((match) => {
+        const rawUnit = match[2]!.replace(/\s+/gu, '').toLocaleLowerCase('en-US');
+        const unit = rawUnit.includes('°') || rawUnit.startsWith('degree')
+            ? 'celsius'
+            : rawUnit.startsWith('second') ? 'seconds'
+                : rawUnit.startsWith('minute') ? 'minutes'
+                    : rawUnit.startsWith('hour') ? 'hours' : rawUnit;
+        return `${match[1]}:${unit}`;
+    });
+}
+
+function countExplicitQuestions(message: string): number {
+    return (message.match(/\?/gu) ?? []).length;
+}
+
+function hasMultipleSystemTopics(message: string): boolean {
+    const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    const topicPatterns: readonly RegExp[] = [
+        /\b(room count|total rooms?|how many rooms?|list rooms?|room status)\b/u,
+        /\b(devices?|online|offline|last seen)\b/u,
+        /\b(temperature|humidity|hot|heat|condition)\b/u,
+        /\b(occupancy|occupied|occupants?)\b/u,
+        /\b(ac power|ac state|aircon|air conditioner)\b/u,
+        /\b(overrides?)\b/u,
+        /\b(ai auto[- ]?apply|auto[- ]?apply|ai toggle)\b/u,
+        /\b(schedules?|timetable)\b/u,
+        /\b(energy|kwh|waste|efficien|ranked? first|ranking|top consumer)\b/u,
+        /\b(climate suggestion|ml suggestion|temperature suggestion)\b/u,
+        /\b(decision events?|operational logs?)\b/u,
+        /\b(floor[ -]?plan|map layout|assigned cells?)\b/u,
+        /\b(users?|accounts?|admins?|staff)\b/u,
+    ];
+    return topicPatterns.filter((pattern) => pattern.test(normalized)).length > 1;
+}
+
+function manilaDateKey(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(date);
+    const value = Object.fromEntries(parts.map((partValue) => [partValue.type, partValue.value]));
+    return `${value['year']}-${value['month']}-${value['day']}`;
 }
 
 function cleanText(value: string, maximum: number): string {
-    const normalized = value.normalize('NFKC')
-        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/gu, '')
-        .replace(/\s+/gu, ' ').trim();
-    return Array.from(normalized).slice(0, maximum).join('');
-}
-
-function redactUntrustedText(value: string): string {
-    return value.normalize('NFKC')
+    return Array.from(value.normalize('NFKC')
         .replace(/[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/gu, ' ')
-        .replace(/https:\/\/[^\s/]+\.(?:firebaseio\.com|firebasedatabase\.app)(?:\/[^\s]*)?/giu, '[redacted Firebase reference]')
-        .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/gu, '[redacted token]')
-        .replace(/\bbearer\s+[A-Za-z0-9._~+\/-]{8,}={0,2}/giu, 'Bearer [redacted]')
-        .replace(/\b(?:api[_ -]?key|access[_ -]?token|id[_ -]?token|state[_ -]?token|secret|password)\s*[:=]\s*[^\s,;]+/giu, '$1=[redacted]')
-        .replace(/\b(?:gsk_|sk-|gh[pousr]_)[A-Za-z0-9_-]{16,}\b/gu, '[redacted credential]')
-        .replace(/\bAIza[A-Za-z0-9_-]{20,}\b/gu, '[redacted credential]')
-        .replace(/\b(?:users|devices|rooms|decisionLogs|energy|logs)\/[A-Za-z0-9_.~%/-]+/giu, '[redacted internal reference]')
-        .replace(/\b(?=[A-Za-z0-9_+/-]{32,}={0,2}(?=$|[\s,;:.!?"'<>]))(?=[A-Za-z0-9_+/-]*[A-Za-z])(?=[A-Za-z0-9_+/-]*\d)[A-Za-z0-9_+/-]{32,}={0,2}/gu, '[redacted opaque value]')
-        .replace(/\s+/gu, ' ').trim();
+        .replace(/\s+/gu, ' ').trim()).slice(0, maximum).join('');
 }
 
-function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-    const actual = Object.keys(value);
-    return actual.length === keys.length && actual.every((key) => keys.includes(key));
+function uniqueStrings(values: readonly string[]): string[] {
+    const seen = new Set<string>();
+    return values.filter((value) => {
+        const key = value.toLocaleLowerCase('en-US');
+        if (!value || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
-function isSafeText(value: unknown, maximum: number, allowEmpty: boolean): value is string {
-    return typeof value === 'string' && Array.from(value).length <= maximum &&
-        !/[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/u.test(value) &&
-        (allowEmpty || Boolean(value.trim()));
+function numberOrZero(value: number | null): number { return value ?? 0; }
+void numberOrZero;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function normalizeText(value: string): string {
-    return value.normalize('NFKC').trim().replace(/\s+/gu, ' ');
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+    const keys = Object.keys(value);
+    return keys.length === expected.length && keys.every((key) => expected.includes(key));
 }
 
-function isIsoCalendarDate(value: string): boolean {
-    if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
-    const parsed = new Date(`${value}T00:00:00.000Z`);
-    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+function assertNotAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) throw signal.reason ?? new Error('chat_turn_aborted');
 }
 
-function hasExplicitEnergyPeriod(value: string): boolean {
-    return /\b(?:today|yesterday|annual|yearly|q[1-4]|quarter|whole[- ]year|january|february|march|april|may|june|july|august|september|october|november|december|\d{4})\b|\b(?:this|last|previous|past)\s+(?:day|week|month|year|7\s+days|12\s+months)\b|\d{4}-\d{2}-\d{2}/iu.test(value);
+function durationBucket(durationMs: number): string {
+    if (durationMs < 500) return 'under_500ms';
+    if (durationMs < 1_500) return '500_1499ms';
+    if (durationMs < 3_000) return '1500_2999ms';
+    if (durationMs < 6_000) return '3000_5999ms';
+    return '6000ms_or_more';
 }
 
-function hasExplicitRoomScope(value: string): boolean {
-    return /\b(?:all|every|each)\s+(?:active\s+)?rooms?\b|\b(?:which|what)\s+(?:active\s+)?rooms\b|\bfacility(?:-wide)?\b|\broom\s+(?!(?:rank(?:ed|s|ing)?|is|was|has|had|uses?|consumes?|with|that|which|who|status|temperature|humidity|energy)\b)[\p{L}\p{N}][\p{L}\p{N}_-]*/iu.test(value);
+function logSafe(
+    requestId: string,
+    stage: string,
+    fields: Readonly<Record<string, string | number>>,
+): void {
+    console.info('[chat] stage', { requestId, stage, ...fields });
 }
 
-function invalidProviderPlan(): ChatApiError {
-    return new ChatApiError('assistant_unavailable', 'The semantic plan was invalid.', 502);
-}
-
-function invalidGeneratedAnswer(): ChatApiError {
-    return new ChatApiError('assistant_unavailable', 'The generated answer was not grounded.', 502);
-}
-
-function invalidDisplayPlan(): ChatApiError {
-    return new ChatApiError('assistant_unavailable', 'The display plan was invalid.', 502);
-}
-
-function unique<T>(values: readonly T[]): T[] {
-    return [...new Set(values)];
-}
+void emptyScopeResolution;

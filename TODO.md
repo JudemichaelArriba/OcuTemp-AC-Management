@@ -21,99 +21,99 @@ Planning only. Every implementation item is intentionally unchecked.
 
 ## 1. Replace the brittle focus list with a bounded system-query contract
 
-- [ ] Add a compact `SystemQueryPlan` with allowlisted `domain`, `operation`, `fields`, `scope`, `timeRange`, `outputPreference`, and `followUpReference`.
-- [ ] Support domains: rooms, devices, occupancy, AC/control state, overrides, AI auto-apply, schedules, energy, decision events, floor plan, own account, admin user aggregates, app help, and assistant capabilities.
-- [ ] Support operations: count, list, status, detail, compare, summarize, explain, and how-to.
-- [ ] Keep specialized energy range/ranking semantics, but stop requiring a new rigid enum value for every safe system wording.
-- [ ] Build a server-owned capability registry mapping domain + field + operation to role, required read, response shape, and visual compatibility.
-- [ ] Give the planner only the relevant capability-registry slice; never send a full database schema or raw snapshot.
-- [ ] Treat an in-system but unsupported request as a concise limitation or clarification, not generic `unsupported` or a fabricated answer.
-- [ ] Keep outside knowledge, repair advice, writes, and control execution out of scope.
+- [x] Add a compact `SystemQueryPlan` with allowlisted `domain`, `operation`, `fields`, `scope`, `timeRange`, `outputPreference`, and `followUpReference`.
+- [x] Support domains: rooms, devices, occupancy, AC/control state, overrides, AI auto-apply, schedules, energy, decision events, floor plan, own account, admin user aggregates, app help, and assistant capabilities.
+- [x] Support operations: count, list, status, detail, compare, summarize, explain, and how-to.
+- [x] Keep specialized energy range/ranking semantics, but stop requiring a new rigid enum value for every safe system wording.
+- [x] Build a server-owned capability registry mapping domain + field + operation to role, required read, response shape, and visual compatibility.
+- [x] Give the planner only the relevant capability-registry slice; never send a full database schema or raw snapshot.
+- [x] Treat an in-system but unsupported request as a concise limitation or clarification, not generic `unsupported` or a fabricated answer.
+- [x] Keep outside knowledge, repair advice, writes, and control execution out of scope.
 
 ## 2. Use deterministic routing for simple questions
 
-- [ ] Resolve common count/list/status/capability questions deterministically before calling a model.
-- [ ] Use Gemini primarily for ambiguous semantic planning and Groq primarily for natural-language composition, with the existing reciprocal fallbacks.
-- [ ] Do not require an answer model for room counts, occupancy availability, override counts, yes/no configuration, schedules, or terminal unavailable/not-found answers.
-- [ ] Distinguish provider transport failure, timeout/rate limit, invalid schema, and semantic-plan rejection in sanitized logs.
-- [ ] If both plans are invalid for a simple system question, return a deterministic answer or one useful clarification instead of a misleading provider-outage 503.
-- [ ] Keep logs limited to request ID, stage, provider, safe category, domain, and operation; never log prompts, tokens, user text, or raw data.
+- [x] Resolve common count/list/status/capability questions deterministically before calling a model.
+- [x] Use Gemini primarily for ambiguous semantic planning and Groq primarily for natural-language composition, with the existing reciprocal fallbacks.
+- [x] Do not require an answer model for room counts, occupancy availability, override counts, yes/no configuration, schedules, or terminal unavailable/not-found answers.
+- [x] Distinguish provider transport failure, timeout/rate limit, invalid schema, and semantic-plan rejection in sanitized logs.
+- [x] If both plans are invalid for a simple system question, return a deterministic answer or one useful clarification instead of a misleading provider-outage 503.
+- [x] Keep logs limited to request ID, stage, provider, safe category, domain, and operation; never log prompts, tokens, user text, or raw data.
 
 ## 3. Expand only the necessary read-only tools
 
-- [ ] Extend `get_room_telemetry` with allowlisted projected fields instead of creating one tool per question.
-- [ ] Support room catalog totals: total, active, inactive, assigned-device, unassigned-device, and bounded room-name lists.
-- [ ] Support device summaries: assigned, available, online, stale, offline, and unavailable counts without exposing device IDs.
-- [ ] Support current and explicit last-known occupancy, temperature, humidity, condition, and AC power with the existing freshness thresholds.
-- [ ] Support stored control facts: `overrideActive`, safe target/expiry state, and `control/aiAutoApply`; distinguish stored configuration from confirmed device application.
-- [ ] Support schedule count/list and per-room grouping from `rooms/{roomId}/schedules` without reading devices.
-- [ ] Add one projected facility-summary tool only if it materially reduces reads/tokens; it must accept allowlisted sections and return aggregates, not raw roots.
+- [x] Extend `get_room_telemetry` with allowlisted projected fields instead of creating one tool per question.
+- [x] Support room catalog totals: total, active, inactive, assigned-device, unassigned-device, and bounded room-name lists.
+- [x] Support device summaries: assigned, available, online, stale, offline, and unavailable counts without exposing device IDs.
+- [x] Support current and explicit last-known occupancy, temperature, humidity, condition, and AC power with the existing freshness thresholds.
+- [x] Support stored control facts: `overrideActive`, safe target/expiry state, and `control/aiAutoApply`; distinguish stored configuration from confirmed device application.
+- [x] Support schedule count/list and per-room grouping from `rooms/{roomId}/schedules` without reading devices.
+- [x] Add one projected facility-summary tool only if it materially reduces reads/tokens; it must accept allowlisted sections and return aggregates, not raw roots.
 - [ ] Add a bounded floor-plan summary read only if requested; if `mapLayout` is absent, answer “not configured” rather than failing.
-- [ ] Add an admin-only user aggregate tool only if required for approved/pending counts; never return the users root, emails, names, or records to the model/browser.
-- [ ] Reuse existing energy and recent-event tools; do not create duplicate ranking, schedule, occupancy, or override tools.
-- [ ] Keep every tool GET-only, maximum four unique tools, bounded rows/bytes/ranges, and one shared deadline.
+- [x] Add an admin-only user aggregate tool only if required for approved/pending counts; never return the users root, emails, names, or records to the model/browser.
+- [x] Reuse existing energy and recent-event tools; do not create duplicate ranking, schedule, occupancy, or override tools.
+- [x] Keep every tool GET-only, maximum four unique tools, bounded rows/bytes/ranges, and one shared deadline.
 
 ## 4. Enforce freshness and truthful system semantics
 
-- [ ] Add first-class `current_occupancy` and `last_known_occupancy` query targets.
-- [ ] A current occupancy answer may use a value only when its device is online; stale/offline `false` must not be presented as currently unoccupied.
-- [ ] “Are there occupancy readings?” must distinguish field availability, current readings, and stored last-known readings.
-- [ ] Last-known values require a valid timestamp and must be labeled historical with device freshness.
-- [ ] Active override answers must distinguish stored active configuration, expiry, device connectivity, and confirmed application.
-- [ ] Missing fields remain unknown; never coerce missing occupancy, override, power, AI state, or counts to false/zero.
-- [ ] Preserve missing room, inactive room, no device, unavailable device, offline, no records, recorded zero, and read failure as distinct outcomes.
+- [x] Add first-class `current_occupancy` and `last_known_occupancy` query targets.
+- [x] A current occupancy answer may use a value only when its device is online; stale/offline `false` must not be presented as currently unoccupied.
+- [x] “Are there occupancy readings?” must distinguish field availability, current readings, and stored last-known readings.
+- [x] Last-known values require a valid timestamp and must be labeled historical with device freshness.
+- [x] Active override answers must distinguish stored active configuration, expiry, device connectivity, and confirmed application.
+- [x] Missing fields remain unknown; never coerce missing occupancy, override, power, AI state, or counts to false/zero.
+- [x] Preserve missing room, inactive room, no device, unavailable device, offline, no records, recorded zero, and read failure as distinct outcomes.
 
 ## 5. Make follow-ups refer to the answer, not only the prior request
 
-- [ ] Extend encrypted state with a bounded `referent` containing type, sanitized room names, source turn, and whether it represents all rooms or a result subset.
-- [ ] Populate the referent only from server-verified results, never from model prose.
-- [ ] Resolve “those rooms,” “them,” “the first one,” “the offline rooms,” and similar references only when one verified referent is unambiguous.
-- [ ] Preserve the previous requested scope separately from the previous result subset.
-- [ ] If a referent is missing, expired, or ambiguous, ask one concise clarification instead of guessing or returning 503.
-- [ ] Keep state UID-bound, encrypted, five-turn/two-hour/12-KiB bounded, and free of IDs, raw tool results, user records, or database paths.
+- [x] Extend encrypted state with a bounded `referent` containing type, sanitized room names, source turn, and whether it represents all rooms or a result subset.
+- [x] Populate the referent only from server-verified results, never from model prose.
+- [x] Resolve “those rooms,” “them,” “the first one,” “the offline rooms,” and similar references only when one verified referent is unambiguous.
+- [x] Preserve the previous requested scope separately from the previous result subset.
+- [x] If a referent is missing, expired, or ambiguous, ask one concise clarification instead of guessing or returning 503.
+- [x] Keep state UID-bound, encrypted, five-turn/two-hour/12-KiB bounded, and free of IDs, raw tool results, user records, or database paths.
 
 ## 6. Produce professional, human answers
 
-- [ ] Answer the exact question in the first sentence; avoid repeating “OcuGuide” and generic report headings on every turn.
-- [ ] Use natural wording and varied sentence structure without changing verified facts.
-- [ ] Use concise prose for counts, yes/no, availability, one-room status, capabilities, and errors.
-- [ ] Use bullets for short readable lists, a table for useful multi-field comparisons, and a chart only for meaningful recorded trends/rankings.
-- [ ] Never show a table/chart merely because a tool ran; keep tools and safe inspection data behind the disclosure control.
-- [ ] Add a dedicated assistant-capabilities response derived from the role-aware capability registry.
-- [ ] “What are your jobs?” should explain that OcuGuide is a read-only OcuTemp assistant and summarize the caller’s available system domains; it must not return the “Use OcuGuide” tutorial unless the user asks how to use it.
-- [ ] Do not use a fixed capability sentence as the semantic boundary; generate the summary from the current registry and role.
-- [ ] Keep answers brief by default and expand only for explicit list, comparison, explanation, or report requests.
+- [x] Answer the exact question in the first sentence; avoid repeating “OcuGuide” and generic report headings on every turn.
+- [x] Use natural wording and varied sentence structure without changing verified facts.
+- [x] Use concise prose for counts, yes/no, availability, one-room status, capabilities, and errors.
+- [x] Use bullets for short readable lists, a table for useful multi-field comparisons, and a chart only for meaningful recorded trends/rankings.
+- [x] Never show a table/chart merely because a tool ran; keep tools and safe inspection data behind the disclosure control.
+- [x] Add a dedicated assistant-capabilities response derived from the role-aware capability registry.
+- [x] “What are your jobs?” should explain that OcuGuide is a read-only OcuTemp assistant and summarize the caller’s available system domains; it must not return the “Use OcuGuide” tutorial unless the user asks how to use it.
+- [x] Do not use a fixed capability sentence as the semantic boundary; generate the summary from the current registry and role.
+- [x] Keep answers brief by default and expand only for explicit list, comparison, explanation, or report requests.
 
 ## 7. Role and RTDB-rule alignment
 
-- [ ] Derive role/approval from the verified server-side Firebase identity profile on every request.
-- [ ] Approved staff/admin may receive permitted room, device, decision-log, and floor-plan facts according to the supplied rules.
-- [ ] Staff must never receive other-user information, admin-only counts, approval guidance/actions, or hidden admin routes.
-- [ ] Admin user questions must return only bounded aggregates unless an existing authorized UI workflow explicitly requires more.
-- [ ] Device accounts, pending staff, and unauthenticated users must not gain chat access through planner/tool selection.
-- [ ] The writer must receive only minimal sanitized facts allowed for that role; authorization is never delegated to either model.
-- [ ] Do not change RTDB rules or database nodes unless a later separately approved requirement proves a read is impossible.
+- [x] Derive role/approval from the verified server-side Firebase identity profile on every request.
+- [x] Approved staff/admin may receive permitted room, device, decision-log, and floor-plan facts according to the supplied rules.
+- [x] Staff must never receive other-user information, admin-only counts, approval guidance/actions, or hidden admin routes.
+- [x] Admin user questions must return only bounded aggregates unless an existing authorized UI workflow explicitly requires more.
+- [x] Device accounts, pending staff, and unauthenticated users must not gain chat access through planner/tool selection.
+- [x] The writer must receive only minimal sanitized facts allowed for that role; authorization is never delegated to either model.
+- [x] Do not change RTDB rules or database nodes unless a later separately approved requirement proves a read is impossible.
 
 ## 8. Grounding, efficiency, and failure behavior
 
-- [ ] Build a small typed fact packet for the requested fields only; do not send complete room/device objects to a provider.
-- [ ] Validate names, values, units, timestamps, state qualifiers, counts, and room-to-value associations.
-- [ ] Use deterministic formatters for simple facts and as the fallback for rejected writer output.
-- [ ] Require every model-written system claim to be entailed by supplied facts; reject invented causes or capabilities.
-- [ ] Cap planner prompt, facts, answer blocks, visual directives, tool disclosure, and response bytes.
-- [ ] Cache per-request snapshots and derived aggregates; do not re-read the same root within one turn.
-- [ ] Keep at most one main visual and no visual for missing/unavailable/permission-denied results.
-- [ ] Return generic public errors while preserving a sanitized diagnostic category in server logs.
+- [x] Build a small typed fact packet for the requested fields only; do not send complete room/device objects to a provider.
+- [x] Validate names, values, units, timestamps, state qualifiers, counts, and room-to-value associations.
+- [x] Use deterministic formatters for simple facts and as the fallback for rejected writer output.
+- [x] Require every model-written system claim to be entailed by supplied facts; reject invented causes or capabilities.
+- [x] Cap planner prompt, facts, answer blocks, visual directives, tool disclosure, and response bytes.
+- [x] Cache per-request snapshots and derived aggregates; do not re-read the same root within one turn.
+- [x] Keep at most one main visual and no visual for missing/unavailable/permission-denied results.
+- [x] Return generic public errors while preserving a sanitized diagnostic category in server logs.
 
 ## 9. Connected file map
 
-- [ ] Server contracts/planning: `server/chat/types/chat.types.ts`, `server/chat/tools/schema.ts`, planner prompt, and orchestrator.
-- [ ] Read-only data layer: executor, energy helper, and Firebase REST client.
-- [ ] Provider/error behavior: retry/provider modules and `api/chat/index.ts`.
-- [ ] Conversation state: `server/chat/state.ts` and the API state handoff.
-- [ ] Client contract/rendering: chat models/service, OcuGuide conversation, and report TS/HTML/CSS.
-- [ ] Review-only sources: app routes; room/device/schedule/energy/user models and services; auth guards; dashboard; room details; reports; settings; user management; supplied RTDB rules/data.
-- [ ] Do not modify environment/package files, RTDB rules/data, routes/sidebar, or unrelated pages unless separately approved.
+- [x] Server contracts/planning: `server/chat/types/chat.types.ts`, `server/chat/tools/schema.ts`, planner prompt, and orchestrator.
+- [x] Read-only data layer: executor, energy helper, and Firebase REST client.
+- [x] Provider/error behavior: retry/provider modules and `api/chat/index.ts`.
+- [x] Conversation state: `server/chat/state.ts` and the API state handoff.
+- [x] Client contract/rendering: chat models/service, OcuGuide conversation, and report TS/HTML/CSS.
+- [x] Review-only sources: app routes; room/device/schedule/energy/user models and services; auth guards; dashboard; room details; reports; settings; user management; supplied RTDB rules/data.
+- [x] Do not modify environment/package files, RTDB rules/data, routes/sidebar, or unrelated pages unless separately approved.
 
 ## 10. Required manual acceptance
 
@@ -130,9 +130,9 @@ Planning only. Every implementation item is intentionally unchecked.
 
 ## 11. Validation restrictions
 
-- [ ] Never add, edit, generate, or run test/spec files, fixtures, snapshots, mocks, or automated test runners.
-- [ ] Validate only through static review, strict compilation, and `npm run build`; use `ng serve` only for optional manual checking.
-- [ ] Confirm the final diff contains no environment, package, database, RTDB-rule, Firebase Function, extra endpoint, or unrelated change.
+- [x] Never add, edit, generate, or run test/spec files, fixtures, snapshots, mocks, or automated test runners.
+- [x] Validate only through static review, strict compilation, and `npm run build`; use `ng serve` only for optional manual checking.
+- [x] Confirm the final diff contains no environment, package, database, RTDB-rule, Firebase Function, extra endpoint, or unrelated change.
 - [ ] Perform authenticated feature-branch Preview checks for admin and approved staff before marking behavioral items complete.
 
 ## Definition of done
@@ -142,4 +142,4 @@ Planning only. Every implementation item is intentionally unchecked.
 - [ ] Follow-ups resolve verified answer referents naturally and never fail merely because a pronoun changed the scope.
 - [ ] Answers are concise, professional, question-specific, and use visuals only when materially useful.
 - [ ] No unauthorized data, unsupported capability, outside knowledge, or fabricated state is presented.
-- [ ] The production build passes with no automated tests run or test files created.
+- [x] The production build passes with no automated tests run or test files created.
