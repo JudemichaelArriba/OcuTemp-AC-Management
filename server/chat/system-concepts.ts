@@ -12,7 +12,7 @@ const TRUSTED_SYSTEM_CONCEPTS: Readonly<Partial<Record<SystemField, string>>> = 
     room_status: 'A room can be configured as active or inactive in OcuTemp. That configured room state is separate from whether its assigned device is online.',
     ac_power: 'AC power state is the on or off state reported by an assigned OcuTemp device. A current state requires the device to be online.',
     override_active: 'An OcuTemp override is active only when its stored active flag is true and its expiry is valid and still in the future. Stored configuration alone does not prove that a physical command was applied.',
-    ai_auto_apply: 'AI auto-apply is stored OcuTemp configuration that determines whether an eligible climate suggestion may be applied automatically by the device. Its configured state can be read while the device is offline.',
+    ai_auto_apply: 'The AI auto button controls whether an eligible climate suggestion may be applied automatically by the device. OcuTemp stores this setting, so its configured state can still be checked while the device is offline.',
     schedules: 'OcuTemp schedules are stored weekly room configurations with a day, start time, end time, and subject. They can be read even when the room device is offline.',
     floor_plan_assignment: 'A floor-plan assignment links a configured OcuTemp room to a floor-plan cell. Assignment coverage comes from the room configuration and does not require live telemetry.',
     climate_suggestion: 'A climate suggestion is a stored recommendation written to OcuTemp by the external prediction service. It is not proof that the suggestion was applied.',

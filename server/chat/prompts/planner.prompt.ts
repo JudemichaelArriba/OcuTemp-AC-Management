@@ -27,6 +27,7 @@ Rules:
 - Use ordinal=0 unless the user explicitly refers to an ordered result. A part with reference=none must always use ordinal=0.
 - Current, now, currently, right now, rn, or live state means freshness=current. Schedules, AI auto-apply, overrides, and floor-plan assignments use configured. Explicit last-known requests use last_known.
 - Definitions and OcuTemp-purpose questions use system_concepts with the relevant concept field. General how-to instructions use app_help.
+- Questions such as "What is the AI auto button for?" ask for the ai_auto_apply system concept. They are definitions, not OcuGuide navigation help.
 - A simple room total plus online-device total should be one devices/count part with room_count and online_device_count.
 - Online, offline, stale, connected, and disconnected describe device_status. A room described as active or running means its AC is currently on and uses ac_control/list with room_name, ac_power, and device_status. Idle means the AC is currently off. Use room_status only when the user explicitly asks about configured or enabled room records. A question asking whether any room is online uses devices/count with online_device_count.
 - Occupied means the room's current occupancy reading is true. Available, vacant, or unoccupied means the current occupancy reading is false. These use occupancy/list with room_name, occupancy, and device_status. Current occupancy claims require an online device; asking whether occupancy data is available is a data-availability question, not a request for unoccupied rooms.

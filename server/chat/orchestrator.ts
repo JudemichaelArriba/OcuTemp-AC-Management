@@ -789,6 +789,16 @@ function normalizeDialoguePart(
     let presentationIntent = dialogue.presentationIntent;
     let reference = dialogue.reference;
     let ordinal = dialogue.ordinal;
+    const definitionConcept = explicitSystemConcept(normalizedMessage);
+
+    if (definitionConcept) {
+        domain = 'system_concepts';
+        intent = 'explain';
+        concepts = [definitionConcept];
+        presentationIntent = 'prose';
+        reference = 'none';
+        ordinal = 0;
+    }
 
     if (requestedAcPower !== null &&
         ['rooms', 'devices', 'ac_control', 'conversation', 'unsupported'].includes(domain)) {
@@ -1073,6 +1083,15 @@ function asksForConnectivityList(message: string): boolean {
 
 function asksForAppHelp(message: string): boolean {
     return /\b(where|how\s+to|how\s+(?:do|can)\s+i|steps?|guide|help)\b/u.test(message);
+}
+
+function explicitSystemConcept(message: string): SystemField | null {
+    const asksForDefinition = /\b(?:what\s+(?:is|does)|what\s+is\s+.+\s+for|explain|meaning)\b/u
+        .test(message);
+    if (!asksForDefinition) return null;
+    if (/\b(?:ai\s+auto(?:matic)?(?:[\s-]*apply)?(?:\s+button)?|auto[\s-]*apply)\b/u
+        .test(message)) return 'ai_auto_apply';
+    return null;
 }
 
 function connectivityCountField(message: string): SystemField {
