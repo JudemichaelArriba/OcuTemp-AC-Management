@@ -1,6 +1,6 @@
 import type {
     ChatAnswerabilityOutcome, ChatOutputPreference, ChatPartId, ChatToolName,
-    EnergyBucket, EnergyRangePreset, RecommendationCategory, SystemDomain,
+    EnergyBucket, EnergyRangePreset, SystemDomain,
     SystemField, SystemFilterOperator, SystemOperation, SystemScopeKind,
 } from '../types/chat.types.js';
 
@@ -42,6 +42,12 @@ export const SYSTEM_FILTER_OPERATORS: readonly SystemFilterOperator[] = [
 export const CHAT_OUTPUT_PREFERENCES: readonly ChatOutputPreference[] = [
     'auto', 'text', 'table', 'graph',
 ];
+export const CHAT_DIALOGUE_ACTS = [
+    'ask', 'confirm', 'correct', 'follow_up', 'elaborate', 'clarify', 'greet', 'deny',
+] as const;
+export const DIALOGUE_FRESHNESS = [
+    'auto', 'current', 'last_known', 'configured', 'historical',
+] as const;
 export const ENERGY_PRESETS: readonly EnergyRangePreset[] = [
     'today', 'this_week', 'last_week', 'last_7_days', 'this_month', 'last_month',
     'this_year', 'last_12_months', 'custom',
@@ -55,97 +61,51 @@ export const ANSWERABILITY_OUTCOMES: readonly ChatAnswerabilityOutcome[] = [
     'insufficient_evidence', 'permission_denied', 'clarification_required',
     'not_applicable',
 ];
-export const RECOMMENDATION_CATEGORIES: readonly RecommendationCategory[] = [
-    'review_schedule', 'inspect_high_runtime_room', 'investigate_offline_device',
-    'review_ai_auto_apply_configuration', 'collect_missing_energy_data',
-];
-
-const FILTER_SCHEMA = {
+const DIALOGUE_PART_SCHEMA = {
     type: 'object', additionalProperties: false,
     properties: {
-        field: { type: 'string', enum: SYSTEM_FIELDS },
-        operator: { type: 'string', enum: SYSTEM_FILTER_OPERATORS },
-        valueType: { type: 'string', enum: ['string', 'number', 'boolean', 'strings'] },
-        stringValue: { type: 'string', maxLength: 100 },
-        numberValue: { type: 'number', minimum: -1_000_000, maximum: 1_000_000 },
-        booleanValue: { type: 'boolean' },
-        stringValues: { type: 'array', maxItems: 50, uniqueItems: true,
-            items: { type: 'string', minLength: 1, maxLength: 100 } },
-    },
-    required: ['field', 'operator', 'valueType', 'stringValue', 'numberValue',
-        'booleanValue', 'stringValues'],
-} as const;
-
-const QUERY_PART_SCHEMA = {
-    type: 'object', additionalProperties: false,
-    properties: {
-        partId: { type: 'string', enum: CHAT_PART_IDS },
         domain: { type: 'string', enum: SYSTEM_DOMAINS },
-        operation: { type: 'string', enum: SYSTEM_OPERATIONS },
-        fields: { type: 'array', minItems: 1, maxItems: 8, uniqueItems: true,
+        intent: { type: 'string', enum: SYSTEM_OPERATIONS },
+        concepts: { type: 'array', minItems: 1, maxItems: 8, uniqueItems: true,
             items: { type: 'string', enum: SYSTEM_FIELDS } },
-        filters: { type: 'array', maxItems: 4, items: FILTER_SCHEMA },
-        sort: { type: 'object', additionalProperties: false,
-            properties: {
-                field: { type: 'string', enum: SYSTEM_FIELDS },
-                direction: { type: 'string', enum: ['none', 'asc', 'desc'] },
-            }, required: ['field', 'direction'] },
-        scope: { type: 'object', additionalProperties: false,
-            properties: {
-                kind: { type: 'string', enum: SYSTEM_SCOPE_KINDS },
-                roomNames: { type: 'array', maxItems: 50, uniqueItems: true,
-                    items: { type: 'string', minLength: 1, maxLength: 100 } },
-                inventory: { type: 'string', enum: ['active', 'inactive', 'all'] },
-                referencePartId: { type: 'string', enum: ['', ...CHAT_PART_IDS] },
-            }, required: ['kind', 'roomNames', 'inventory', 'referencePartId'] },
-        timeRange: { type: 'object', additionalProperties: false,
-            properties: {
-                preset: { type: 'string', enum: ENERGY_PRESETS },
-                startDate: { type: 'string', maxLength: 10 },
-                endDate: { type: 'string', maxLength: 10 },
-                bucket: { type: 'string', enum: ENERGY_BUCKETS },
-            }, required: ['preset', 'startDate', 'endDate', 'bucket'] },
+        roomNames: { type: 'array', maxItems: 50, uniqueItems: true,
+            items: { type: 'string', minLength: 1, maxLength: 100 } },
+        reference: { type: 'string', enum: ['none', 'previous_request',
+            'previous_result', 'prior_part'] },
+        referencePartId: { type: 'string', enum: ['', ...CHAT_PART_IDS] },
+        ordinal: { type: 'integer', minimum: 0, maximum: 3 },
+        freshness: { type: 'string', enum: DIALOGUE_FRESHNESS },
         outputPreference: { type: 'string', enum: CHAT_OUTPUT_PREFERENCES },
-        followUpReference: { type: 'object', additionalProperties: false,
-            properties: {
-                kind: { type: 'string', enum: ['none', 'previous_request',
-                    'previous_result', 'prior_part'] },
-                partId: { type: 'string', enum: ['', ...CHAT_PART_IDS] },
-                ordinal: { type: 'integer', minimum: 0, maximum: 3 },
-            }, required: ['kind', 'partId', 'ordinal'] },
-        limit: { type: 'integer', minimum: 1, maximum: 50 },
-        needsClarification: { type: 'boolean' },
-        clarification: { type: 'string', maxLength: 240 },
+        confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        ambiguity: { type: 'string', maxLength: 240 },
     },
-    required: ['partId', 'domain', 'operation', 'fields', 'filters', 'sort', 'scope',
-        'timeRange', 'outputPreference', 'followUpReference', 'limit',
-        'needsClarification', 'clarification'],
+    required: ['domain', 'intent', 'concepts', 'roomNames', 'reference',
+        'referencePartId', 'ordinal', 'freshness', 'outputPreference', 'confidence',
+        'ambiguity'],
 } as const;
 
-/** Models return semantic intent only. Tool names and authorization are server owned. */
-export const PLANNER_OUTPUT_SCHEMA: Record<string, unknown> = {
+export const DIALOGUE_PLAN_SCHEMA: Record<string, unknown> = {
     type: 'object', additionalProperties: false,
-    properties: { parts: { type: 'array', minItems: 1, maxItems: 3, items: QUERY_PART_SCHEMA } },
-    required: ['parts'],
+    properties: {
+        act: { type: 'string', enum: CHAT_DIALOGUE_ACTS },
+        parts: { type: 'array', minItems: 1, maxItems: 3, items: DIALOGUE_PART_SCHEMA },
+    },
+    required: ['act', 'parts'],
 };
 
 const EVIDENCE_REFS_SCHEMA = { type: 'array', minItems: 1, maxItems: 12,
     uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 80 } } as const;
-const RECOMMENDATION_SCHEMA = {
-    type: 'object', additionalProperties: false,
-    properties: {
-        category: { type: 'string', enum: RECOMMENDATION_CATEGORIES },
-        text: { type: 'string', minLength: 1, maxLength: 300 },
-        evidenceRefs: EVIDENCE_REFS_SCHEMA,
-    },
-    required: ['category', 'text', 'evidenceRefs'],
-} as const;
-
 export const ANSWER_OUTPUT_SCHEMA: Record<string, unknown> = {
     type: 'object', additionalProperties: false,
     properties: {
-        text: { type: 'string', minLength: 1, maxLength: 1_200 },
-        evidenceRefs: EVIDENCE_REFS_SCHEMA,
+        clauses: { type: 'array', minItems: 1, maxItems: 4, items: {
+            type: 'object', additionalProperties: false,
+            properties: {
+                role: { type: 'string', enum: ['direct_answer', 'context', 'next_step'] },
+                text: { type: 'string', minLength: 1, maxLength: 600 },
+                evidenceRefs: EVIDENCE_REFS_SCHEMA,
+            }, required: ['role', 'text', 'evidenceRefs'],
+        } },
         highlights: { type: 'array', maxItems: 6, items: {
             type: 'object', additionalProperties: false,
             properties: {
@@ -153,7 +113,6 @@ export const ANSWER_OUTPUT_SCHEMA: Record<string, unknown> = {
                 evidenceRefs: EVIDENCE_REFS_SCHEMA,
             }, required: ['text', 'evidenceRefs'],
         } },
-        recommendations: { type: 'array', maxItems: 5, items: RECOMMENDATION_SCHEMA },
     },
-    required: ['text', 'evidenceRefs', 'highlights', 'recommendations'],
+    required: ['clauses', 'highlights'],
 };

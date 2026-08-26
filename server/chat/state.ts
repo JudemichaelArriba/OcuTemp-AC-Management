@@ -1,14 +1,16 @@
 import { CompactEncrypt, compactDecrypt } from 'jose';
 import { getChatConfig } from './config.js';
 import {
-    ANSWERABILITY_OUTCOMES, CHAT_PART_IDS, CHAT_TOOL_NAMES, ENERGY_BUCKETS,
+    ANSWERABILITY_OUTCOMES, CHAT_DIALOGUE_ACTS, CHAT_PART_IDS, CHAT_TOOL_NAMES, ENERGY_BUCKETS,
     ENERGY_PRESETS, SYSTEM_DOMAINS, SYSTEM_FIELDS, SYSTEM_OPERATIONS,
     SYSTEM_SCOPE_KINDS,
 } from './tools/schema.js';
 import type {
-    ChatAnswerabilityOutcome, ChatPartId, ChatStateContext, ChatStatePayload,
-    ChatStateReferent, ChatStateTurn, ChatToolName, EnergyBucket, EnergyRangePreset,
-    SystemDomain, SystemField, SystemOperation, SystemScopeKind,
+    ChatAnswerabilityOutcome, ChatDialogueAct, ChatDisplayMode, ChatFreshnessOutcome,
+    ChatPartId, ChatStateContext, ChatStateCount, ChatStateEmptyReason, ChatStatePayload,
+    ChatStateReferent, ChatStateResultMemory, ChatStateResultOutcome, ChatStateTurn,
+    ChatToolName, EnergyBucket, EnergyRangePreset, SystemDomain, SystemField,
+    SystemOperation, SystemScopeKind,
 } from './types/chat.types.js';
 import { ChatApiError } from './types/chat.types.js';
 
@@ -16,7 +18,7 @@ export const CHAT_STATE_MAX_TURNS = 5;
 export const CHAT_STATE_LIFETIME_SECONDS = 2 * 60 * 60;
 export const CHAT_STATE_MAX_TOKEN_BYTES = 12 * 1024;
 
-const STATE_VERSION = 3;
+const STATE_VERSION = 4;
 const STATE_TOKEN_TYPE = 'ocutemp-chat-state+jwe';
 const CLOCK_TOLERANCE_SECONDS = 30;
 const MAX_CONTEXTS_PER_TURN = 3;
@@ -24,6 +26,22 @@ const MAX_REFERENTS_PER_TURN = 3;
 const MAX_REFERENT_ROOMS = 50;
 const MAX_CONTEXT_FIELDS = 8;
 const MAX_STATE_TOOLS = 4;
+const MAX_RESULT_COUNTS = 8;
+const RESULT_OUTCOMES: readonly ChatStateResultOutcome[] = [
+    'matched', 'empty', 'partial', 'unavailable', 'denied', 'ambiguous',
+];
+const EMPTY_REASONS: readonly ChatStateEmptyReason[] = [
+    'none', 'no_matches', 'no_online_reading', 'no_records', 'room_not_found',
+    'room_inactive', 'permission_denied', 'source_unavailable',
+    'insufficient_evidence', 'ambiguous',
+];
+const FRESHNESS_OUTCOMES: readonly ChatFreshnessOutcome[] = [
+    'current', 'mixed', 'stale', 'offline', 'unavailable', 'not_applicable',
+];
+const DISPLAY_MODES: ReadonlyArray<ChatDisplayMode | 'none'> = [
+    'none', 'compact_metrics', 'key_value', 'bullet_list', 'table', 'ranking_chart',
+    'trend_chart', 'full_report',
+];
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
@@ -56,7 +74,7 @@ export async function encodeChatState(
 }
 
 /**
- * Valid v1/v2 tokens are intentionally treated as context resets. Modified,
+ * Valid v1/v2/v3 tokens are intentionally treated as context resets. Modified,
  * malformed, or UID-bound tokens fail closed instead of being migrated.
  */
 export async function decodeChatState(
@@ -78,11 +96,11 @@ export async function decodeChatState(
         assertNotAborted(abortSignal);
         const version = protectedHeader['v'];
         if (protectedHeader.alg !== 'dir' || protectedHeader.enc !== 'A256GCM' ||
-            protectedHeader.typ !== STATE_TOKEN_TYPE || ![1, 2, STATE_VERSION].includes(Number(version))) {
+            protectedHeader.typ !== STATE_TOKEN_TYPE || ![1, 2, 3, STATE_VERSION].includes(Number(version))) {
             throw contextInvalid();
         }
         const parsed = JSON.parse(textDecoder.decode(plaintext)) as unknown;
-        if (version === 1 || version === 2 || isLegacyPayload(parsed)) {
+        if (version === 1 || version === 2 || version === 3 || isLegacyPayload(parsed)) {
             if (!isRecord(parsed) || parsed['uid'] !== uid) throw contextInvalid();
             return { state: null, contextReset: true };
         }
@@ -116,27 +134,83 @@ function validateAndNormalizeState(value: unknown, allowExpired: boolean): ChatS
         (!allowExpired && expiresAt <= now) || !Array.isArray(turns) ||
         turns.length > CHAT_STATE_MAX_TURNS) throw contextInvalid();
     return {
-        version: 3, uid, conversationId, issuedAt, expiresAt,
+        version: 4, uid, conversationId, issuedAt, expiresAt,
         turns: turns.map(normalizeTurn),
     };
 }
 
 function normalizeTurn(value: unknown): ChatStateTurn {
-    if (!isRecord(value) || !hasExactKeys(value, ['contexts', 'referents']) ||
+    if (!isRecord(value) || !hasExactKeys(value, ['act', 'contexts', 'referents', 'results']) ||
+        typeof value['act'] !== 'string' ||
+        !CHAT_DIALOGUE_ACTS.includes(value['act'] as ChatDialogueAct) ||
         !Array.isArray(value['contexts']) || value['contexts'].length < 1 ||
         value['contexts'].length > MAX_CONTEXTS_PER_TURN ||
-        !Array.isArray(value['referents']) || value['referents'].length > MAX_REFERENTS_PER_TURN) {
+        !Array.isArray(value['referents']) || value['referents'].length > MAX_REFERENTS_PER_TURN ||
+        !Array.isArray(value['results']) || value['results'].length < 1 ||
+        value['results'].length > MAX_CONTEXTS_PER_TURN) {
         throw contextInvalid();
     }
     const contexts = value['contexts'].map(normalizeContext);
     const expectedIds = contexts.map((context, index) => CHAT_PART_IDS[index] === context.partId);
     if (expectedIds.some((matches) => !matches)) throw contextInvalid();
     const referents = value['referents'].map(normalizeReferent);
+    const results = value['results'].map(normalizeResultMemory);
     if (new Set(referents.map((item) => item.sourcePartId)).size !== referents.length ||
         referents.some((item) => !contexts.some((context) => context.partId === item.sourcePartId))) {
         throw contextInvalid();
     }
-    return { contexts, referents };
+    if (new Set(results.map((item) => item.sourcePartId)).size !== results.length ||
+        results.some((item) => !contexts.some((context) => context.partId === item.sourcePartId))) {
+        throw contextInvalid();
+    }
+    return { act: value['act'] as ChatDialogueAct, contexts, referents, results };
+}
+
+function normalizeResultMemory(value: unknown): ChatStateResultMemory {
+    const keys = ['sourcePartId', 'subject', 'outcome', 'emptyReason', 'counts',
+        'roomNames', 'complete', 'freshness', 'asOf', 'visual'];
+    if (!isRecord(value) || !hasExactKeys(value, keys) ||
+        typeof value['sourcePartId'] !== 'string' ||
+        !CHAT_PART_IDS.includes(value['sourcePartId'] as ChatPartId) ||
+        typeof value['subject'] !== 'string' ||
+        !SYSTEM_DOMAINS.includes(value['subject'] as SystemDomain) ||
+        typeof value['outcome'] !== 'string' ||
+        !RESULT_OUTCOMES.includes(value['outcome'] as ChatStateResultOutcome) ||
+        typeof value['emptyReason'] !== 'string' ||
+        !EMPTY_REASONS.includes(value['emptyReason'] as ChatStateEmptyReason) ||
+        !Array.isArray(value['counts']) || value['counts'].length > MAX_RESULT_COUNTS ||
+        !Array.isArray(value['roomNames']) || value['roomNames'].length > MAX_REFERENT_ROOMS ||
+        typeof value['complete'] !== 'boolean' || typeof value['freshness'] !== 'string' ||
+        !FRESHNESS_OUTCOMES.includes(value['freshness'] as ChatFreshnessOutcome) ||
+        typeof value['asOf'] !== 'string' || !isIsoDateTime(value['asOf']) ||
+        typeof value['visual'] !== 'string' ||
+        !DISPLAY_MODES.includes(value['visual'] as ChatDisplayMode | 'none')) {
+        throw contextInvalid();
+    }
+    const outcome = value['outcome'] as ChatStateResultOutcome;
+    const emptyReason = value['emptyReason'] as ChatStateEmptyReason;
+    if ((outcome === 'empty') !== (emptyReason !== 'none')) throw contextInvalid();
+    return {
+        sourcePartId: value['sourcePartId'] as ChatPartId,
+        subject: value['subject'] as SystemDomain,
+        outcome,
+        emptyReason,
+        counts: value['counts'].map(normalizeStateCount),
+        roomNames: normalizeRoomNames(value['roomNames']),
+        complete: value['complete'],
+        freshness: value['freshness'] as ChatFreshnessOutcome,
+        asOf: value['asOf'],
+        visual: value['visual'] as ChatDisplayMode | 'none',
+    };
+}
+
+function normalizeStateCount(value: unknown): ChatStateCount {
+    if (!isRecord(value) || !hasExactKeys(value, ['field', 'value']) ||
+        typeof value['field'] !== 'string' ||
+        !SYSTEM_FIELDS.includes(value['field'] as SystemField) ||
+        typeof value['value'] !== 'number' || !Number.isSafeInteger(value['value']) ||
+        value['value'] < 0 || value['value'] > 1_000_000) throw contextInvalid();
+    return { field: value['field'] as SystemField, value: value['value'] };
 }
 
 function normalizeContext(value: unknown): ChatStateContext {
@@ -267,7 +341,12 @@ function cleanName(value: string): string {
 }
 
 function isLegacyPayload(value: unknown): boolean {
-    return isRecord(value) && (value['version'] === 1 || value['version'] === 2);
+    return isRecord(value) && [1, 2, 3].includes(Number(value['version']));
+}
+
+function isIsoDateTime(value: string): boolean {
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
 
 function isDate(value: string): boolean {

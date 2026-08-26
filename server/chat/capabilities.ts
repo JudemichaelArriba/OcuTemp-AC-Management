@@ -1,5 +1,8 @@
 import {
     CHAT_PART_IDS,
+    CHAT_DIALOGUE_ACTS,
+    CHAT_OUTPUT_PREFERENCES,
+    DIALOGUE_FRESHNESS,
     ENERGY_BUCKETS,
     ENERGY_PRESETS,
     SYSTEM_DOMAINS,
@@ -8,10 +11,14 @@ import {
 } from './tools/schema.js';
 import type {
     ChatDisplayMode,
+    ChatDialogueAct,
     ChatPartId,
     ChatPrincipal,
     ChatToolName,
     ChatUserRole,
+    DialogueFreshness,
+    DialoguePart,
+    DialoguePlan,
     PlannerToolPlan,
     SystemDomain,
     SystemField,
@@ -168,6 +175,70 @@ export function validateSystemQueryPlan(rawPlan: unknown): SystemQueryPlan {
     return validatePlanShape(rawPlan);
 }
 
+export function validateDialoguePlan(value: unknown): DialoguePlan {
+    if (!isRecord(value) || !hasExactKeys(value, ['act', 'parts']) ||
+        typeof value['act'] !== 'string' ||
+        !CHAT_DIALOGUE_ACTS.includes(value['act'] as ChatDialogueAct) ||
+        !Array.isArray(value['parts']) || value['parts'].length < 1 ||
+        value['parts'].length > MAX_QUERY_PARTS) {
+        throw new CapabilityValidationError('invalid_dialogue_plan');
+    }
+    return {
+        act: value['act'] as ChatDialogueAct,
+        parts: value['parts'].map(validateDialoguePart),
+    };
+}
+
+function validateDialoguePart(value: unknown, index: number): DialoguePart {
+    const keys = ['domain', 'intent', 'concepts', 'roomNames', 'reference',
+        'referencePartId', 'ordinal', 'freshness', 'outputPreference', 'confidence',
+        'ambiguity'];
+    if (!isRecord(value) || !hasExactKeys(value, keys) ||
+        typeof value['domain'] !== 'string' ||
+        !SYSTEM_DOMAINS.includes(value['domain'] as SystemDomain) ||
+        typeof value['intent'] !== 'string' ||
+        !SYSTEM_OPERATIONS.includes(value['intent'] as SystemOperation) ||
+        !Array.isArray(value['concepts']) || value['concepts'].length < 1 ||
+        value['concepts'].length > MAX_PART_FIELDS || !Array.isArray(value['roomNames']) ||
+        typeof value['reference'] !== 'string' ||
+        !['none', 'previous_request', 'previous_result', 'prior_part'].includes(value['reference']) ||
+        typeof value['referencePartId'] !== 'string' ||
+        !['', ...CHAT_PART_IDS].includes(value['referencePartId'] as ChatPartId) ||
+        typeof value['ordinal'] !== 'number' || !Number.isInteger(value['ordinal']) ||
+        value['ordinal'] < 0 || value['ordinal'] > 3 ||
+        typeof value['freshness'] !== 'string' ||
+        !DIALOGUE_FRESHNESS.includes(value['freshness'] as DialogueFreshness) ||
+        typeof value['outputPreference'] !== 'string' ||
+        !CHAT_OUTPUT_PREFERENCES.includes(value['outputPreference'] as never) ||
+        !['high', 'medium', 'low'].includes(String(value['confidence'])) ||
+        typeof value['ambiguity'] !== 'string' || value['ambiguity'].length > 240) {
+        throw new CapabilityValidationError('invalid_dialogue_part');
+    }
+    const reference = value['reference'] as DialoguePart['reference'];
+    const roomNames = normalizeTextArray(value['roomNames'], MAX_EXPLICIT_ROOMS, 100);
+    if (reference === 'none' && value['referencePartId'] !== '' ||
+        reference === 'prior_part' && (value['referencePartId'] === '' ||
+            CHAT_PART_IDS.indexOf(value['referencePartId'] as ChatPartId) >= index) ||
+        reference !== 'prior_part' && value['referencePartId'] !== '' ||
+        reference !== 'none' && roomNames.length > 0) {
+        throw new CapabilityValidationError('invalid_dialogue_reference');
+    }
+    return {
+        domain: value['domain'] as SystemDomain,
+        intent: value['intent'] as SystemOperation,
+        concepts: normalizeEnumArray(value['concepts'], SYSTEM_FIELDS, MAX_PART_FIELDS,
+            'invalid_dialogue_concepts'),
+        roomNames,
+        reference,
+        referencePartId: value['referencePartId'] as DialoguePart['referencePartId'],
+        ordinal: value['ordinal'] as DialoguePart['ordinal'],
+        freshness: value['freshness'] as DialogueFreshness,
+        outputPreference: value['outputPreference'] as DialoguePart['outputPreference'],
+        confidence: value['confidence'] as DialoguePart['confidence'],
+        ambiguity: cleanText(value['ambiguity'], 240),
+    };
+}
+
 /**
  * Compiles semantics into server-owned calls. Denied parts are retained for a
  * direct permission response while unrelated allowed parts continue.
@@ -273,7 +344,7 @@ function validateResolvedParts(
             JSON.stringify(normalized.fields) !== JSON.stringify(original.fields) ||
             JSON.stringify(normalized.filters) !== JSON.stringify(original.filters) ||
             !mayInheritEnergyRange &&
-                JSON.stringify(normalized.timeRange) !== JSON.stringify(original.timeRange)) {
+            JSON.stringify(normalized.timeRange) !== JSON.stringify(original.timeRange)) {
             throw new CapabilityValidationError('resolved_part_mutated_semantics');
         }
         return normalized;
@@ -476,7 +547,7 @@ function validateFilterCompatibility(filter: SystemFilter): void {
     }
     if (filter.operator === 'in' && filter.valueType !== 'strings' ||
         ['gt', 'gte', 'lt', 'lte'].includes(filter.operator) &&
-            filter.valueType !== 'number' ||
+        filter.valueType !== 'number' ||
         filter.operator === 'eq' && filter.valueType === 'strings') {
         throw new CapabilityValidationError('invalid_filter_operator');
     }

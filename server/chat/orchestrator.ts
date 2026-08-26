@@ -1,18 +1,23 @@
 import type { FirebaseRestClient } from './firebase-rest.js';
 import {
+    CAPABILITY_REGISTRY,
     CapabilityValidationError,
     capabilitiesForRole,
     compileSystemQueryPlan,
     plannerCapabilitySlice,
+    validateDialoguePlan,
     validateSystemQueryPlan,
 } from './capabilities.js';
 import { ANSWERER_SYSTEM_PROMPT } from './prompts/answerer.prompt.js';
-import { PLANNER_SYSTEM_PROMPT } from './prompts/planner.prompt.js';
+import {
+    PLANNER_REPAIR_SYSTEM_PROMPT,
+    PLANNER_SYSTEM_PROMPT,
+} from './prompts/planner.prompt.js';
 import { GeminiProvider } from './providers/gemini.provider.js';
 import { GroqProvider } from './providers/groq.provider.js';
 import { ProviderResponseError } from './providers/provider.interface.js';
 import { BothProvidersFailedError, generateWithFallback } from './retry.js';
-import { ANSWER_OUTPUT_SCHEMA, PLANNER_OUTPUT_SCHEMA } from './tools/schema.js';
+import { ANSWER_OUTPUT_SCHEMA, DIALOGUE_PLAN_SCHEMA } from './tools/schema.js';
 import { executeToolPlans } from './tools/executor.js';
 import type {
     AnswerPacket,
@@ -21,6 +26,7 @@ import type {
     ChatAnswerabilityOutcome,
     ChatDisplayDirective,
     ChatDisplayMode,
+    ChatDialogueAct,
     ChatFollowUp,
     ChatPartId,
     ChatPresentation,
@@ -30,9 +36,12 @@ import type {
     ChatStateContext,
     ChatStatePayload,
     ChatStateReferent,
+    ChatStateResultMemory,
     ChatStateTurn,
     ChatToolName,
     ClimateSuggestionsPresentation,
+    DialoguePart,
+    DialoguePlan,
     EnergyRange,
     EnergyReportPresentation,
     EvidenceBackedRecommendation,
@@ -56,12 +65,13 @@ import type {
     ToolOutcome,
 } from './types/chat.types.js';
 
-const PLANNER_PRIMARY_MS = 5_000;
-const PLANNER_FALLBACK_MS = 3_000;
+const PLANNER_PRIMARY_MS = 4_000;
+const PLANNER_FALLBACK_MS = 2_500;
+const PLANNER_REPAIR_MS = 2_500;
 const PLANNING_RESERVE_MS = 6_000;
-const WRITER_MIN_REMAINING_MS = 4_500;
-const WRITER_PRIMARY_MS = 3_000;
-const WRITER_FALLBACK_MS = 2_000;
+const WRITER_MIN_REMAINING_MS = 3_500;
+const WRITER_PRIMARY_MS = 3_500;
+const WRITER_FALLBACK_MS = 2_500;
 const FINALIZATION_RESERVE_MS = 1_000;
 const MAX_PROVIDER_FACTS = 80;
 const MAX_PROVIDER_PACKET_BYTES = 48 * 1024;
@@ -110,35 +120,60 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
     assertNotAborted(input.abortSignal);
     const startedAt = Date.now();
     const deadlineAtMs = input.deadlineAtMs ?? startedAt + 20_000;
-    let requestedPlan: SystemQueryPlan;
     const explicitQuestionCount = countExplicitQuestions(input.message);
-    const deterministic = explicitQuestionCount <= 1 && !hasMultipleSystemTopics(input.message)
-        ? deterministicPlan(input.message, input.state)
-        : null;
-
-    if (deterministic) {
-        try {
-            requestedPlan = validateSystemQueryPlan(deterministic);
-            compileSystemQueryPlan(requestedPlan, input.user);
-        } catch (error: unknown) {
-            if (!(error instanceof CapabilityValidationError)) throw error;
-            requestedPlan = clarificationPlan(
-                'That OcuTemp request is too broad or ambiguous to process safely. Please narrow the room scope or rephrase the question.',
-            );
-        }
-    } else if (explicitQuestionCount > 3) {
-        requestedPlan = clarificationPlan(
+    let dialoguePlan: DialoguePlan;
+    let dialogueSource: 'safety' | 'semantic' | 'contextual_fallback';
+    const safety = safetyDialoguePlan(input.message);
+    if (explicitQuestionCount > 3) {
+        dialoguePlan = dialogueClarification(
             'Please split that into no more than three related OcuTemp questions.',
         );
+        dialogueSource = 'safety';
+    } else if (safety) {
+        dialoguePlan = safety;
+        dialogueSource = 'safety';
     } else {
-        requestedPlan = await planWithProviders(input, deadlineAtMs, startedAt);
+        dialoguePlan = await planWithProviders(input, deadlineAtMs, startedAt);
+        dialogueSource = dialoguePlan.act === 'clarify' ? 'contextual_fallback' : 'semantic';
+    }
+
+    let requestedPlan: SystemQueryPlan;
+    try {
+        requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
+            input.state);
+        compileSystemQueryPlan(requestedPlan, input.user);
+    } catch (error: unknown) {
+        if (!(error instanceof CapabilityValidationError)) throw error;
+        const repaired = await repairDialoguePlan(input, dialoguePlan, error.reason,
+            deadlineAtMs, startedAt);
+        if (repaired) {
+            try {
+                dialoguePlan = repaired;
+                requestedPlan = normalizeDialoguePlan(repaired, input.message, input.user,
+                    input.state);
+                compileSystemQueryPlan(requestedPlan, input.user);
+            } catch (repairError: unknown) {
+                if (!(repairError instanceof CapabilityValidationError)) throw repairError;
+                dialoguePlan = contextualClarificationDialogue(input.state);
+                requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
+                    input.state);
+                dialogueSource = 'contextual_fallback';
+            }
+        } else {
+            dialoguePlan = contextualClarificationDialogue(input.state);
+            requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
+                input.state);
+            dialogueSource = 'contextual_fallback';
+        }
     }
 
     const visualConflict = conflictingExplicitVisuals(requestedPlan.parts);
     if (visualConflict) {
-        requestedPlan = clarificationPlan(
+        dialoguePlan = dialogueClarification(
             'That request asks for different visuals. Which single table or graph should I show?',
         );
+        requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
+            input.state);
     }
 
     const historical = resolveHistoricalReferences(requestedPlan, input.state);
@@ -191,7 +226,7 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
     }
 
     const deniedIds = new Set(finalCompilation.deniedParts.map((item) => item.partId));
-    const displayPlan = selectDisplayPlan(sameTurn.parts, results);
+    const displayPlan = selectDisplayPlan(dialoguePlan.act, sameTurn.parts, results);
     const partWorks = buildPartWork(
         requestedPlan.parts,
         sameTurn.parts,
@@ -199,6 +234,9 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         sameTurn.unresolved,
         deniedIds,
         displayPlan,
+        dialoguePlan.act,
+        input.state,
+        input.user,
     );
     const answerParts: ChatAnswerPart[] = [];
     let remainingFactBudget = MAX_PROVIDER_FACTS;
@@ -235,14 +273,16 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         .slice(0, MAX_PUBLIC_NOTICES);
     const partial = results.some((result) => result.partial) ||
         partWorks.some((work) => work.answerability === 'partial');
-    const stateTurn = buildStateTurn(partWorks, finalCompilation.tools, displayPlan);
+    const stateTurn = buildStateTurn(dialoguePlan.act, partWorks, finalCompilation.tools,
+        displayPlan);
 
     logSafe(input.requestId, 'orchestration', {
         domain: requestedPlan.parts.map((part) => part.domain).join(','),
         operation: requestedPlan.parts.map((part) => part.operation).join(','),
+        dialogueAct: dialoguePlan.act,
         toolCount: new Set(finalCompilation.tools.map((tool) => tool.name)).size,
         durationBucket: durationBucket(Date.now() - startedAt),
-        fallbackOutcome: deterministic ? 'deterministic_plan' : 'semantic_plan',
+        fallbackOutcome: dialogueSource,
     });
 
     return {
@@ -266,7 +306,7 @@ async function planWithProviders(
     input: RunChatTurnInput,
     deadlineAtMs: number,
     startedAt: number,
-): Promise<SystemQueryPlan> {
+): Promise<DialoguePlan> {
     const prompt = JSON.stringify({
         currentManilaDate: manilaDateKey(new Date()),
         callerRole: input.user.role,
@@ -275,26 +315,22 @@ async function planWithProviders(
         untrustedUserMessage: input.message,
     });
     try {
-        const generated = await generateWithFallback<SystemQueryPlan>(
+        const generated = await generateWithFallback<DialoguePlan>(
             geminiProvider,
             groqProvider,
             {
                 systemPrompt: PLANNER_SYSTEM_PROMPT,
                 prompt,
-                schema: PLANNER_OUTPUT_SCHEMA,
-                schemaName: 'system_query_plan',
-                schemaDescription: 'A bounded semantic OcuTemp query plan.',
-                maxOutputTokens: 2_400,
+                schema: DIALOGUE_PLAN_SCHEMA,
+                schemaName: 'dialogue_plan',
+                schemaDescription: 'A compact interpretation of an OcuTemp conversation turn.',
+                maxOutputTokens: 1_200,
                 temperature: 0,
                 timeoutMs: PLANNER_PRIMARY_MS,
                 reasoningEffort: 'low',
                 abortSignal: input.abortSignal,
             },
-            (rawPlan) => {
-                const plan = validateSystemQueryPlan(rawPlan);
-                compileSystemQueryPlan(plan, input.user);
-                return plan;
-            },
+            validateDialoguePlan,
             {
                 fallbackTimeoutMs: PLANNER_FALLBACK_MS,
                 deadlineAtMs,
@@ -315,11 +351,67 @@ async function planWithProviders(
                 durationBucket: durationBucket(Date.now() - startedAt),
                 fallbackOutcome: 'invalid_plan_clarified',
             });
-            return clarificationPlan(
-                'I could not safely interpret that OcuTemp request. Please name the system data you want and, if relevant, the room or period.',
-            );
+            return contextualClarificationDialogue(input.state);
         }
         throw error;
+    }
+}
+
+async function repairDialoguePlan(
+    input: RunChatTurnInput,
+    invalidPlan: DialoguePlan,
+    validationCategory: string,
+    deadlineAtMs: number,
+    startedAt: number,
+): Promise<DialoguePlan | null> {
+    if (deadlineAtMs - Date.now() < PLANNER_REPAIR_MS + FINALIZATION_RESERVE_MS) return null;
+    const prompt = JSON.stringify({
+        currentManilaDate: manilaDateKey(new Date()),
+        callerRole: input.user.role,
+        permittedSemanticCapabilities: plannerCapabilitySlice(input.user.role),
+        typedConversationContext: safeStateForPlanner(input.state),
+        untrustedUserMessage: input.message,
+        previousDialoguePlan: invalidPlan,
+        safeValidationCategory: cleanText(validationCategory, 80),
+    });
+    try {
+        const generated = await generateWithFallback<DialoguePlan>(
+            geminiProvider,
+            groqProvider,
+            {
+                systemPrompt: PLANNER_REPAIR_SYSTEM_PROMPT,
+                prompt,
+                schema: DIALOGUE_PLAN_SCHEMA,
+                schemaName: 'repaired_dialogue_plan',
+                schemaDescription: 'A repaired compact OcuTemp dialogue interpretation.',
+                maxOutputTokens: 1_200,
+                temperature: 0,
+                timeoutMs: PLANNER_REPAIR_MS,
+                reasoningEffort: 'low',
+                abortSignal: input.abortSignal,
+            },
+            validateDialoguePlan,
+            {
+                fallbackTimeoutMs: PLANNER_FALLBACK_MS,
+                deadlineAtMs,
+                reserveMs: PLANNING_RESERVE_MS,
+            },
+        );
+        logSafe(input.requestId, 'planning_repair', {
+            provider: generated.providerUsed,
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: generated.usedFallback ? 'fallback_succeeded' : 'repair_succeeded',
+        });
+        return generated.result;
+    } catch (error: unknown) {
+        if (input.abortSignal?.aborted) throw error;
+        if (!isSemanticPlanningFailure(error)) throw error;
+        logSafe(input.requestId, 'planning_repair', {
+            provider: 'none',
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: 'contextual_clarification',
+        });
+        return null;
     }
 }
 
@@ -420,6 +512,22 @@ function resolveHistoricalReferences(
             latest.contexts.find((context) => context.partId === referent.sourcePartId)?.domain ===
                 part.domain || latest.referents.length === 1);
         const referent = candidates[candidates.length - 1];
+        if (referent?.roomNames.length === 0 && referent.complete &&
+            part.followUpReference.ordinal === 0) {
+            const previousContext = latest.contexts.find((context) =>
+                context.partId === referent.sourcePartId);
+            if (previousContext && ['facility', 'named_rooms'].includes(
+                previousContext.requestedScope.kind,
+            )) {
+                return {
+                    ...part,
+                    scope: { ...previousContext.requestedScope },
+                    timeRange: part.domain === 'energy'
+                        ? { ...previousContext.timeRange }
+                        : part.timeRange,
+                };
+            }
+        }
         if (!referent || referent.roomNames.length === 0 ||
             (!referent.complete && part.followUpReference.ordinal === 0)) {
             return unresolvedPart(part, unresolved,
@@ -435,12 +543,17 @@ function resolveHistoricalReferences(
             return unresolvedPart(part, unresolved,
                 'That numbered room is not present in the previous verified result.');
         }
+        const sourceContext = latest.contexts.find((context) =>
+            context.partId === referent.sourcePartId);
         return {
             ...part,
             scope: {
                 kind: 'named_rooms', roomNames: [...roomNames],
                 inventory: part.scope.inventory, referencePartId: '',
             },
+            timeRange: part.domain === 'energy' && sourceContext
+                ? { ...sourceContext.timeRange }
+                : part.timeRange,
         };
     });
     return { parts, unresolved };
@@ -503,172 +616,287 @@ function unresolvedPart(
     };
 }
 
-function deterministicPlan(message: string, state: ChatStatePayload | null): SystemQueryPlan | null {
+function safetyDialoguePlan(message: string): DialoguePlan | null {
     const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
-    const roomNames = explicitRoomNames(message);
-    const namedScope = roomNames.length > 0
-        ? scope('named_rooms', roomNames, 'all')
-        : scope('facility', [], 'active');
-
     if (/^(hi|hello|hey|good (morning|afternoon|evening))[!. ]*$/u.test(normalized)) {
-        return onePart(part({ domain: 'conversation', operation: 'greet',
-            fields: ['capabilities'] }));
-    }
-    if (/\b(what (can|do) you do|what (is|are) your (job|role|capabilit)|how can you help)\b/u
-        .test(normalized)) {
-        return onePart(part({ domain: 'assistant_capabilities', operation: 'list',
-            fields: ['capabilities'] }));
-    }
-    const helpTopic = deterministicHelpTopic(normalized);
-    if (helpTopic) {
-        return onePart(part({ domain: 'app_help', operation: 'how_to', fields: ['help_topic'],
-            filters: [stringFilter('help_topic', helpTopic)] }));
+        return { act: 'greet', parts: [dialoguePart({
+            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
+        })] };
     }
     if (/^(please\s+)?(turn|set|change|delete|create|remove|approve|apply|disable|enable)\b/u
         .test(normalized)) {
-        return onePart(part({ domain: 'conversation', operation: 'deny',
-            fields: ['capabilities'] }));
-    }
-    if (/\b(my (name|email|role)|who am i|is my account approved|my account status)\b/u
-        .test(normalized)) {
-        const fields: SystemField[] = [];
-        if (/name|who am i/u.test(normalized)) fields.push('account_name');
-        if (/email/u.test(normalized)) fields.push('account_email');
-        if (/role|who am i/u.test(normalized)) fields.push('account_role');
-        if (/approved|status/u.test(normalized)) fields.push('account_approval');
-        return onePart(part({ domain: 'own_account', operation: 'detail', fields,
-            scope: scope('own_account', [], 'all') }));
-    }
-    if (/\b(how many|total|count).*(users?|accounts?|admins?|staff)\b/u.test(normalized)) {
-        const fields: SystemField[] = [];
-        if (/users?|accounts?/u.test(normalized)) fields.push('user_total');
-        if (/admins?/u.test(normalized)) fields.push('admin_count');
-        if (/pending/u.test(normalized)) fields.push('pending_staff_count');
-        if (/approved/u.test(normalized)) fields.push('approved_staff_count');
-        if (fields.length === 0) fields.push('user_total');
-        return onePart(part({ domain: 'admin_user_aggregates', operation: 'count', fields }));
-    }
-    if (/\b(how many|total|count).*(rooms?)\b/u.test(normalized)) {
-        return onePart(part({ domain: 'rooms', operation: 'count',
-            fields: ['room_count'], scope: scope('facility', [], 'all') }));
-    }
-    if (/\b(how many|total|count).*(devices?)\b/u.test(normalized)) {
-        return onePart(part({ domain: 'devices', operation: 'count',
-            fields: ['device_count'], scope: scope('facility', [], 'all') }));
-    }
-    if (/\b(schedule|timetable)\b/u.test(normalized)) {
-        const isCount = /\b(how many|count|total)\b/u.test(normalized);
-        const those = /\b(those rooms|them)\b/u.test(normalized);
-        return onePart(part({
-            domain: 'schedules', operation: isCount ? 'count' : 'list',
-            fields: isCount ? ['schedule_count'] : ['room_name', 'schedules'],
-            scope: those ? scope('previous_result', [], 'all') :
-                roomNames.length > 0 ? namedScope : scope('facility', [], 'all'),
-            followUpReference: those ? follow('previous_result') : undefined,
-            limit: 50,
-        }));
-    }
-    if (/\b(occupancy|occupied|occupants?)\b/u.test(normalized)) {
-        const lastKnown = /\b(last[- ]?known|historical|previous)\b/u.test(normalized);
-        return onePart(part({ domain: 'occupancy', operation: roomNames.length > 1 ? 'compare' : 'status',
-            fields: ['room_name', lastKnown ? 'last_known_occupancy' : 'occupancy', 'device_status'],
-            scope: namedScope }));
-    }
-    if (/\b(active override|overrides?)\b/u.test(normalized)) {
-        const activeOnly = /\b(active|currently)\b/u.test(normalized);
-        return onePart(part({ domain: 'overrides', operation: /which|what room|list/u.test(normalized)
-            ? 'list' : 'status', fields: ['room_name', 'override_active',
-                'override_target_temperature', 'override_until'],
-            filters: activeOnly ? [booleanFilter('override_active', true)] : [],
-            scope: roomNames.length > 0 ? namedScope : scope('facility', [], 'all') }));
-    }
-    if (/\b(ai auto[- ]?apply|auto[- ]?apply|ai toggle)\b/u.test(normalized)) {
-        const enabledOnly = /\b(which|what room|enabled rooms?)\b/u.test(normalized);
-        return onePart(part({ domain: 'ai_auto_apply', operation: enabledOnly ? 'list' : 'status',
-            fields: ['room_name', 'ai_auto_apply'],
-            filters: enabledOnly ? [booleanFilter('ai_auto_apply', true)] : [],
-            scope: roomNames.length > 0 ? namedScope : scope('facility', [], 'all') }));
-    }
-    if (/\b(floor[ -]?plan|map layout|assigned cells?)\b/u.test(normalized)) {
-        const layout = /map layout|shapes?|dynamic/u.test(normalized);
-        return onePart(part({ domain: 'floor_plan', operation: /how many|count/u.test(normalized)
-            ? 'count' : 'list', fields: ['room_name', layout ? 'floor_plan_layout' :
-                'floor_plan_assignment'], scope: scope('facility', [], 'all') }));
-    }
-    if (/\b(climate suggestion|ml suggestion|temperature suggestion)\b/u.test(normalized)) {
-        return onePart(part({ domain: 'climate_suggestions', operation: 'list',
-            fields: ['room_name', 'climate_suggestion'], scope: namedScope }));
-    }
-    if (/\b(recent events?|decision events?|operational logs?)\b/u.test(normalized)) {
-        return onePart(part({ domain: 'decision_events', operation: 'list',
-            fields: ['room_name', 'decision_event'], scope: namedScope,
-            timeRange: energyRangeFor(normalized), limit: 25 }));
-    }
-    if (/\b(energy|kwh|waste|efficien)/u.test(normalized) ||
-        /\b(ranked? first|rank(ing)?|top consumer)\b/u.test(normalized)) {
-        const winner = /\b(ranked? first|who (is|was) first|top consumer|rank one)\b/u
-            .test(normalized);
-        const ranking = winner || /\b(rank|ranking|compare)\b/u.test(normalized);
-        const efficiency = /\b(waste|efficien|reduce)\b/u.test(normalized);
-        const report = /\breport\b/u.test(normalized);
-        const trend = /\b(trend|over time)\b/u.test(normalized);
-        const inherit = winner && roomNames.length === 0 && state !== null &&
-            !hasExplicitEnergyRange(normalized);
-        return onePart(part({
-            domain: 'energy',
-            operation: efficiency ? 'explain' : report ? 'report' : ranking ? 'compare' :
-                trend ? 'detail' : 'summarize',
-            fields: report
-                ? ['estimated_kwh', 'runtime_seconds', 'session_count', 'energy_rank', 'energy_trend']
-                : ranking ? ['room_name', 'estimated_kwh', 'energy_rank']
-                    : trend ? ['estimated_kwh', 'energy_trend']
-                        : ['estimated_kwh', 'runtime_seconds', 'session_count'],
-            scope: inherit ? scope('previous_request', [], 'active') : namedScope,
-            timeRange: energyRangeFor(normalized),
-            sort: ranking ? { field: 'estimated_kwh', direction: 'desc' } : undefined,
-            followUpReference: inherit ? follow('previous_request') : undefined,
-            limit: winner ? 1 : 50,
-        }));
-    }
-    if (/\b(temperature|humidity|hot|heat|condition)\b/u.test(normalized)) {
-        const lastKnown = /\b(last[- ]?known|historical|previous)\b/u.test(normalized);
-        const fields: SystemField[] = ['room_name', 'device_status'];
-        if (/temperature|hot|heat|condition/u.test(normalized)) {
-            fields.push(lastKnown ? 'last_known_temperature' : 'temperature');
-        }
-        if (/humidity/u.test(normalized)) {
-            fields.push(lastKnown ? 'last_known_humidity' : 'humidity');
-        }
-        if (/hot|heat|condition|why/u.test(normalized)) fields.push('condition');
-        return onePart(part({ domain: 'measurements', operation: /why|cause/u.test(normalized)
-            ? 'explain' : roomNames.length === 1 ? 'detail' : 'compare', fields,
-            scope: namedScope }));
-    }
-    if (/\b(ac (power|state|status)|aircon (on|off)|air conditioner (on|off))\b/u
-        .test(normalized)) {
-        return onePart(part({ domain: 'ac_control', operation: roomNames.length === 1
-            ? 'status' : 'list', fields: ['room_name', 'ac_power', 'device_status'],
-            scope: namedScope }));
-    }
-    if (/\b(device status|online rooms?|offline rooms?|room status|list rooms?)\b/u
-        .test(normalized)) {
-        const domain: SystemDomain = /device|online|offline/u.test(normalized) ? 'devices' : 'rooms';
-        const inventory = /\binactive\b/u.test(normalized) ? 'inactive'
-            : /\b(all|every|configured)\b/u.test(normalized) ? 'all' : 'active';
-        const statusFilters: SystemFilter[] = domain === 'devices' && /\boffline\b/u.test(normalized)
-            ? [stringFilter('device_status', 'offline')]
-            : domain === 'devices' && /\bonline\b/u.test(normalized)
-                ? [stringFilter('device_status', 'online')]
-                : [];
-        return onePart(part({ domain, operation: /list|which|what room/u.test(normalized)
-            ? 'list' : 'status', fields: domain === 'devices'
-                ? ['room_name', 'device_status', 'last_seen']
-                : ['room_name', 'room_status', 'device_assignment'],
-            filters: statusFilters,
-            scope: roomNames.length > 0 ? namedScope : scope('facility', [], inventory) }));
+        return { act: 'deny', parts: [dialoguePart({
+            domain: 'conversation', intent: 'deny', concepts: ['capabilities'],
+        })] };
     }
     return null;
 }
+
+interface DialoguePartOptions {
+    readonly domain: SystemDomain;
+    readonly intent: SystemOperation;
+    readonly concepts: SystemField[];
+    readonly ambiguity?: string;
+}
+
+function dialoguePart(options: DialoguePartOptions): DialoguePart {
+    return {
+        domain: options.domain,
+        intent: options.intent,
+        concepts: options.concepts,
+        roomNames: [],
+        reference: 'none',
+        referencePartId: '',
+        ordinal: 0,
+        freshness: 'auto',
+        outputPreference: 'auto',
+        confidence: options.ambiguity ? 'low' : 'high',
+        ambiguity: cleanText(options.ambiguity ?? '', 240),
+    };
+}
+
+function dialogueClarification(message: string): DialoguePlan {
+    return { act: 'clarify', parts: [dialoguePart({
+        domain: 'conversation', intent: 'clarify', concepts: ['capabilities'],
+        ambiguity: message,
+    })] };
+}
+
+function contextualClarificationDialogue(state: ChatStatePayload | null): DialoguePlan {
+    const latest = state?.turns[state.turns.length - 1];
+    const subject = latest?.results[latest.results.length - 1]?.subject ??
+        latest?.contexts[latest.contexts.length - 1]?.domain;
+    const message = subject
+        ? `I understood this as a follow-up about ${domainLabel(subject).toLocaleLowerCase('en-US')}, but I need the specific result or detail you want me to check.`
+        : 'I understood this as an OcuTemp question, but I need the system data, room, or period you want me to check.';
+    return dialogueClarification(message);
+}
+
+function normalizeDialoguePlan(
+    dialogue: DialoguePlan,
+    message: string,
+    user: ChatPrincipal,
+    state: ChatStatePayload | null,
+): SystemQueryPlan {
+    const validated = validateDialoguePlan(dialogue);
+    const parts = validated.parts.map((dialogueValue, index) =>
+        normalizeDialoguePart(validated.act, dialogueValue, index, message, user, state));
+    return validateSystemQueryPlan({ parts });
+}
+
+function normalizeDialoguePart(
+    act: ChatDialogueAct,
+    dialogue: DialoguePart,
+    index: number,
+    message: string,
+    _user: ChatPrincipal,
+    state: ChatStatePayload | null,
+): SystemQueryPart {
+    const partId = `part-${index + 1}` as ChatPartId;
+    if (dialogue.confidence === 'low' || act === 'clarify') {
+        return part({
+            domain: 'conversation', operation: 'clarify', fields: ['capabilities'],
+            clarification: dialogue.ambiguity ||
+                'Please clarify the OcuTemp result, room, or period you want me to check.',
+        }, partId);
+    }
+
+    const capability = CAPABILITY_REGISTRY.find((candidate) =>
+        candidate.domain === dialogue.domain);
+    if (!capability) throw new CapabilityValidationError('unknown_dialogue_domain');
+    const operation = capability.operations.includes(dialogue.intent)
+        ? dialogue.intent
+        : defaultOperationFor(dialogue.domain, act, capability.operations);
+    const normalizedMessage = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    const freshness = requestsCurrentRefresh(normalizedMessage) &&
+        liveDataDomain(dialogue.domain)
+        ? 'current'
+        : dialogue.freshness;
+    let fields = dialogue.concepts.filter((field) => capability.fields.includes(field));
+    fields = applyFreshnessToFields(dialogue.domain, freshness, fields);
+    const mandatoryCountFields: Partial<Record<SystemDomain, SystemField>> = {
+        rooms: 'room_count', devices: 'device_count', schedules: 'schedule_count',
+    };
+    if (operation === 'count' && mandatoryCountFields[dialogue.domain]) {
+        fields = [mandatoryCountFields[dialogue.domain]!];
+    }
+    if (fields.length === 0) fields = defaultFieldsFor(dialogue.domain, operation);
+    fields = uniqueFields(fields.filter((field) => capability.fields.includes(field))).slice(0, 8);
+    if (fields.length === 0) throw new CapabilityValidationError('no_permitted_dialogue_fields');
+
+    const roomNames = uniqueStrings([
+        ...dialogue.roomNames.map((name) => cleanText(name, 100)),
+        ...explicitRoomNames(message),
+    ]).slice(0, 50);
+    let reference = freshness === 'current' &&
+        dialogue.reference === 'previous_result'
+        ? 'previous_request'
+        : dialogue.reference;
+    if (roomNames.length > 0) reference = 'none';
+    if (reference === 'none' && roomNames.length === 0 && state &&
+        ['confirm', 'correct', 'elaborate', 'follow_up'].includes(act)) {
+        reference = freshness === 'current' || act !== 'follow_up'
+            ? 'previous_request'
+            : 'previous_result';
+    }
+    const inventory: SystemQueryPart['scope']['inventory'] = /\binactive\b/u.test(normalizedMessage)
+        ? 'inactive'
+        : /\b(all|every|configured)\b/u.test(normalizedMessage) ||
+            configuredDomain(dialogue.domain) || operation === 'count'
+            ? 'all'
+            : 'active';
+    const scopeValue: SystemQueryPart['scope'] = roomNames.length > 0
+        ? scope('named_rooms', roomNames, inventory)
+        : reference === 'prior_part'
+            ? { kind: 'prior_part', roomNames: [], inventory,
+                referencePartId: dialogue.referencePartId }
+            : reference === 'previous_request' || reference === 'previous_result'
+                ? scope(reference, [], inventory)
+                : dialogue.domain === 'own_account'
+                    ? scope('own_account', [], 'all')
+                    : scope('facility', [], inventory);
+    const filters = safeFiltersFor(dialogue.domain, operation, fields, normalizedMessage);
+    let clarification = cleanText(dialogue.ambiguity, 240);
+    if (dialogue.domain === 'app_help') {
+        const topic = deterministicHelpTopic(normalizedMessage);
+        if (topic) filters.push(stringFilter('help_topic', topic));
+        else clarification = clarification ||
+            'Please name the OcuTemp feature you want step-by-step help with.';
+    }
+    const ranking = dialogue.domain === 'energy' &&
+        (operation === 'compare' || fields.includes('energy_rank'));
+    if (ranking && !fields.includes('estimated_kwh')) {
+        fields = uniqueFields([...fields, 'estimated_kwh']).slice(0, 8);
+    }
+    const singleRank = ranking && (dialogue.ordinal > 0 ||
+        /\b(first|top(?:-ranked)?|rank(?:ed)? one|number one)\b/u.test(normalizedMessage) ||
+        (act === 'follow_up' && reference !== 'none'));
+    const followReference: SystemQueryPart['followUpReference'] = {
+        kind: reference,
+        partId: reference === 'prior_part' ? dialogue.referencePartId : '',
+        ordinal: dialogue.ordinal,
+    };
+    return part({
+        domain: dialogue.domain,
+        operation,
+        fields,
+        filters,
+        scope: scopeValue,
+        timeRange: dialogue.domain === 'energy' || dialogue.domain === 'decision_events'
+            ? energyRangeFor(normalizedMessage)
+            : defaultTimeRange(),
+        sort: ranking
+            ? { field: 'estimated_kwh', direction: 'desc' }
+            : { field: fields[0]!, direction: 'none' },
+        outputPreference: dialogue.outputPreference,
+        followUpReference: followReference,
+        limit: singleRank ? 1 : operation === 'report' ? 50 : 25,
+        clarification,
+    }, partId);
+}
+
+function defaultOperationFor(
+    domain: SystemDomain,
+    act: ChatDialogueAct,
+    allowed: readonly SystemOperation[],
+): SystemOperation {
+    const preferred: Partial<Record<SystemDomain, SystemOperation>> = {
+        rooms: 'status', devices: 'status', measurements: 'detail', occupancy: 'status',
+        ac_control: 'status', overrides: 'status', ai_auto_apply: 'status', schedules: 'list',
+        energy: 'summarize', climate_suggestions: 'list', decision_events: 'list',
+        floor_plan: 'status', own_account: 'detail', admin_user_aggregates: 'count',
+        app_help: 'how_to', assistant_capabilities: 'list', unsupported: 'clarify',
+        conversation: act === 'greet' ? 'greet' : act === 'deny' ? 'deny' : 'clarify',
+    };
+    const operation = preferred[domain];
+    return operation && allowed.includes(operation) ? operation : allowed[0]!;
+}
+
+function defaultFieldsFor(domain: SystemDomain, operation: SystemOperation): SystemField[] {
+    const countFields: Partial<Record<SystemDomain, SystemField[]>> = {
+        rooms: ['room_count'], devices: ['device_count'], schedules: ['schedule_count'],
+        admin_user_aggregates: ['user_total'], floor_plan: ['floor_plan_assignment'],
+    };
+    if (operation === 'count' && countFields[domain]) return countFields[domain]!;
+    const fields: Record<SystemDomain, SystemField[]> = {
+        rooms: ['room_name', 'room_status', 'device_assignment'],
+        devices: ['room_name', 'device_status', 'last_seen'],
+        measurements: ['room_name', 'temperature', 'device_status'],
+        occupancy: ['room_name', 'occupancy', 'device_status'],
+        ac_control: ['room_name', 'ac_power', 'device_status'],
+        overrides: ['room_name', 'override_active', 'override_target_temperature',
+            'override_until'],
+        ai_auto_apply: ['room_name', 'ai_auto_apply'],
+        schedules: ['room_name', 'schedules'],
+        energy: ['estimated_kwh', 'runtime_seconds', 'session_count'],
+        climate_suggestions: ['room_name', 'climate_suggestion'],
+        decision_events: ['room_name', 'decision_event'],
+        floor_plan: ['room_name', 'floor_plan_assignment'],
+        own_account: ['account_role', 'account_approval'],
+        admin_user_aggregates: ['user_total'],
+        app_help: ['help_topic'],
+        assistant_capabilities: ['capabilities'],
+        conversation: ['capabilities'],
+        unsupported: ['capabilities'],
+    };
+    return fields[domain];
+}
+
+function applyFreshnessToFields(
+    domain: SystemDomain,
+    freshness: DialoguePart['freshness'],
+    fields: readonly SystemField[],
+): SystemField[] {
+    const lastKnown = freshness === 'last_known' || freshness === 'historical';
+    if (!lastKnown) return [...fields];
+    return fields.map((field): SystemField => {
+        if (domain === 'measurements' && field === 'temperature') return 'last_known_temperature';
+        if (domain === 'measurements' && field === 'humidity') return 'last_known_humidity';
+        if (domain === 'occupancy' && field === 'occupancy') return 'last_known_occupancy';
+        if (domain === 'ac_control' && field === 'ac_power') return 'last_known_ac_power';
+        return field;
+    });
+}
+
+function safeFiltersFor(
+    domain: SystemDomain,
+    operation: SystemOperation,
+    fields: readonly SystemField[],
+    message: string,
+): SystemFilter[] {
+    if (operation !== 'list') return [];
+    if (domain === 'devices' && fields.includes('device_status')) {
+        if (/\boffline\b/u.test(message)) return [stringFilter('device_status', 'offline')];
+        if (/\bonline\b/u.test(message)) return [stringFilter('device_status', 'online')];
+    }
+    if (domain === 'overrides' && fields.includes('override_active') &&
+        /\b(active|currently active)\b/u.test(message)) {
+        return [booleanFilter('override_active', true)];
+    }
+    if (domain === 'ai_auto_apply' && fields.includes('ai_auto_apply') &&
+        /\b(enabled|on)\b/u.test(message)) {
+        return [booleanFilter('ai_auto_apply', true)];
+    }
+    return [];
+}
+
+function configuredDomain(domain: SystemDomain): boolean {
+    return ['rooms', 'devices', 'overrides', 'ai_auto_apply', 'schedules', 'floor_plan']
+        .includes(domain);
+}
+
+function liveDataDomain(domain: SystemDomain): boolean {
+    return ['devices', 'measurements', 'occupancy', 'ac_control'].includes(domain);
+}
+
+function requestsCurrentRefresh(message: string): boolean {
+    return /\b(now|currently|right now|rn|at the moment)\b/u.test(message);
+}
+
+function uniqueFields(fields: readonly SystemField[]): SystemField[] {
+    return [...new Set(fields)];
+}
+
 
 interface PartOptions {
     readonly domain: SystemDomain;
@@ -701,13 +929,6 @@ function part(options: PartOptions, partId: ChatPartId = 'part-1'): SystemQueryP
         needsClarification: clarification.length > 0,
         clarification,
     };
-}
-
-function onePart(value: SystemQueryPart): SystemQueryPlan { return { parts: [value] }; }
-
-function clarificationPlan(message: string): SystemQueryPlan {
-    return onePart(part({ domain: 'conversation', operation: 'clarify',
-        fields: ['capabilities'], clarification: message }));
 }
 
 function scope(
@@ -743,6 +964,9 @@ function buildPartWork(
     unresolved: ReadonlyMap<ChatPartId, string>,
     deniedIds: ReadonlySet<ChatPartId>,
     displayPlan: readonly ChatDisplayDirective[],
+    dialogueAct: ChatDialogueAct,
+    state: ChatStatePayload | null,
+    user: ChatPrincipal,
 ): PartWork[] {
     return requestedParts.map((requested, index): PartWork => {
         const executable = executableParts[index]!;
@@ -751,15 +975,19 @@ function buildPartWork(
             : unresolved.has(requested.partId) || executable.needsClarification
                 ? 'clarification_required'
                 : determineAnswerability(requested, partResults);
-        const facts = partResults.flatMap((result) => result.facts)
-            .filter((fact) => fact.partId === requested.partId);
+        const facts = augmentGroundingFacts(requested, partResults,
+            partResults.flatMap((result) => result.facts)
+                .filter((fact) => fact.partId === requested.partId), user);
         const scopeResolution = mergeScopes(partResults.map((result) => result.scope));
         const range = partResults.map((result) => result.presentation)
             .find((presentation): presentation is EnergyReportPresentation =>
                 presentation.kind === 'energy-report')?.range ?? null;
         const recommendations = buildRecommendations(requested, partResults);
+        const previousResult = previousResultFor(state, requested.domain, dialogueAct);
         const packet: AnswerPacket = {
             partId: requested.partId,
+            dialogueAct,
+            responseGoal: responseGoalFor(dialogueAct, requested, answerability),
             domain: requested.domain,
             operation: requested.operation,
             fields: [...requested.fields],
@@ -771,9 +999,122 @@ function buildPartWork(
             recommendations,
             notices: uniqueStrings(partResults.flatMap((result) => result.notices)).slice(0, 6),
             displayPlan: displayPlan.filter((directive) => directive.partId === requested.partId),
+            previousResult,
         };
         return { requested, executable, results: partResults, answerability, packet };
     });
+}
+
+function augmentGroundingFacts(
+    part: SystemQueryPart,
+    results: readonly ToolExecutionResult[],
+    rawFacts: readonly GroundingFact[],
+    user: ChatPrincipal,
+): GroundingFact[] {
+    const facts = [...rawFacts];
+    for (const result of results) {
+        const presentation = result.presentation;
+        if (presentation.kind === 'room-data') {
+            facts.push({
+                id: `server.${part.partId}.room_count`,
+                partId: part.partId,
+                statement: `The verified result contains ${presentation.rooms.length} configured ${presentation.rooms.length === 1 ? 'room' : 'rooms'}.`,
+            });
+            const statuses = presentation.rooms.flatMap((room) => room.values)
+                .filter((value) => value.field === 'device_status' &&
+                    typeof value.value === 'string');
+            if (statuses.length > 0) {
+                const online = statuses.filter((value) => value.value === 'online').length;
+                const stale = statuses.filter((value) => value.value === 'stale').length;
+                const offline = statuses.filter((value) => value.value === 'offline').length;
+                const unknown = statuses.length - online - stale - offline;
+                facts.push({
+                    id: `server.${part.partId}.device_status_counts`,
+                    partId: part.partId,
+                    statement: `Of ${statuses.length} rooms with reported device status, ${online} are online, ${stale} are stale, ${offline} are offline, and ${unknown} are unknown.`,
+                });
+            }
+        }
+        if (presentation.kind === 'schedule-data') {
+            facts.push({
+                id: `server.${part.partId}.schedule_count`,
+                partId: part.partId,
+                statement: `The verified result contains ${presentation.schedules.length} configured ${presentation.schedules.length === 1 ? 'schedule' : 'schedules'}.`,
+            });
+        }
+    }
+    if (['measurements', 'occupancy', 'ac_control', 'devices'].includes(part.domain)) {
+        facts.push({
+            id: `server.${part.partId}.configured_capabilities`,
+            partId: part.partId,
+            statement: 'OcuGuide can read stored OcuTemp schedules and AI auto-apply configuration while devices are offline, but current temperature and occupancy require an online device.',
+        });
+    }
+    if (part.domain === 'assistant_capabilities') {
+        const domains = uniqueStrings(capabilitiesForRole(user.role)
+            .map((capability) => domainLabel(capability.domain))
+            .filter((label) => !['Conversation', 'Unsupported'].includes(label)));
+        facts.push({
+            id: `server.${part.partId}.role_capabilities`,
+            partId: part.partId,
+            statement: `The caller's OcuTemp role permits read-only OcuGuide questions about: ${domains.join('; ')}.`,
+        });
+    }
+    if (part.domain === 'conversation' && part.operation === 'greet') {
+        facts.push({
+            id: `server.${part.partId}.greeting_capability`,
+            partId: part.partId,
+            statement: 'OcuGuide is available to answer read-only questions about OcuTemp system data permitted for the signed-in caller.',
+        });
+    }
+    if (part.domain === 'conversation' && part.operation === 'clarify' &&
+        part.clarification) {
+        facts.push({
+            id: `server.${part.partId}.required_clarification`,
+            partId: part.partId,
+            statement: `Required clarification: ${part.clarification}`,
+        });
+    }
+    return deduplicateFacts(facts);
+}
+
+function deduplicateFacts(facts: readonly GroundingFact[]): GroundingFact[] {
+    const seen = new Set<string>();
+    return facts.filter((fact) => {
+        if (seen.has(fact.id)) return false;
+        seen.add(fact.id);
+        return true;
+    });
+}
+
+function previousResultFor(
+    state: ChatStatePayload | null,
+    domain: SystemDomain,
+    act: ChatDialogueAct,
+): ChatStateResultMemory | null {
+    const latest = state?.turns[state.turns.length - 1];
+    if (!latest) return null;
+    const matching = latest.results.filter((result) => result.subject === domain);
+    return matching[matching.length - 1] ??
+        (['confirm', 'correct', 'follow_up', 'elaborate'].includes(act) &&
+            latest.results.length === 1 ? latest.results[0]! : null);
+}
+
+function responseGoalFor(
+    act: ChatDialogueAct,
+    part: SystemQueryPart,
+    answerability: ChatAnswerabilityOutcome,
+): string {
+    if (answerability === 'clarification_required') {
+        return 'Explain what was understood and ask for only the missing detail.';
+    }
+    if (act === 'confirm') return 'Confirm or correct the user directly, then explain the verified distinction.';
+    if (act === 'correct') return 'Correct the prior interpretation directly and state the verified result.';
+    if (act === 'elaborate') return 'Explain the previous verified result in plain language.';
+    if (act === 'follow_up') return 'Answer the follow-up directly without repeating the prior report or visual.';
+    if (part.operation === 'count') return 'State the verified count directly in a natural sentence.';
+    if (part.operation === 'list') return 'Summarize the verified list naturally and keep details concise.';
+    return 'Answer the OcuTemp question directly and naturally from the verified facts.';
 }
 
 function determineAnswerability(
@@ -933,6 +1274,10 @@ function buildDeterministicAnswer(work: PartWork, user: ChatPrincipal): ChatAnsw
 
     const presentation = work.results[0]?.presentation;
     if (!presentation) return base('There is not enough verified OcuTemp data to answer that question.');
+    if (work.requested.domain === 'devices' && presentation.kind === 'room-data') {
+        const connectivity = connectivityFallbackAnswer(work, presentation, caveats);
+        if (connectivity) return connectivity;
+    }
     switch (presentation.kind) {
         case 'metric-summary': return metricAnswer(work, presentation, caveats);
         case 'room-data': return roomDataAnswer(work, presentation, caveats);
@@ -944,6 +1289,40 @@ function buildDeterministicAnswer(work: PartWork, user: ChatPrincipal): ChatAnsw
         case 'room-telemetry':
             return base('The verified room result is available, but it could not be projected into the current answer format.');
     }
+}
+
+function connectivityFallbackAnswer(
+    work: PartWork,
+    presentation: RoomDataPresentation,
+    caveats: string[],
+): ChatAnswerPart | null {
+    if (work.requested.operation === 'list') return null;
+    const statuses = presentation.rooms.flatMap((room) => room.values)
+        .filter((value) => value.field === 'device_status' && typeof value.value === 'string');
+    if (statuses.length === 0) return null;
+    const online = statuses.filter((value) => value.value === 'online').length;
+    const stale = statuses.filter((value) => value.value === 'stale').length;
+    const offline = statuses.filter((value) => value.value === 'offline').length;
+    const unknown = statuses.length - online - stale - offline;
+    const configured = presentation.rooms.length;
+    let text: string;
+    if (work.packet.dialogueAct === 'confirm') {
+        text = online === 0
+            ? `Correct—OcuTemp has ${configured} configured ${configured === 1 ? 'room' : 'rooms'} in this scope, but none of their devices are online right now.`
+            : `Not quite—${online} of ${configured} configured ${configured === 1 ? 'room has an' : 'rooms have'} online device right now.`;
+    } else {
+        text = `${online} of ${configured} configured ${configured === 1 ? 'room has an' : 'rooms have'} online device right now.`;
+    }
+    const unavailableStates = [
+        stale > 0 ? `${stale} ${stale === 1 ? 'device is' : 'devices are'} stale` : '',
+        offline > 0 ? `${offline} ${offline === 1 ? 'device is' : 'devices are'} offline` : '',
+        unknown > 0 ? `${unknown} ${unknown === 1 ? 'device status is' : 'device statuses are'} unknown` : '',
+    ].filter(Boolean);
+    if (unavailableStates.length > 0) text += ` ${unavailableStates.join(' and ')}.`;
+    if (online === 0) {
+        text += ' Stored schedules and AI auto-apply configuration remain available, but current temperature and occupancy do not.';
+    }
+    return answer(work.requested.partId, text, [], caveats);
 }
 
 function ownAccountAnswer(work: PartWork, user: ChatPrincipal): ChatAnswerPart {
@@ -977,6 +1356,26 @@ function metricAnswer(
     if (metrics.length === 0) {
         return answer(work.requested.partId,
             'The requested OcuTemp value is unknown or unavailable.', [], caveats);
+    }
+    if (metrics.length === 1) {
+        const metric = metrics[0]!;
+        const metricValue = metric.value;
+        if (typeof metricValue !== 'number') {
+            const text = `${metric.label}: ${formatProjectedValue(metric)}`;
+            return answer(work.requested.partId, text, [], caveats);
+        }
+        if (metric.field === 'room_count') {
+            return answer(work.requested.partId,
+                `OcuTemp has ${formatNumber(metricValue)} configured ${metricValue === 1 ? 'room' : 'rooms'} in this scope.`, [], caveats);
+        }
+        if (metric.field === 'device_count') {
+            return answer(work.requested.partId,
+                `OcuTemp has ${formatNumber(metricValue)} configured ${metricValue === 1 ? 'device' : 'devices'} in this scope.`, [], caveats);
+        }
+        if (metric.field === 'schedule_count') {
+            return answer(work.requested.partId,
+                `There ${metricValue === 1 ? 'is' : 'are'} ${formatNumber(metricValue)} valid configured ${metricValue === 1 ? 'schedule' : 'schedules'} in this scope.`, [], caveats);
+        }
     }
     const text = metrics.map((metric) => `${metric.label}: ${formatProjectedValue(metric)}`).join(' · ');
     return answer(work.requested.partId, text, [{ kind: 'key-value', text: '', items: [],
@@ -1130,9 +1529,12 @@ function answer(
 }
 
 function selectDisplayPlan(
+    dialogueAct: ChatDialogueAct,
     parts: readonly SystemQueryPart[],
     results: readonly ToolExecutionResult[],
 ): ChatDisplayDirective[] {
+    if (['confirm', 'correct', 'elaborate', 'clarify', 'greet', 'deny']
+        .includes(dialogueAct)) return [];
     for (const part of parts) {
         if (part.outputPreference === 'text' || part.needsClarification) continue;
         const partResults = results.filter((result) => result.partId === part.partId);
@@ -1213,13 +1615,45 @@ function validateWriterDraft(
     value: GroundedAnswerDraft,
     packet: AnswerPacket,
 ): GroundedAnswerDraft {
-    if (!isRecord(value) || !hasExactKeys(value, ['text', 'evidenceRefs', 'highlights',
-        'recommendations']) || typeof value['text'] !== 'string' ||
-        !Array.isArray(value['evidenceRefs']) || !Array.isArray(value['highlights']) ||
-        !Array.isArray(value['recommendations'])) throw new Error('invalid_writer_shape');
+    if (!isRecord(value) || !hasExactKeys(value, ['clauses', 'highlights']) ||
+        !Array.isArray(value['clauses']) || value['clauses'].length < 1 ||
+        value['clauses'].length > 4 || !Array.isArray(value['highlights'])) {
+        throw new Error('invalid_writer_shape');
+    }
     const factById = new Map(packet.facts.map((fact) => [fact.id, fact]));
-    const text = validateGroundedText(value['text'], value['evidenceRefs'], factById,
-        packet.scope.matchedRoomNames);
+    const clauses = value['clauses'].map((clause, index) => {
+        if (!isRecord(clause) || !hasExactKeys(clause, ['role', 'text', 'evidenceRefs']) ||
+            !['direct_answer', 'context', 'next_step'].includes(String(clause['role'])) ||
+            typeof clause['text'] !== 'string' || !Array.isArray(clause['evidenceRefs'])) {
+            throw new Error('invalid_writer_clause');
+        }
+        if (index === 0 && clause['role'] !== 'direct_answer') {
+            throw new Error('missing_direct_answer');
+        }
+        const evidenceRefs = validateEvidenceRefs(clause['evidenceRefs'], factById);
+        if (clause['role'] === 'next_step') {
+            const approvedRecommendation = packet.recommendations.some((recommendation) =>
+                recommendation.text === cleanText(clause['text'], 1_200) &&
+                recommendation.evidenceRefs.every((ref) => evidenceRefs.includes(ref)));
+            const verifiedCapability = evidenceRefs.some((ref) =>
+                ref.endsWith('.configured_capabilities') ||
+                ref.endsWith('.role_capabilities') ||
+                ref.endsWith('.greeting_capability') ||
+                ref.endsWith('.required_clarification'));
+            if (!approvedRecommendation && !verifiedCapability) {
+                throw new Error('unapproved_next_step');
+            }
+        }
+        return {
+            role: clause['role'] as 'direct_answer' | 'context' | 'next_step',
+            text: validateGroundedText(clause['text'], clause['evidenceRefs'], factById,
+                packet.scope.matchedRoomNames),
+            evidenceRefs,
+        };
+    });
+    if (clauses.filter((clause) => clause.role === 'direct_answer').length !== 1) {
+        throw new Error('invalid_direct_answer_count');
+    }
     const highlights = value['highlights'].map((highlight) => {
         if (!isRecord(highlight) || !hasExactKeys(highlight, ['text', 'evidenceRefs']) ||
             typeof highlight['text'] !== 'string' || !Array.isArray(highlight['evidenceRefs'])) {
@@ -1231,17 +1665,7 @@ function validateWriterDraft(
             evidenceRefs: validateEvidenceRefs(highlight['evidenceRefs'], factById),
         };
     }).slice(0, 6);
-    const evidenceRefs = validateEvidenceRefs(value['evidenceRefs'], factById);
-    const recommendations = value['recommendations'].map((recommendation) => {
-        if (!isRecord(recommendation)) throw new Error('invalid_recommendation');
-        const exact = packet.recommendations.find((allowed) =>
-            recommendation['category'] === allowed.category &&
-            recommendation['text'] === allowed.text &&
-            JSON.stringify(recommendation['evidenceRefs']) === JSON.stringify(allowed.evidenceRefs));
-        if (!exact) throw new Error('unapproved_recommendation');
-        return { ...exact };
-    });
-    return { text, evidenceRefs, highlights, recommendations };
+    return { clauses, highlights };
 }
 
 function validateGroundedText(
@@ -1301,24 +1725,21 @@ function validateEvidenceRefs(
 }
 
 function answerPartFromDraft(work: PartWork, draft: GroundedAnswerDraft): ChatAnswerPart {
-    const blocks: ChatAnswerBlock[] = draft.recommendations.length > 0 ? [{
-        kind: 'bullet-list', text: 'Grounded next steps',
-        items: draft.recommendations.map((recommendation) => recommendation.text),
-        entries: [], tone: 'info',
-    }] : [];
     return {
         partId: work.requested.partId,
-        text: draft.text,
-        blocks,
+        text: draft.clauses.map((clause) => clause.text).join(' '),
+        blocks: [],
         highlights: draft.highlights.map((highlight) => ({ text: highlight.text })),
         caveats: work.packet.notices.slice(0, 3),
     };
 }
 
 function shouldUseWriter(work: PartWork): boolean {
-    return ['compare', 'summarize', 'report', 'explain'].includes(work.requested.operation) &&
-        (work.answerability === 'answerable' || work.answerability === 'partial') &&
-        work.requested.domain !== 'own_account';
+    if (work.requested.domain === 'own_account' || work.requested.domain === 'unsupported') {
+        return false;
+    }
+    return work.requested.domain !== 'conversation' ||
+        ['greet', 'clarify'].includes(work.requested.operation);
 }
 
 function boundPacket(packet: AnswerPacket, factLimit: number): AnswerPacket {
@@ -1339,6 +1760,7 @@ function boundPacket(packet: AnswerPacket, factLimit: number): AnswerPacket {
 }
 
 function buildStateTurn(
+    act: ChatDialogueAct,
     works: readonly PartWork[],
     tools: readonly PlannerToolPlan[],
     displayPlan: readonly ChatDisplayDirective[],
@@ -1356,7 +1778,7 @@ function buildStateTurn(
         answerability: work.answerability,
         hadVisual: displayPlan.some((directive) => directive.partId === work.requested.partId),
     }));
-    const referents: ChatStateReferent[] = works.map((work): ChatStateReferent | null => {
+    const referents: ChatStateReferent[] = works.map((work): ChatStateReferent => {
         const energy = work.results.map((result) => result.presentation)
             .find((presentation): presentation is EnergyReportPresentation =>
                 presentation.kind === 'energy-report');
@@ -1366,7 +1788,6 @@ function buildStateTurn(
                 .map((room) => room.roomName)
             : work.packet.scope.matchedRoomNames;
         const names = uniqueStrings(orderedNames).slice(0, 50);
-        if (names.length === 0) return null;
         return {
             sourcePartId: work.requested.partId,
             kind: 'room_result',
@@ -1374,8 +1795,106 @@ function buildStateTurn(
             complete: !work.results.some((result) => result.partial) && orderedNames.length <= 50,
             ordering: energy ? 'ranking' : 'query',
         };
-    }).filter((referent): referent is ChatStateReferent => referent !== null);
-    return { contexts, referents };
+    });
+    const results: ChatStateResultMemory[] = works.map((work) => {
+        const outcome = stateOutcomeFor(work);
+        const directive = displayPlan.find((item) => item.partId === work.requested.partId);
+        return {
+            sourcePartId: work.requested.partId,
+            subject: work.requested.domain,
+            outcome: outcome.outcome,
+            emptyReason: outcome.emptyReason,
+            counts: stateCountsFor(work),
+            roomNames: uniqueStrings(work.packet.scope.matchedRoomNames).slice(0, 50),
+            complete: !work.results.some((result) => result.partial) &&
+                work.packet.scope.matchedRoomNames.length <= 50,
+            freshness: work.packet.freshness,
+            asOf: stateTimestampFor(work),
+            visual: directive?.mode ?? 'none',
+        };
+    });
+    return { act, contexts, referents, results };
+}
+
+function stateOutcomeFor(work: PartWork): Pick<ChatStateResultMemory, 'outcome' | 'emptyReason'> {
+    if (work.answerability === 'partial') return { outcome: 'partial', emptyReason: 'none' };
+    if (work.answerability === 'permission_denied') {
+        return { outcome: 'denied', emptyReason: 'none' };
+    }
+    if (work.answerability === 'room_ambiguous' ||
+        work.answerability === 'clarification_required') {
+        return { outcome: 'ambiguous', emptyReason: 'none' };
+    }
+    if (work.answerability === 'source_unavailable') {
+        return { outcome: 'unavailable', emptyReason: 'none' };
+    }
+    const emptyReasons: Partial<Record<ChatAnswerabilityOutcome,
+        ChatStateResultMemory['emptyReason']>> = {
+        no_online_reading: 'no_online_reading',
+        no_energy_records: 'no_records',
+        room_not_found: 'room_not_found',
+        room_inactive: 'room_inactive',
+        insufficient_evidence: 'insufficient_evidence',
+    };
+    const reason = emptyReasons[work.answerability];
+    if (reason) return { outcome: 'empty', emptyReason: reason };
+    const hasZeroRoomResult = work.results.some((result) =>
+        result.presentation.kind === 'room-data' && result.presentation.rooms.length === 0);
+    const roomCountIsZero = work.results.some((result) =>
+        result.presentation.kind === 'metric-summary' &&
+        result.presentation.metrics.some((metric) => metric.field === 'room_count' &&
+            metric.value === 0));
+    if (hasZeroRoomResult || roomCountIsZero) {
+        return { outcome: 'empty', emptyReason: 'no_matches' };
+    }
+    return { outcome: 'matched', emptyReason: 'none' };
+}
+
+function stateCountsFor(work: PartWork): ChatStateResultMemory['counts'] {
+    const counts: Array<{ field: SystemField; value: number }> = [];
+    for (const result of work.results) {
+        const presentation = result.presentation;
+        if (presentation.kind === 'metric-summary') {
+            for (const metric of presentation.metrics) {
+                if (metric.unit === 'count' && typeof metric.value === 'number' &&
+                    Number.isSafeInteger(metric.value) && metric.value >= 0) {
+                    counts.push({ field: metric.field, value: metric.value });
+                }
+            }
+        }
+        if (presentation.kind === 'room-data') {
+            counts.push({ field: 'room_count', value: presentation.rooms.length });
+        }
+        if (presentation.kind === 'schedule-data') {
+            counts.push({ field: 'schedule_count', value: presentation.schedules.length });
+        }
+        if (presentation.kind === 'energy-report') {
+            counts.push({ field: 'room_count', value: presentation.metrics.roomsWithRecords });
+        }
+    }
+    const seen = new Set<SystemField>();
+    return counts.filter((count) => {
+        if (seen.has(count.field)) return false;
+        seen.add(count.field);
+        return true;
+    }).slice(0, 8);
+}
+
+function stateTimestampFor(work: PartWork): string {
+    const timestamps = work.results.flatMap((result) => {
+        const presentation = result.presentation;
+        if (presentation.kind === 'metric-summary') {
+            return presentation.metrics.map((metric) => metric.asOf).filter(isString);
+        }
+        if (presentation.kind === 'room-data') {
+            return presentation.rooms.flatMap((room) => room.values.map((value) => value.asOf))
+                .filter(isString);
+        }
+        return [];
+    }).filter((value) => Number.isFinite(new Date(value).getTime()));
+    const latest = timestamps.map((value) => new Date(value))
+        .sort((left, right) => right.getTime() - left.getTime())[0];
+    return latest?.toISOString() ?? new Date().toISOString();
 }
 
 function buildFollowUps(works: readonly PartWork[]): ChatFollowUp[] {
@@ -1424,6 +1943,7 @@ function emptyScopeResolution(): RoomScopeResolution {
 function safeStateForPlanner(state: ChatStatePayload | null): unknown {
     if (!state) return null;
     return state.turns.map((turn) => ({
+        act: turn.act,
         contexts: turn.contexts.map((context) => ({
             partId: context.partId,
             domain: context.domain,
@@ -1434,16 +1954,14 @@ function safeStateForPlanner(state: ChatStatePayload | null): unknown {
             answerability: context.answerability,
         })),
         referents: turn.referents,
+        results: turn.results,
     }));
 }
 
 function isSemanticPlanningFailure(error: unknown): boolean {
     if (error instanceof ProviderResponseError) return true;
-    if (!(error instanceof BothProvidersFailedError)) return false;
-    return error.primaryError instanceof ProviderResponseError ||
-        error.fallbackError instanceof ProviderResponseError ||
-        error.primaryError instanceof CapabilityValidationError ||
-        error.fallbackError instanceof CapabilityValidationError;
+    if (error instanceof BothProvidersFailedError) return true;
+    return error instanceof CapabilityValidationError;
 }
 
 function deterministicHelpTopic(message: string): string | null {
@@ -1501,9 +2019,6 @@ function requestedBucket(message: string): SystemTimeRange['bucket'] {
     return 'auto';
 }
 
-function hasExplicitEnergyRange(message: string): boolean {
-    return /\b(today|week|month|year|annual|\d{4}-\d{2}-\d{2})\b/u.test(message);
-}
 
 function formatProjectedValue(value: ProjectedValue): string {
     if (value.value === null) return value.state === 'expired' ? 'expired'
@@ -1611,25 +2126,6 @@ function countExplicitQuestions(message: string): number {
     return (message.match(/\?/gu) ?? []).length;
 }
 
-function hasMultipleSystemTopics(message: string): boolean {
-    const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
-    const topicPatterns: readonly RegExp[] = [
-        /\b(room count|total rooms?|how many rooms?|list rooms?|room status)\b/u,
-        /\b(devices?|online|offline|last seen)\b/u,
-        /\b(temperature|humidity|hot|heat|condition)\b/u,
-        /\b(occupancy|occupied|occupants?)\b/u,
-        /\b(ac power|ac state|aircon|air conditioner)\b/u,
-        /\b(overrides?)\b/u,
-        /\b(ai auto[- ]?apply|auto[- ]?apply|ai toggle)\b/u,
-        /\b(schedules?|timetable)\b/u,
-        /\b(energy|kwh|waste|efficien|ranked? first|ranking|top consumer)\b/u,
-        /\b(climate suggestion|ml suggestion|temperature suggestion)\b/u,
-        /\b(decision events?|operational logs?)\b/u,
-        /\b(floor[ -]?plan|map layout|assigned cells?)\b/u,
-        /\b(users?|accounts?|admins?|staff)\b/u,
-    ];
-    return topicPatterns.filter((pattern) => pattern.test(normalized)).length > 1;
-}
 
 function manilaDateKey(date: Date): string {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -1660,6 +2156,10 @@ void numberOrZero;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isString(value: string | null): value is string {
+    return typeof value === 'string';
 }
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {

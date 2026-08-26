@@ -187,6 +187,42 @@ export interface SystemQueryPlan {
     readonly parts: SystemQueryPart[];
 }
 
+export type ChatDialogueAct =
+    | 'ask'
+    | 'confirm'
+    | 'correct'
+    | 'follow_up'
+    | 'elaborate'
+    | 'clarify'
+    | 'greet'
+    | 'deny';
+
+export type DialogueFreshness =
+    | 'auto'
+    | 'current'
+    | 'last_known'
+    | 'configured'
+    | 'historical';
+
+export interface DialoguePart {
+    readonly domain: SystemDomain;
+    readonly intent: SystemOperation;
+    readonly concepts: SystemField[];
+    readonly roomNames: string[];
+    readonly reference: 'none' | 'previous_request' | 'previous_result' | 'prior_part';
+    readonly referencePartId: '' | ChatPartId;
+    readonly ordinal: 0 | 1 | 2 | 3;
+    readonly freshness: DialogueFreshness;
+    readonly outputPreference: ChatOutputPreference;
+    readonly confidence: 'high' | 'medium' | 'low';
+    readonly ambiguity: string;
+}
+
+export interface DialoguePlan {
+    readonly act: ChatDialogueAct;
+    readonly parts: DialoguePart[];
+}
+
 export type ChatDisplayMode =
     | 'compact_metrics'
     | 'key_value'
@@ -626,6 +662,8 @@ export interface EvidenceBackedRecommendation {
 
 export interface AnswerPacket {
     readonly partId: ChatPartId;
+    readonly dialogueAct: ChatDialogueAct;
+    readonly responseGoal: string;
     readonly domain: SystemDomain;
     readonly operation: SystemOperation;
     readonly fields: SystemField[];
@@ -637,17 +675,18 @@ export interface AnswerPacket {
     readonly recommendations: EvidenceBackedRecommendation[];
     readonly notices: string[];
     readonly displayPlan: ChatDisplayDirective[];
+    readonly previousResult: ChatStateResultMemory | null;
+}
+
+export interface GroundedResponseClause {
+    readonly role: 'direct_answer' | 'context' | 'next_step';
+    readonly text: string;
+    readonly evidenceRefs: string[];
 }
 
 export interface GroundedAnswerDraft {
-    readonly text: string;
-    readonly evidenceRefs: string[];
+    readonly clauses: GroundedResponseClause[];
     readonly highlights: Array<{
-        readonly text: string;
-        readonly evidenceRefs: string[];
-    }>;
-    readonly recommendations: Array<{
-        readonly category: RecommendationCategory;
         readonly text: string;
         readonly evidenceRefs: string[];
     }>;
@@ -673,8 +712,10 @@ export interface ChatPrincipal {
 }
 
 export interface ChatStateTurn {
+    readonly act: ChatDialogueAct;
     readonly contexts: ChatStateContext[];
     readonly referents: ChatStateReferent[];
+    readonly results: ChatStateResultMemory[];
 }
 
 export interface ChatStateContext {
@@ -697,8 +738,46 @@ export interface ChatStateReferent {
     readonly ordering: 'query' | 'ranking';
 }
 
+export type ChatStateResultOutcome =
+    | 'matched'
+    | 'empty'
+    | 'partial'
+    | 'unavailable'
+    | 'denied'
+    | 'ambiguous';
+
+export type ChatStateEmptyReason =
+    | 'none'
+    | 'no_matches'
+    | 'no_online_reading'
+    | 'no_records'
+    | 'room_not_found'
+    | 'room_inactive'
+    | 'permission_denied'
+    | 'source_unavailable'
+    | 'insufficient_evidence'
+    | 'ambiguous';
+
+export interface ChatStateCount {
+    readonly field: SystemField;
+    readonly value: number;
+}
+
+export interface ChatStateResultMemory {
+    readonly sourcePartId: ChatPartId;
+    readonly subject: SystemDomain;
+    readonly outcome: ChatStateResultOutcome;
+    readonly emptyReason: ChatStateEmptyReason;
+    readonly counts: ChatStateCount[];
+    readonly roomNames: string[];
+    readonly complete: boolean;
+    readonly freshness: ChatFreshnessOutcome;
+    readonly asOf: string;
+    readonly visual: ChatDisplayMode | 'none';
+}
+
 export interface ChatStatePayload {
-    readonly version: 3;
+    readonly version: 4;
     readonly uid: string;
     readonly conversationId: string;
     readonly issuedAt: number;
