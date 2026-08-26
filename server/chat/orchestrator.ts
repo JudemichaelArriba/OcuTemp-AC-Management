@@ -22,6 +22,7 @@ import {
     ProviderResponseError,
 } from './providers/provider.interface.js';
 import { BothProvidersFailedError, generateWithFallback } from './retry.js';
+import { CHAT_STATE_MAX_TURNS } from './state.js';
 import { trustedSystemConceptFacts } from './system-concepts.js';
 import { ANSWER_OUTPUT_SCHEMA, DIALOGUE_PLAN_SCHEMA } from './tools/schema.js';
 import { executeToolPlans } from './tools/executor.js';
@@ -122,7 +123,7 @@ interface PartWork {
 interface PlannerOutcome {
     readonly plan: DialoguePlan;
     readonly attempts: 1 | 2;
-    readonly source: 'primary' | 'fallback';
+    readonly source: 'primary' | 'fallback' | 'verified_context';
 }
 
 const geminiProvider = new GeminiProvider();
@@ -134,7 +135,8 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
     const deadlineAtMs = input.deadlineAtMs ?? startedAt + 20_000;
     const explicitQuestionCount = countExplicitQuestions(input.message);
     let dialoguePlan: DialoguePlan;
-    let dialogueSource: 'safety' | 'semantic' | 'provider_fallback';
+    let dialogueSource: 'safety' | 'semantic' | 'provider_fallback' |
+        'verified_context_fallback';
     let plannerAttempts: 0 | 1 | 2 = 0;
     const safety = safetyDialoguePlan(input.message);
     if (explicitQuestionCount > 3) {
@@ -147,7 +149,11 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         const planned = await planWithProviders(input, deadlineAtMs, startedAt);
         dialoguePlan = planned.plan;
         plannerAttempts = planned.attempts;
-        dialogueSource = planned.source === 'primary' ? 'semantic' : 'provider_fallback';
+        dialogueSource = planned.source === 'primary'
+            ? 'semantic'
+            : planned.source === 'verified_context'
+                ? 'verified_context_fallback'
+                : 'provider_fallback';
     }
 
     let requestedPlan: SystemQueryPlan;
@@ -407,6 +413,16 @@ async function planWithProviders(
     } catch (error: unknown) {
         if (input.abortSignal?.aborted) throw error;
         const fallbackFailure = normalizePlannerFailure(error, 'groq');
+        const verifiedContextPlan = verifiedContextFallbackPlan(input.message, input.state);
+        if (verifiedContextPlan) {
+            logSafe(input.requestId, 'planning', {
+                provider: 'groq',
+                safeFailureCategory: plannerFailureCategory(fallbackFailure),
+                durationBucket: durationBucket(Date.now() - startedAt),
+                fallbackOutcome: 'verified_context_fallback',
+            });
+            return { plan: verifiedContextPlan, attempts: 2, source: 'verified_context' };
+        }
         logSafe(input.requestId, 'planning', {
             provider: 'groq',
             safeFailureCategory: plannerFailureCategory(fallbackFailure),
@@ -415,6 +431,31 @@ async function planWithProviders(
         });
         throw new BothProvidersFailedError(firstFailure, fallbackFailure);
     }
+}
+
+function verifiedContextFallbackPlan(
+    message: string,
+    state: ChatStatePayload | null,
+): DialoguePlan | null {
+    const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    if (!isCausalConnectivityFollowUp(normalized)) return null;
+    const located = latestReferenceableResult(state);
+    if (!located || !hasConnectivityReference(located.result)) return null;
+    return {
+        act: 'confirm',
+        clarificationReason: 'none',
+        parts: [dialoguePart({
+            domain: 'devices',
+            intent: 'count',
+            concepts: [
+                'online_device_count', 'stale_device_count',
+                'offline_device_count', 'unknown_device_status_count',
+            ],
+            freshness: 'current',
+            presentationIntent: 'prose',
+            reference: 'previous_request',
+        })],
+    };
 }
 
 async function repairDialoguePlan(
@@ -790,6 +831,9 @@ function normalizeDialoguePart(
     let reference = dialogue.reference;
     let ordinal = dialogue.ordinal;
     const definitionConcept = explicitSystemConcept(normalizedMessage);
+    const causalConnectivityFollowUp = isCausalConnectivityFollowUp(normalizedMessage) &&
+        latestReference !== undefined && latestReference !== null &&
+        hasConnectivityReference(latestReference);
 
     if (definitionConcept) {
         domain = 'system_concepts';
@@ -797,6 +841,18 @@ function normalizeDialoguePart(
         concepts = [definitionConcept];
         presentationIntent = 'prose';
         reference = 'none';
+        ordinal = 0;
+    }
+
+    if (causalConnectivityFollowUp) {
+        domain = 'devices';
+        intent = 'count';
+        concepts = [
+            'online_device_count', 'stale_device_count',
+            'offline_device_count', 'unknown_device_status_count',
+        ];
+        presentationIntent = 'prose';
+        reference = 'previous_request';
         ordinal = 0;
     }
 
@@ -1083,6 +1139,16 @@ function asksForConnectivityList(message: string): boolean {
 
 function asksForAppHelp(message: string): boolean {
     return /\b(where|how\s+to|how\s+(?:do|can)\s+i|steps?|guide|help)\b/u.test(message);
+}
+
+function isCausalConnectivityFollowUp(message: string): boolean {
+    return /\b(?:is|was|could)\s+(?:it|that|this)\b.*\b(?:because|beacause|cause|due\s+to)\b.*\b(?:off?line|disconnected|not\s+online)\b/u
+        .test(message);
+}
+
+function hasConnectivityReference(result: ChatStateResultMemory): boolean {
+    return ['devices', 'measurements', 'occupancy', 'ac_control'].includes(result.subject) &&
+        result.counts.some((count) => count.field === 'online_device_count');
 }
 
 function explicitSystemConcept(message: string): SystemField | null {
@@ -1705,6 +1771,18 @@ function metricAnswer(
     if (metrics.length === 0) {
         return answer(work.requested.partId,
             'The requested OcuTemp value is unknown or unavailable.', [], caveats);
+    }
+    const onlineMetric = metrics.find((metric) => metric.field === 'online_device_count');
+    if (work.packet.dialogueAct === 'confirm' &&
+        typeof onlineMetric?.value === 'number') {
+        if (onlineMetric.value === 0) {
+            return answer(work.requested.partId,
+                'That is the immediate connectivity reason. The refreshed OcuTemp status still shows no online devices, so current readings cannot be retrieved. This does not identify why connectivity was lost or prove that every unavailable device has the same offline state.',
+                [], caveats);
+        }
+        return answer(work.requested.partId,
+            `Not currently. The refreshed OcuTemp status shows ${formatNumber(onlineMetric.value)} online ${onlineMetric.value === 1 ? 'device' : 'devices'}, so the earlier no-online result is no longer current.`,
+            [], caveats);
     }
     if (metrics.length === 1) {
         const metric = metrics[0]!;
@@ -2375,7 +2453,7 @@ function emptyScopeResolution(): RoomScopeResolution {
 
 function safeStateForPlanner(state: ChatStatePayload | null): unknown {
     if (!state) return null;
-    return state.turns.map((turn) => ({
+    return state.turns.slice(-CHAT_STATE_MAX_TURNS).map((turn) => ({
         act: turn.act,
         referenceBoundary: turn.referenceBoundary,
         contexts: turn.contexts.map((context) => ({

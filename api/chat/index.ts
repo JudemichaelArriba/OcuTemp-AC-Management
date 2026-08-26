@@ -15,6 +15,7 @@ import {
 import { runChatTurn } from '../../server/chat/orchestrator.js';
 import { BothProvidersFailedError } from '../../server/chat/retry.js';
 import {
+    CHAT_STATE_MAX_TURNS,
     CHAT_STATE_LIFETIME_SECONDS,
     decodeChatState,
     encodeChatState,
@@ -97,7 +98,8 @@ async function handler(request: Request): Promise<Response> {
             conversationId: decoded.state?.conversationId ?? globalThis.crypto.randomUUID(),
             issuedAt: nowSeconds,
             expiresAt: nowSeconds + CHAT_STATE_LIFETIME_SECONDS,
-            turns: [...(decoded.state?.turns ?? []), result.stateTurn].slice(-5),
+            turns: [...(decoded.state?.turns ?? []), result.stateTurn]
+                .slice(-CHAT_STATE_MAX_TURNS),
         };
 
         stage = 'state_encode';
