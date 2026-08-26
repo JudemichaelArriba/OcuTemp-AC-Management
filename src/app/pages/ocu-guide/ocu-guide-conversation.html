@@ -153,7 +153,7 @@
               }
             </section>
             }
-            @if (message.evidence) {
+            @if (message.evidence && message.evidence.source !== 'none') {
             <footer class="mt-4 flex flex-wrap items-center gap-1 text-[0.7rem] tabular-nums text-slate-500">
               <span class="material-symbols-outlined text-[0.95rem] text-cyan-700"
                 aria-hidden="true">verified</span><span>{{ evidenceLabel(message) }}</span>

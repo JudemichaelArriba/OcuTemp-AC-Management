@@ -92,7 +92,7 @@ async function handler(request: Request): Promise<Response> {
 
         const nowSeconds = Math.floor(Date.now() / 1_000);
         const state: ChatStatePayload = {
-            version: 4,
+            version: 5,
             uid: principal.uid,
             conversationId: decoded.state?.conversationId ?? globalThis.crypto.randomUUID(),
             issuedAt: nowSeconds,

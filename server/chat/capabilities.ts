@@ -11,6 +11,7 @@ import {
 } from './tools/schema.js';
 import type {
     ChatDisplayMode,
+    DialogueClarificationReason,
     ChatDialogueAct,
     ChatPartId,
     ChatPrincipal,
@@ -75,7 +76,9 @@ export const CAPABILITY_REGISTRY: readonly CapabilityDefinition[] = [
         BOTH_ROLES, 'get_facility_summary', ROOM_SCOPES,
         ['compact_metrics', 'bullet_list', 'key_value', 'table']),
     capability('devices', DATA_OPERATIONS,
-        ['room_name', 'device_assignment', 'device_status', 'device_count', 'last_seen'],
+        ['room_name', 'room_count', 'device_assignment', 'device_status', 'device_count',
+            'assigned_device_count', 'online_device_count', 'stale_device_count',
+            'offline_device_count', 'unknown_device_status_count', 'last_seen'],
         BOTH_ROLES, 'get_facility_summary', ROOM_SCOPES,
         ['compact_metrics', 'bullet_list', 'key_value', 'table']),
     capability('measurements', ['status', 'detail', 'compare', 'summarize', 'explain'],
@@ -131,6 +134,12 @@ export const CAPABILITY_REGISTRY: readonly CapabilityDefinition[] = [
         'get_system_help', ['facility'], ['bullet_list']),
     capability('assistant_capabilities', ['list', 'explain'], ['capabilities'], BOTH_ROLES,
         'deterministic', ['facility'], ['bullet_list']),
+    capability('system_concepts', ['explain'], [
+        'capabilities', 'temperature', 'last_known_temperature', 'humidity',
+        'last_known_humidity', 'occupancy', 'last_known_occupancy', 'device_status',
+        'room_status', 'ac_power', 'override_active', 'ai_auto_apply', 'schedules',
+        'floor_plan_assignment', 'climate_suggestion', 'estimated_kwh', 'decision_event',
+    ], BOTH_ROLES, 'deterministic', ['facility'], ['key_value']),
     capability('conversation', ['greet', 'clarify', 'deny'], ['capabilities'], BOTH_ROLES,
         'deterministic', ['facility'], ['bullet_list']),
     capability('unsupported', ['clarify', 'deny'], ['capabilities'], BOTH_ROLES,
@@ -168,7 +177,11 @@ export function plannerCapabilitySlice(role: ChatUserRole): string {
     const helpTopics = Object.entries(HELP_TOPIC_ROLES)
         .filter(([, roles]) => roles.includes(role))
         .map(([topic]) => topic);
-    return [...capabilities, `app_help topics=${helpTopics.join(',')}`].join('\n');
+    const restricted = role === 'staff'
+        ? 'admin_user_aggregates: operations=count,status,summarize; fields=user_total,approved_staff_count,pending_staff_count,admin_count; access=denied (select only to return the role denial)'
+        : '';
+    return [...capabilities, restricted, `app_help topics=${helpTopics.join(',')}`]
+        .filter(Boolean).join('\n');
 }
 
 export function validateSystemQueryPlan(rawPlan: unknown): SystemQueryPlan {
@@ -176,23 +189,31 @@ export function validateSystemQueryPlan(rawPlan: unknown): SystemQueryPlan {
 }
 
 export function validateDialoguePlan(value: unknown): DialoguePlan {
-    if (!isRecord(value) || !hasExactKeys(value, ['act', 'parts']) ||
+    if (!isRecord(value) || !hasExactKeys(value, ['act', 'parts', 'clarificationReason']) ||
         typeof value['act'] !== 'string' ||
         !CHAT_DIALOGUE_ACTS.includes(value['act'] as ChatDialogueAct) ||
         !Array.isArray(value['parts']) || value['parts'].length < 1 ||
-        value['parts'].length > MAX_QUERY_PARTS) {
+        value['parts'].length > MAX_QUERY_PARTS ||
+        typeof value['clarificationReason'] !== 'string' ||
+        !['none', 'missing_subject', 'missing_room', 'missing_period',
+            'ambiguous_reference', 'unrelated_parts'].includes(value['clarificationReason'])) {
         throw new CapabilityValidationError('invalid_dialogue_plan');
     }
+    const act = value['act'] as ChatDialogueAct;
+    const clarificationReason = value['clarificationReason'] as DialogueClarificationReason;
+    if ((act === 'clarify') !== (clarificationReason !== 'none')) {
+        throw new CapabilityValidationError('invalid_clarification_reason');
+    }
     return {
-        act: value['act'] as ChatDialogueAct,
+        act,
         parts: value['parts'].map(validateDialoguePart),
+        clarificationReason,
     };
 }
 
 function validateDialoguePart(value: unknown, index: number): DialoguePart {
     const keys = ['domain', 'intent', 'concepts', 'roomNames', 'reference',
-        'referencePartId', 'ordinal', 'freshness', 'outputPreference', 'confidence',
-        'ambiguity'];
+        'referencePartId', 'ordinal', 'freshness', 'presentationIntent'];
     if (!isRecord(value) || !hasExactKeys(value, keys) ||
         typeof value['domain'] !== 'string' ||
         !SYSTEM_DOMAINS.includes(value['domain'] as SystemDomain) ||
@@ -208,10 +229,9 @@ function validateDialoguePart(value: unknown, index: number): DialoguePart {
         value['ordinal'] < 0 || value['ordinal'] > 3 ||
         typeof value['freshness'] !== 'string' ||
         !DIALOGUE_FRESHNESS.includes(value['freshness'] as DialogueFreshness) ||
-        typeof value['outputPreference'] !== 'string' ||
-        !CHAT_OUTPUT_PREFERENCES.includes(value['outputPreference'] as never) ||
-        !['high', 'medium', 'low'].includes(String(value['confidence'])) ||
-        typeof value['ambiguity'] !== 'string' || value['ambiguity'].length > 240) {
+        typeof value['presentationIntent'] !== 'string' ||
+        !['prose', 'short_list', 'comparison', 'ranking', 'trend', 'report']
+            .includes(value['presentationIntent'])) {
         throw new CapabilityValidationError('invalid_dialogue_part');
     }
     const reference = value['reference'] as DialoguePart['reference'];
@@ -233,9 +253,7 @@ function validateDialoguePart(value: unknown, index: number): DialoguePart {
         referencePartId: value['referencePartId'] as DialoguePart['referencePartId'],
         ordinal: value['ordinal'] as DialoguePart['ordinal'],
         freshness: value['freshness'] as DialogueFreshness,
-        outputPreference: value['outputPreference'] as DialoguePart['outputPreference'],
-        confidence: value['confidence'] as DialoguePart['confidence'],
-        ambiguity: cleanText(value['ambiguity'], 240),
+        presentationIntent: value['presentationIntent'] as DialoguePart['presentationIntent'],
     };
 }
 
@@ -537,6 +555,8 @@ function validateFilterCompatibility(filter: SystemFilter): void {
     const numberFields: readonly SystemField[] = [
         'temperature', 'last_known_temperature', 'humidity', 'last_known_humidity',
         'override_target_temperature', 'room_count', 'device_count', 'schedule_count',
+        'assigned_device_count', 'online_device_count', 'stale_device_count',
+        'offline_device_count', 'unknown_device_status_count',
         'estimated_kwh', 'runtime_seconds', 'session_count', 'energy_rank', 'user_total',
         'approved_staff_count', 'pending_staff_count', 'admin_count',
     ];

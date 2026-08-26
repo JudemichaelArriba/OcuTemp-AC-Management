@@ -56,7 +56,7 @@ const DOMAINS = new Set([
   'rooms', 'devices', 'measurements', 'occupancy', 'ac_control', 'overrides',
   'ai_auto_apply', 'schedules', 'energy', 'climate_suggestions', 'decision_events',
   'floor_plan', 'own_account', 'admin_user_aggregates', 'app_help',
-  'assistant_capabilities', 'conversation', 'unsupported',
+  'assistant_capabilities', 'system_concepts', 'conversation', 'unsupported',
 ]);
 const OPERATIONS = new Set([
   'greet', 'count', 'list', 'status', 'detail', 'compare', 'report', 'summarize', 'explain',
@@ -73,7 +73,9 @@ const ANSWERABILITY = new Set([
 ]);
 const SYSTEM_FIELDS = new Set<SystemField>([
   'room_name', 'room_status', 'room_count', 'device_assignment', 'device_status',
-  'device_count', 'last_seen', 'temperature', 'last_known_temperature', 'humidity',
+  'device_count', 'assigned_device_count', 'online_device_count',
+  'stale_device_count', 'offline_device_count', 'unknown_device_status_count',
+  'last_seen', 'temperature', 'last_known_temperature', 'humidity',
   'last_known_humidity', 'condition', 'occupancy', 'last_known_occupancy', 'ac_power',
   'last_known_ac_power', 'override_active', 'override_target_temperature',
   'override_until', 'ai_auto_apply', 'schedule_count', 'schedules', 'estimated_kwh',

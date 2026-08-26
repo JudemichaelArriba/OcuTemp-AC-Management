@@ -798,7 +798,9 @@ function projectedDeviceFields(
     const required = new Set<FirebaseDeviceProjectionField>();
     const has = (field: SystemField): boolean => fields.includes(field);
 
-    if (has('device_status') || has('last_seen') || has('temperature') ||
+    if (has('device_status') || has('online_device_count') ||
+        has('stale_device_count') || has('offline_device_count') ||
+        has('unknown_device_status_count') || has('last_seen') || has('temperature') ||
         has('last_known_temperature') || has('humidity') ||
         has('last_known_humidity') || has('condition') || has('occupancy') ||
         has('last_known_occupancy') || has('ac_power') || has('last_known_ac_power')) {
@@ -1125,6 +1127,11 @@ function projectRoomValue(
             );
         case 'room_count':
         case 'device_count':
+        case 'assigned_device_count':
+        case 'online_device_count':
+        case 'stale_device_count':
+        case 'offline_device_count':
+        case 'unknown_device_status_count':
         case 'schedules':
         case 'estimated_kwh':
         case 'runtime_seconds':
@@ -1280,14 +1287,41 @@ function buildFacilityMetrics(
             assigned, 'configured', 'count',
         ));
     }
+    const assignedRooms = rooms.filter((room) =>
+        room.deviceAssignmentStatus === 'assigned');
+    if (requested.has('assigned_device_count')) {
+        add(projectedValue(
+            'assigned_device_count', 'Rooms with an unconflicted assigned device',
+            assignedRooms.length, 'configured', 'count',
+        ));
+    }
+    const statusCounts = {
+        online: assignedRooms.filter((room) => room.onlineState === 'online').length,
+        stale: assignedRooms.filter((room) => room.onlineState === 'stale').length,
+        offline: assignedRooms.filter((room) => room.onlineState === 'offline').length,
+    };
+    const unknownStatusCount = assignedRooms.length - statusCounts.online -
+        statusCounts.stale - statusCounts.offline;
+    if (requested.has('online_device_count')) {
+        add(projectedValue('online_device_count', 'Assigned devices online now',
+            statusCounts.online, 'current', 'count'));
+    }
+    if (requested.has('stale_device_count')) {
+        add(projectedValue('stale_device_count', 'Assigned devices with stale status',
+            statusCounts.stale, 'current', 'count'));
+    }
+    if (requested.has('offline_device_count')) {
+        add(projectedValue('offline_device_count', 'Assigned devices offline now',
+            statusCounts.offline, 'current', 'count'));
+    }
+    if (requested.has('unknown_device_status_count')) {
+        add(projectedValue('unknown_device_status_count',
+            'Assigned devices with unknown status', unknownStatusCount, 'unknown', 'count'));
+    }
     if (requested.has('device_status')) {
-        const online = rooms.filter((room) => room.onlineState === 'online').length;
-        const stale = rooms.filter((room) => room.onlineState === 'stale').length;
-        const offline = rooms.filter((room) => room.onlineState === 'offline').length;
-        const unknown = rooms.length - online - stale - offline;
         add(projectedValue(
             'device_status', 'Assigned-device status summary',
-            `${online} online; ${stale} stale; ${offline} offline; ${unknown} unknown`,
+            `${statusCounts.online} online; ${statusCounts.stale} stale; ${statusCounts.offline} offline; ${unknownStatusCount} unknown`,
             'current', 'none',
         ));
     }
@@ -1468,7 +1502,9 @@ function sortProjectedRooms(
 
 function shouldPresentFacilityRows(plan: PlannerToolPlan): boolean {
     if (plan.fields.every((field) => [
-        'room_count', 'device_count', 'schedule_count', 'floor_plan_layout',
+        'room_count', 'device_count', 'assigned_device_count', 'online_device_count',
+        'stale_device_count', 'offline_device_count', 'unknown_device_status_count',
+        'schedule_count', 'floor_plan_layout',
     ].includes(field))) return false;
     if (plan.operation === 'list' || plan.operation === 'detail' ||
         plan.operation === 'compare' || plan.operation === 'report') return true;

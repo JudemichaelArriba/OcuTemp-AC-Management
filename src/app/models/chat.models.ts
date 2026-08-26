@@ -31,6 +31,7 @@ export type SystemDomain =
   | 'admin_user_aggregates'
   | 'app_help'
   | 'assistant_capabilities'
+  | 'system_concepts'
   | 'conversation'
   | 'unsupported';
 
@@ -55,6 +56,11 @@ export type SystemField =
   | 'device_assignment'
   | 'device_status'
   | 'device_count'
+  | 'assigned_device_count'
+  | 'online_device_count'
+  | 'stale_device_count'
+  | 'offline_device_count'
+  | 'unknown_device_status_count'
   | 'last_seen'
   | 'temperature'
   | 'last_known_temperature'

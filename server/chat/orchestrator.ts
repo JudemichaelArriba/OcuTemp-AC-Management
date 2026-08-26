@@ -15,8 +15,12 @@ import {
 } from './prompts/planner.prompt.js';
 import { GeminiProvider } from './providers/gemini.provider.js';
 import { GroqProvider } from './providers/groq.provider.js';
-import { ProviderResponseError } from './providers/provider.interface.js';
-import { BothProvidersFailedError, generateWithFallback } from './retry.js';
+import {
+    ProviderRecoverableError,
+    ProviderResponseError,
+} from './providers/provider.interface.js';
+import { generateWithFallback } from './retry.js';
+import { trustedSystemConceptFacts } from './system-concepts.js';
 import { ANSWER_OUTPUT_SCHEMA, DIALOGUE_PLAN_SCHEMA } from './tools/schema.js';
 import { executeToolPlans } from './tools/executor.js';
 import type {
@@ -113,6 +117,12 @@ interface PartWork {
     readonly packet: AnswerPacket;
 }
 
+interface PlannerOutcome {
+    readonly plan: DialoguePlan;
+    readonly attempts: 0 | 1 | 2;
+    readonly source: 'primary' | 'fallback' | 'emergency';
+}
+
 const geminiProvider = new GeminiProvider();
 const groqProvider = new GroqProvider();
 
@@ -122,19 +132,21 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
     const deadlineAtMs = input.deadlineAtMs ?? startedAt + 20_000;
     const explicitQuestionCount = countExplicitQuestions(input.message);
     let dialoguePlan: DialoguePlan;
-    let dialogueSource: 'safety' | 'semantic' | 'contextual_fallback';
+    let dialogueSource: 'safety' | 'semantic' | 'provider_fallback' | 'emergency';
+    let plannerAttempts: 0 | 1 | 2 = 0;
     const safety = safetyDialoguePlan(input.message);
     if (explicitQuestionCount > 3) {
-        dialoguePlan = dialogueClarification(
-            'Please split that into no more than three related OcuTemp questions.',
-        );
+        dialoguePlan = dialogueClarification('unrelated_parts');
         dialogueSource = 'safety';
     } else if (safety) {
         dialoguePlan = safety;
         dialogueSource = 'safety';
     } else {
-        dialoguePlan = await planWithProviders(input, deadlineAtMs, startedAt);
-        dialogueSource = dialoguePlan.act === 'clarify' ? 'contextual_fallback' : 'semantic';
+        const planned = await planWithProviders(input, deadlineAtMs, startedAt);
+        dialoguePlan = planned.plan;
+        plannerAttempts = planned.attempts;
+        dialogueSource = planned.source === 'primary' ? 'semantic'
+            : planned.source === 'fallback' ? 'provider_fallback' : 'emergency';
     }
 
     let requestedPlan: SystemQueryPlan;
@@ -144,8 +156,9 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         compileSystemQueryPlan(requestedPlan, input.user);
     } catch (error: unknown) {
         if (!(error instanceof CapabilityValidationError)) throw error;
-        const repaired = await repairDialoguePlan(input, dialoguePlan, error.reason,
-            deadlineAtMs, startedAt);
+        const repaired = plannerAttempts < 2
+            ? await repairDialoguePlan(input, error.reason, deadlineAtMs, startedAt)
+            : null;
         if (repaired) {
             try {
                 dialoguePlan = repaired;
@@ -154,26 +167,17 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
                 compileSystemQueryPlan(requestedPlan, input.user);
             } catch (repairError: unknown) {
                 if (!(repairError instanceof CapabilityValidationError)) throw repairError;
-                dialoguePlan = contextualClarificationDialogue(input.state);
+                dialoguePlan = emergencyDialoguePlan(input.message, input.state, input.user.role);
                 requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
                     input.state);
-                dialogueSource = 'contextual_fallback';
+                dialogueSource = 'emergency';
             }
         } else {
-            dialoguePlan = contextualClarificationDialogue(input.state);
+            dialoguePlan = emergencyDialoguePlan(input.message, input.state, input.user.role);
             requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
                 input.state);
-            dialogueSource = 'contextual_fallback';
+            dialogueSource = 'emergency';
         }
-    }
-
-    const visualConflict = conflictingExplicitVisuals(requestedPlan.parts);
-    if (visualConflict) {
-        dialoguePlan = dialogueClarification(
-            'That request asks for different visuals. Which single table or graph should I show?',
-        );
-        requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
-            input.state);
     }
 
     const historical = resolveHistoricalReferences(requestedPlan, input.state);
@@ -293,9 +297,11 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         followUps: buildFollowUps(partWorks),
         partial,
         notices,
-        evidenceSource: results.length > 0 ? 'facility'
+        evidenceSource: results.some((result) => result.name !== 'get_system_help')
+            ? 'facility'
             : requestedPlan.parts.some((part) =>
-                ['own_account', 'assistant_capabilities', 'app_help'].includes(part.domain))
+                ['own_account', 'assistant_capabilities', 'system_concepts', 'app_help']
+                    .includes(part.domain))
                 ? 'application'
                 : 'none',
         stateTurn,
@@ -306,7 +312,7 @@ async function planWithProviders(
     input: RunChatTurnInput,
     deadlineAtMs: number,
     startedAt: number,
-): Promise<DialoguePlan> {
+): Promise<PlannerOutcome> {
     const prompt = JSON.stringify({
         currentManilaDate: manilaDateKey(new Date()),
         callerRole: input.user.role,
@@ -314,52 +320,76 @@ async function planWithProviders(
         typedConversationContext: safeStateForPlanner(input.state),
         untrustedUserMessage: input.message,
     });
+    let firstFailure: unknown;
     try {
-        const generated = await generateWithFallback<DialoguePlan>(
-            geminiProvider,
-            groqProvider,
-            {
-                systemPrompt: PLANNER_SYSTEM_PROMPT,
-                prompt,
-                schema: DIALOGUE_PLAN_SCHEMA,
-                schemaName: 'dialogue_plan',
-                schemaDescription: 'A compact interpretation of an OcuTemp conversation turn.',
-                maxOutputTokens: 1_200,
-                temperature: 0,
-                timeoutMs: PLANNER_PRIMARY_MS,
-                reasoningEffort: 'low',
-                abortSignal: input.abortSignal,
-            },
-            validateDialoguePlan,
-            {
-                fallbackTimeoutMs: PLANNER_FALLBACK_MS,
-                deadlineAtMs,
-                reserveMs: PLANNING_RESERVE_MS,
-            },
-        );
+        const result = validateDialoguePlan(await geminiProvider.generateStructured<DialoguePlan>({
+            systemPrompt: PLANNER_SYSTEM_PROMPT,
+            prompt,
+            schema: DIALOGUE_PLAN_SCHEMA,
+            schemaName: 'dialogue_plan',
+            schemaDescription: 'A compact semantic interpretation of an OcuTemp turn.',
+            maxOutputTokens: 600,
+            temperature: 0,
+            timeoutMs: boundedProviderTimeout(PLANNER_PRIMARY_MS, deadlineAtMs,
+                PLANNING_RESERVE_MS, 'gemini'),
+            reasoningEffort: 'low',
+            abortSignal: input.abortSignal,
+        }));
         logSafe(input.requestId, 'planning', {
-            provider: generated.providerUsed,
+            provider: 'gemini',
             durationBucket: durationBucket(Date.now() - startedAt),
-            fallbackOutcome: generated.usedFallback ? 'fallback_succeeded' : 'primary_succeeded',
+            fallbackOutcome: 'primary_succeeded',
         });
-        return generated.result;
+        return { plan: result, attempts: 1, source: 'primary' };
     } catch (error: unknown) {
         if (input.abortSignal?.aborted) throw error;
-        if (isSemanticPlanningFailure(error)) {
-            logSafe(input.requestId, 'planning', {
-                provider: 'none',
-                durationBucket: durationBucket(Date.now() - startedAt),
-                fallbackOutcome: 'invalid_plan_clarified',
-            });
-            return contextualClarificationDialogue(input.state);
-        }
-        throw error;
+        firstFailure = normalizePlannerFailure(error, 'gemini');
+    }
+
+    const failureCategory = plannerFailureCategory(firstFailure);
+    if (deadlineAtMs - Date.now() < 250 + PLANNING_RESERVE_MS) {
+        return emergencyPlannerOutcome(input, startedAt, 'insufficient_time');
+    }
+    const semanticRepair = failureCategory === 'invalid_structure' ||
+        failureCategory === 'invalid_semantics';
+    const fallbackPrompt = semanticRepair ? JSON.stringify({
+        currentManilaDate: manilaDateKey(new Date()),
+        callerRole: input.user.role,
+        permittedSemanticCapabilities: plannerCapabilitySlice(input.user.role),
+        typedConversationContext: safeStateForPlanner(input.state),
+        untrustedUserMessage: input.message,
+        safeValidationCategory: failureCategory,
+    }) : prompt;
+    try {
+        const result = validateDialoguePlan(await groqProvider.generateStructured<DialoguePlan>({
+            systemPrompt: semanticRepair ? PLANNER_REPAIR_SYSTEM_PROMPT : PLANNER_SYSTEM_PROMPT,
+            prompt: fallbackPrompt,
+            schema: DIALOGUE_PLAN_SCHEMA,
+            schemaName: semanticRepair ? 'repaired_dialogue_plan' : 'dialogue_plan',
+            schemaDescription: 'A compact semantic interpretation of an OcuTemp turn.',
+            maxOutputTokens: 600,
+            temperature: 0,
+            timeoutMs: boundedProviderTimeout(PLANNER_FALLBACK_MS, deadlineAtMs,
+                PLANNING_RESERVE_MS, 'groq'),
+            reasoningEffort: 'low',
+            abortSignal: input.abortSignal,
+        }));
+        logSafe(input.requestId, 'planning', {
+            provider: 'groq',
+            safeFailureCategory: failureCategory,
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: semanticRepair ? 'repair_succeeded' : 'fallback_succeeded',
+        });
+        return { plan: result, attempts: 2, source: 'fallback' };
+    } catch (error: unknown) {
+        if (input.abortSignal?.aborted) throw error;
+        return emergencyPlannerOutcome(input, startedAt,
+            plannerFailureCategory(normalizePlannerFailure(error, 'groq')));
     }
 }
 
 async function repairDialoguePlan(
     input: RunChatTurnInput,
-    invalidPlan: DialoguePlan,
     validationCategory: string,
     deadlineAtMs: number,
     startedAt: number,
@@ -371,45 +401,35 @@ async function repairDialoguePlan(
         permittedSemanticCapabilities: plannerCapabilitySlice(input.user.role),
         typedConversationContext: safeStateForPlanner(input.state),
         untrustedUserMessage: input.message,
-        previousDialoguePlan: invalidPlan,
         safeValidationCategory: cleanText(validationCategory, 80),
     });
     try {
-        const generated = await generateWithFallback<DialoguePlan>(
-            geminiProvider,
-            groqProvider,
-            {
-                systemPrompt: PLANNER_REPAIR_SYSTEM_PROMPT,
-                prompt,
-                schema: DIALOGUE_PLAN_SCHEMA,
-                schemaName: 'repaired_dialogue_plan',
-                schemaDescription: 'A repaired compact OcuTemp dialogue interpretation.',
-                maxOutputTokens: 1_200,
-                temperature: 0,
-                timeoutMs: PLANNER_REPAIR_MS,
-                reasoningEffort: 'low',
-                abortSignal: input.abortSignal,
-            },
-            validateDialoguePlan,
-            {
-                fallbackTimeoutMs: PLANNER_FALLBACK_MS,
-                deadlineAtMs,
-                reserveMs: PLANNING_RESERVE_MS,
-            },
-        );
+        const result = validateDialoguePlan(await groqProvider.generateStructured<DialoguePlan>({
+            systemPrompt: PLANNER_REPAIR_SYSTEM_PROMPT,
+            prompt,
+            schema: DIALOGUE_PLAN_SCHEMA,
+            schemaName: 'repaired_dialogue_plan',
+            schemaDescription: 'A repaired compact OcuTemp dialogue interpretation.',
+            maxOutputTokens: 600,
+            temperature: 0,
+            timeoutMs: boundedProviderTimeout(PLANNER_REPAIR_MS, deadlineAtMs,
+                FINALIZATION_RESERVE_MS, 'groq'),
+            reasoningEffort: 'low',
+            abortSignal: input.abortSignal,
+        }));
         logSafe(input.requestId, 'planning_repair', {
-            provider: generated.providerUsed,
+            provider: 'groq',
             durationBucket: durationBucket(Date.now() - startedAt),
-            fallbackOutcome: generated.usedFallback ? 'fallback_succeeded' : 'repair_succeeded',
+            fallbackOutcome: 'repair_succeeded',
         });
-        return generated.result;
+        return result;
     } catch (error: unknown) {
         if (input.abortSignal?.aborted) throw error;
-        if (!isSemanticPlanningFailure(error)) throw error;
         logSafe(input.requestId, 'planning_repair', {
-            provider: 'none',
+            provider: 'groq',
+            safeFailureCategory: plannerFailureCategory(normalizePlannerFailure(error, 'groq')),
             durationBucket: durationBucket(Date.now() - startedAt),
-            fallbackOutcome: 'contextual_clarification',
+            fallbackOutcome: 'emergency_fallback',
         });
         return null;
     }
@@ -436,7 +456,7 @@ async function writeWithFallback(
                 schema: ANSWER_OUTPUT_SCHEMA,
                 schemaName: 'grounded_answer',
                 schemaDescription: 'A concise answer supported by supplied fact IDs.',
-                maxOutputTokens: 1_200,
+                maxOutputTokens: 600,
                 temperature: 0.15,
                 timeoutMs: WRITER_PRIMARY_MS,
                 reasoningEffort: 'low',
@@ -476,7 +496,6 @@ function resolveHistoricalReferences(
     state: ChatStatePayload | null,
 ): ReferenceResolution {
     const unresolved = new Map<ChatPartId, string>();
-    const latest = state?.turns[state.turns.length - 1];
     const parts = plan.parts.map((part): SystemQueryPart => {
         if (part.scope.kind === 'prior_part' ||
             part.followUpReference.kind === 'prior_part') return part;
@@ -488,42 +507,42 @@ function resolveHistoricalReferences(
                 ? part.followUpReference.kind
                 : null;
         if (!referenceKind) return part;
-        if (!latest) {
+        const located = latestReferenceableResult(state);
+        if (!located || !state) {
             return unresolvedPart(part, unresolved,
                 'I do not have a verified previous result for that reference. Please name the rooms or scope.');
         }
+        const sourceTurn = state.turns[located.turnIndex]!;
+        const sourceContext = sourceTurn.contexts.find((context) =>
+            context.partId === located.result.sourcePartId);
 
         if (referenceKind === 'previous_request') {
-            const candidates = latest.contexts.filter((context) =>
-                context.domain === part.domain || latest.contexts.length === 1);
-            const context = candidates[candidates.length - 1];
-            if (!context || !['facility', 'named_rooms'].includes(context.requestedScope.kind)) {
+            if (!sourceContext || !['facility', 'named_rooms'].includes(
+                sourceContext.requestedScope.kind,
+            )) {
                 return unresolvedPart(part, unresolved,
                     'The previous request does not provide one unambiguous room scope. Please name the rooms.');
             }
             return {
                 ...part,
-                scope: { ...context.requestedScope },
-                timeRange: part.domain === 'energy' ? { ...context.timeRange } : part.timeRange,
+                scope: { ...sourceContext.requestedScope },
+                timeRange: part.domain === 'energy'
+                    ? { ...sourceContext.timeRange } : part.timeRange,
             };
         }
 
-        const candidates = latest.referents.filter((referent) =>
-            latest.contexts.find((context) => context.partId === referent.sourcePartId)?.domain ===
-                part.domain || latest.referents.length === 1);
-        const referent = candidates[candidates.length - 1];
+        const referent = sourceTurn.referents.find((item) =>
+            item.sourcePartId === located.result.sourcePartId);
         if (referent?.roomNames.length === 0 && referent.complete &&
             part.followUpReference.ordinal === 0) {
-            const previousContext = latest.contexts.find((context) =>
-                context.partId === referent.sourcePartId);
-            if (previousContext && ['facility', 'named_rooms'].includes(
-                previousContext.requestedScope.kind,
+            if (sourceContext && ['facility', 'named_rooms'].includes(
+                sourceContext.requestedScope.kind,
             )) {
                 return {
                     ...part,
-                    scope: { ...previousContext.requestedScope },
+                    scope: { ...sourceContext.requestedScope },
                     timeRange: part.domain === 'energy'
-                        ? { ...previousContext.timeRange }
+                        ? { ...sourceContext.timeRange }
                         : part.timeRange,
                 };
             }
@@ -543,8 +562,6 @@ function resolveHistoricalReferences(
             return unresolvedPart(part, unresolved,
                 'That numbered room is not present in the previous verified result.');
         }
-        const sourceContext = latest.contexts.find((context) =>
-            context.partId === referent.sourcePartId);
         return {
             ...part,
             scope: {
@@ -618,14 +635,10 @@ function unresolvedPart(
 
 function safetyDialoguePlan(message: string): DialoguePlan | null {
     const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
-    if (/^(hi|hello|hey|good (morning|afternoon|evening))[!. ]*$/u.test(normalized)) {
-        return { act: 'greet', parts: [dialoguePart({
-            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
-        })] };
-    }
-    if (/^(please\s+)?(turn|set|change|delete|create|remove|approve|apply|disable|enable)\b/u
-        .test(normalized)) {
-        return { act: 'deny', parts: [dialoguePart({
+    const prohibitedControl = /^(?:please\s+)?(?:turn|set|change|apply|disable|enable)\b.*\b(?:ac|device|override|temperature|auto-apply)\b/u;
+    const prohibitedMutation = /^(?:please\s+)?(?:delete|create|remove|approve)\b.*\b(?:room|schedule|staff|user|account|assignment)\b/u;
+    if (prohibitedControl.test(normalized) || prohibitedMutation.test(normalized)) {
+        return { act: 'deny', clarificationReason: 'none', parts: [dialoguePart({
             domain: 'conversation', intent: 'deny', concepts: ['capabilities'],
         })] };
     }
@@ -636,7 +649,9 @@ interface DialoguePartOptions {
     readonly domain: SystemDomain;
     readonly intent: SystemOperation;
     readonly concepts: SystemField[];
-    readonly ambiguity?: string;
+    readonly freshness?: DialoguePart['freshness'];
+    readonly presentationIntent?: DialoguePart['presentationIntent'];
+    readonly reference?: DialoguePart['reference'];
 }
 
 function dialoguePart(options: DialoguePartOptions): DialoguePart {
@@ -648,28 +663,142 @@ function dialoguePart(options: DialoguePartOptions): DialoguePart {
         reference: 'none',
         referencePartId: '',
         ordinal: 0,
-        freshness: 'auto',
-        outputPreference: 'auto',
-        confidence: options.ambiguity ? 'low' : 'high',
-        ambiguity: cleanText(options.ambiguity ?? '', 240),
+        freshness: options.freshness ?? 'auto',
+        presentationIntent: options.presentationIntent ?? 'prose',
+        ...(options.reference ? { reference: options.reference } : {}),
     };
 }
 
-function dialogueClarification(message: string): DialoguePlan {
-    return { act: 'clarify', parts: [dialoguePart({
+function dialogueClarification(
+    reason: DialoguePlan['clarificationReason'],
+): DialoguePlan {
+    return { act: 'clarify', clarificationReason: reason, parts: [dialoguePart({
         domain: 'conversation', intent: 'clarify', concepts: ['capabilities'],
-        ambiguity: message,
     })] };
 }
 
-function contextualClarificationDialogue(state: ChatStatePayload | null): DialoguePlan {
-    const latest = state?.turns[state.turns.length - 1];
-    const subject = latest?.results[latest.results.length - 1]?.subject ??
-        latest?.contexts[latest.contexts.length - 1]?.domain;
-    const message = subject
-        ? `I understood this as a follow-up about ${domainLabel(subject).toLocaleLowerCase('en-US')}, but I need the specific result or detail you want me to check.`
-        : 'I understood this as an OcuTemp question, but I need the system data, room, or period you want me to check.';
-    return dialogueClarification(message);
+function emergencyPlannerOutcome(
+    input: RunChatTurnInput,
+    startedAt: number,
+    safeFailureCategory: string,
+): PlannerOutcome {
+    logSafe(input.requestId, 'planning', {
+        provider: 'none',
+        safeFailureCategory,
+        durationBucket: durationBucket(Date.now() - startedAt),
+        fallbackOutcome: 'emergency_fallback',
+    });
+    return {
+        plan: emergencyDialoguePlan(input.message, input.state, input.user.role),
+        attempts: 2,
+        source: 'emergency',
+    };
+}
+
+/** Used only when model planning cannot complete; it is never the normal router. */
+function emergencyDialoguePlan(
+    message: string,
+    state: ChatStatePayload | null,
+    role: ChatPrincipal['role'],
+): DialoguePlan {
+    const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    const make = (act: ChatDialogueAct, partValue: DialoguePart): DialoguePlan => ({
+        act, parts: [partValue], clarificationReason: 'none',
+    });
+    if (/^(h+i+|hello+|hey+|good (morning|afternoon|evening))[!.? ]*$/u.test(normalized)) {
+        return make('greet', dialoguePart({
+            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
+        }));
+    }
+    if (/^(thanks?|thank you|ty)[!.? ]*$/u.test(normalized)) {
+        return make('acknowledge', dialoguePart({
+            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
+        }));
+    }
+    if (/\bi (?:am|['’]m) not (?:following up|asking about that)\b/u.test(normalized)) {
+        return make('correct', dialoguePart({
+            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
+        }));
+    }
+    if (/\bwhat (?:is|does) ocutemp (?:for|do)|\bpurpose of ocutemp\b/u.test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'system_concepts', intent: 'explain', concepts: ['capabilities'],
+        }));
+    }
+    if (/^what (?:is|does) humidity(?: mean)?[?.! ]*$/u.test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'system_concepts', intent: 'explain', concepts: ['humidity'],
+        }));
+    }
+    if (/\bhow many (?:configured )?rooms\b/u.test(normalized) &&
+        /\b(online|connected|live)\b/u.test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'devices', intent: 'count',
+            concepts: ['room_count', 'online_device_count'], freshness: 'current',
+        }));
+    }
+    if (/\bhow many (?:configured )?rooms\b/u.test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'rooms', intent: 'count', concepts: ['room_count'],
+            freshness: 'configured',
+        }));
+    }
+    if (/\b(?:what|which|list).*(?:rooms|spaces).*(?:system|ocutemp)|\bwhat rooms are\b/u
+        .test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'rooms', intent: 'list', concepts: ['room_name', 'room_status'],
+            freshness: 'configured', presentationIntent: 'short_list',
+        }));
+    }
+    if (/\b(staff|accounts?).*\b(awaiting|pending).*\bapproval\b|\bhow many staff accounts\b/u
+        .test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'admin_user_aggregates', intent: 'count',
+            concepts: ['pending_staff_count'],
+        }));
+    }
+    if (/^(what do you mean|really|eh+\??)[?.! ]*$/u.test(normalized)) {
+        const previous = latestReferenceableResult(state);
+        const context = previous ? state?.turns[previous.turnIndex]?.contexts.find((item) =>
+            item.partId === previous.result.sourcePartId) : undefined;
+        if (previous && context) {
+            return make(normalized.startsWith('really') ? 'confirm' : 'elaborate', {
+                ...dialoguePart({
+                    domain: context.domain,
+                    intent: context.operation,
+                    concepts: [...context.fields],
+                    reference: 'previous_result',
+                }),
+                ordinal: 0,
+            });
+        }
+    }
+    if (role === 'staff' && /\b(?:users?|staff accounts?|admins?)\b/u.test(normalized)) {
+        return make('ask', dialoguePart({
+            domain: 'admin_user_aggregates', intent: 'count', concepts: ['user_total'],
+        }));
+    }
+    return dialogueClarification('missing_subject');
+}
+
+function clarificationForReason(reason: DialoguePlan['clarificationReason']): string {
+    const messages: Record<Exclude<DialoguePlan['clarificationReason'], 'none'>, string> = {
+        missing_subject: 'Please rephrase what you would like to know about OcuTemp.',
+        missing_room: 'Please name the OcuTemp room you want me to check.',
+        missing_period: 'Please specify the energy or event period you want me to use.',
+        ambiguous_reference: 'Please name the earlier result or room you mean.',
+        unrelated_parts: 'Please ask no more than three related OcuTemp questions at a time.',
+    };
+    return reason === 'none' ? 'Please rephrase that OcuTemp question.' : messages[reason];
+}
+
+function outputPreferenceFor(
+    intent: DialoguePart['presentationIntent'],
+): SystemQueryPart['outputPreference'] {
+    if (intent === 'prose' || intent === 'short_list') return 'text';
+    if (intent === 'comparison') return 'table';
+    if (intent === 'ranking' || intent === 'trend') return 'graph';
+    return 'auto';
 }
 
 function normalizeDialoguePlan(
@@ -680,24 +809,24 @@ function normalizeDialoguePlan(
 ): SystemQueryPlan {
     const validated = validateDialoguePlan(dialogue);
     const parts = validated.parts.map((dialogueValue, index) =>
-        normalizeDialoguePart(validated.act, dialogueValue, index, message, user, state));
+        normalizeDialoguePart(validated, dialogueValue, index, message, user, state));
     return validateSystemQueryPlan({ parts });
 }
 
 function normalizeDialoguePart(
-    act: ChatDialogueAct,
+    plan: DialoguePlan,
     dialogue: DialoguePart,
     index: number,
     message: string,
     _user: ChatPrincipal,
-    state: ChatStatePayload | null,
+    _state: ChatStatePayload | null,
 ): SystemQueryPart {
     const partId = `part-${index + 1}` as ChatPartId;
-    if (dialogue.confidence === 'low' || act === 'clarify') {
+    const act = plan.act;
+    if (act === 'clarify') {
         return part({
             domain: 'conversation', operation: 'clarify', fields: ['capabilities'],
-            clarification: dialogue.ambiguity ||
-                'Please clarify the OcuTemp result, room, or period you want me to check.',
+            clarification: clarificationForReason(plan.clarificationReason),
         }, partId);
     }
 
@@ -717,34 +846,23 @@ function normalizeDialoguePart(
     const mandatoryCountFields: Partial<Record<SystemDomain, SystemField>> = {
         rooms: 'room_count', devices: 'device_count', schedules: 'schedule_count',
     };
-    if (operation === 'count' && mandatoryCountFields[dialogue.domain]) {
-        fields = [mandatoryCountFields[dialogue.domain]!];
+    if (operation === 'count' && mandatoryCountFields[dialogue.domain] &&
+        !fields.some((field) => field.endsWith('_count'))) {
+        fields = [mandatoryCountFields[dialogue.domain]!, ...fields];
     }
     if (fields.length === 0) fields = defaultFieldsFor(dialogue.domain, operation);
     fields = uniqueFields(fields.filter((field) => capability.fields.includes(field))).slice(0, 8);
     if (fields.length === 0) throw new CapabilityValidationError('no_permitted_dialogue_fields');
 
-    const roomNames = uniqueStrings([
-        ...dialogue.roomNames.map((name) => cleanText(name, 100)),
-        ...explicitRoomNames(message),
-    ]).slice(0, 50);
+    const roomNames = uniqueStrings(dialogue.roomNames
+        .map((name) => cleanText(name, 100))).slice(0, 50);
     let reference = freshness === 'current' &&
         dialogue.reference === 'previous_result'
         ? 'previous_request'
         : dialogue.reference;
     if (roomNames.length > 0) reference = 'none';
-    if (reference === 'none' && roomNames.length === 0 && state &&
-        ['confirm', 'correct', 'elaborate', 'follow_up'].includes(act)) {
-        reference = freshness === 'current' || act !== 'follow_up'
-            ? 'previous_request'
-            : 'previous_result';
-    }
-    const inventory: SystemQueryPart['scope']['inventory'] = /\binactive\b/u.test(normalizedMessage)
-        ? 'inactive'
-        : /\b(all|every|configured)\b/u.test(normalizedMessage) ||
-            configuredDomain(dialogue.domain) || operation === 'count'
-            ? 'all'
-            : 'active';
+    const inventory: SystemQueryPart['scope']['inventory'] =
+        configuredDomain(dialogue.domain) || operation === 'count' ? 'all' : 'active';
     const scopeValue: SystemQueryPart['scope'] = roomNames.length > 0
         ? scope('named_rooms', roomNames, inventory)
         : reference === 'prior_part'
@@ -755,8 +873,8 @@ function normalizeDialoguePart(
                 : dialogue.domain === 'own_account'
                     ? scope('own_account', [], 'all')
                     : scope('facility', [], inventory);
-    const filters = safeFiltersFor(dialogue.domain, operation, fields, normalizedMessage);
-    let clarification = cleanText(dialogue.ambiguity, 240);
+    const filters: SystemFilter[] = [];
+    let clarification = '';
     if (dialogue.domain === 'app_help') {
         const topic = deterministicHelpTopic(normalizedMessage);
         if (topic) filters.push(stringFilter('help_topic', topic));
@@ -788,7 +906,7 @@ function normalizeDialoguePart(
         sort: ranking
             ? { field: 'estimated_kwh', direction: 'desc' }
             : { field: fields[0]!, direction: 'none' },
-        outputPreference: dialogue.outputPreference,
+        outputPreference: outputPreferenceFor(dialogue.presentationIntent),
         followUpReference: followReference,
         limit: singleRank ? 1 : operation === 'report' ? 50 : 25,
         clarification,
@@ -806,6 +924,7 @@ function defaultOperationFor(
         energy: 'summarize', climate_suggestions: 'list', decision_events: 'list',
         floor_plan: 'status', own_account: 'detail', admin_user_aggregates: 'count',
         app_help: 'how_to', assistant_capabilities: 'list', unsupported: 'clarify',
+        system_concepts: 'explain',
         conversation: act === 'greet' ? 'greet' : act === 'deny' ? 'deny' : 'clarify',
     };
     const operation = preferred[domain];
@@ -836,6 +955,7 @@ function defaultFieldsFor(domain: SystemDomain, operation: SystemOperation): Sys
         admin_user_aggregates: ['user_total'],
         app_help: ['help_topic'],
         assistant_capabilities: ['capabilities'],
+        system_concepts: ['capabilities'],
         conversation: ['capabilities'],
         unsupported: ['capabilities'],
     };
@@ -856,28 +976,6 @@ function applyFreshnessToFields(
         if (domain === 'ac_control' && field === 'ac_power') return 'last_known_ac_power';
         return field;
     });
-}
-
-function safeFiltersFor(
-    domain: SystemDomain,
-    operation: SystemOperation,
-    fields: readonly SystemField[],
-    message: string,
-): SystemFilter[] {
-    if (operation !== 'list') return [];
-    if (domain === 'devices' && fields.includes('device_status')) {
-        if (/\boffline\b/u.test(message)) return [stringFilter('device_status', 'offline')];
-        if (/\bonline\b/u.test(message)) return [stringFilter('device_status', 'online')];
-    }
-    if (domain === 'overrides' && fields.includes('override_active') &&
-        /\b(active|currently active)\b/u.test(message)) {
-        return [booleanFilter('override_active', true)];
-    }
-    if (domain === 'ai_auto_apply' && fields.includes('ai_auto_apply') &&
-        /\b(enabled|on)\b/u.test(message)) {
-        return [booleanFilter('ai_auto_apply', true)];
-    }
-    return [];
 }
 
 function configuredDomain(domain: SystemDomain): boolean {
@@ -947,11 +1045,6 @@ function defaultTimeRange(): SystemTimeRange {
     return { preset: 'this_month', startDate: '', endDate: '', bucket: 'auto' };
 }
 
-function booleanFilter(field: SystemField, value: boolean): SystemFilter {
-    return { field, operator: 'eq', valueType: 'boolean', stringValue: '',
-        numberValue: 0, booleanValue: value, stringValues: [] };
-}
-
 function stringFilter(field: SystemField, value: string): SystemFilter {
     return { field, operator: 'eq', valueType: 'string', stringValue: value,
         numberValue: 0, booleanValue: false, stringValues: [] };
@@ -977,7 +1070,8 @@ function buildPartWork(
                 : determineAnswerability(requested, partResults);
         const facts = augmentGroundingFacts(requested, partResults,
             partResults.flatMap((result) => result.facts)
-                .filter((fact) => fact.partId === requested.partId), user);
+                .filter((fact) => fact.partId === requested.partId), user,
+            dialogueAct, answerability);
         const scopeResolution = mergeScopes(partResults.map((result) => result.scope));
         const range = partResults.map((result) => result.presentation)
             .find((presentation): presentation is EnergyReportPresentation =>
@@ -1010,6 +1104,8 @@ function augmentGroundingFacts(
     results: readonly ToolExecutionResult[],
     rawFacts: readonly GroundingFact[],
     user: ChatPrincipal,
+    dialogueAct: ChatDialogueAct,
+    answerability: ChatAnswerabilityOutcome,
 ): GroundingFact[] {
     const facts = [...rawFacts];
     for (const result of results) {
@@ -1020,6 +1116,13 @@ function augmentGroundingFacts(
                 partId: part.partId,
                 statement: `The verified result contains ${presentation.rooms.length} configured ${presentation.rooms.length === 1 ? 'room' : 'rooms'}.`,
             });
+            if (presentation.rooms.length > 0) {
+                facts.push({
+                    id: `server.${part.partId}.room_names`,
+                    partId: part.partId,
+                    statement: `The matching configured room names are: ${presentation.rooms.map((room) => room.roomName).join('; ')}.`,
+                });
+            }
             const statuses = presentation.rooms.flatMap((room) => room.values)
                 .filter((value) => value.field === 'device_status' &&
                     typeof value.value === 'string');
@@ -1060,6 +1163,9 @@ function augmentGroundingFacts(
             statement: `The caller's OcuTemp role permits read-only OcuGuide questions about: ${domains.join('; ')}.`,
         });
     }
+    if (part.domain === 'system_concepts') {
+        facts.push(...trustedSystemConceptFacts(part.partId, part.fields));
+    }
     if (part.domain === 'conversation' && part.operation === 'greet') {
         facts.push({
             id: `server.${part.partId}.greeting_capability`,
@@ -1073,6 +1179,27 @@ function augmentGroundingFacts(
             id: `server.${part.partId}.required_clarification`,
             partId: part.partId,
             statement: `Required clarification: ${part.clarification}`,
+        });
+    }
+    if (dialogueAct === 'correct') {
+        facts.push({
+            id: `server.${part.partId}.new_request_boundary`,
+            partId: part.partId,
+            statement: 'The current turn corrects the earlier interpretation and starts a new conversation boundary; it must not be treated as a data follow-up.',
+        });
+    }
+    if (answerability === 'permission_denied') {
+        facts.push({
+            id: `server.${part.partId}.role_denial`,
+            partId: part.partId,
+            statement: `The caller's ${user.role} role is not permitted to access the requested OcuTemp information.`,
+        });
+    }
+    if (part.domain === 'unsupported') {
+        facts.push({
+            id: `server.${part.partId}.unsupported_scope`,
+            partId: part.partId,
+            statement: 'The request is outside OcuGuide\'s read-only OcuTemp system scope.',
         });
     }
     return deduplicateFacts(facts);
@@ -1092,12 +1219,11 @@ function previousResultFor(
     domain: SystemDomain,
     act: ChatDialogueAct,
 ): ChatStateResultMemory | null {
-    const latest = state?.turns[state.turns.length - 1];
-    if (!latest) return null;
-    const matching = latest.results.filter((result) => result.subject === domain);
-    return matching[matching.length - 1] ??
-        (['confirm', 'correct', 'follow_up', 'elaborate'].includes(act) &&
-            latest.results.length === 1 ? latest.results[0]! : null);
+    const located = latestReferenceableResult(state);
+    if (!located) return null;
+    if (located.result.subject === domain) return located.result;
+    return ['confirm', 'correct', 'follow_up', 'elaborate'].includes(act)
+        ? located.result : null;
 }
 
 function responseGoalFor(
@@ -1109,7 +1235,9 @@ function responseGoalFor(
         return 'Explain what was understood and ask for only the missing detail.';
     }
     if (act === 'confirm') return 'Confirm or correct the user directly, then explain the verified distinction.';
-    if (act === 'correct') return 'Correct the prior interpretation directly and state the verified result.';
+    if (act === 'correct') return 'Acknowledge the correction and treat the next self-contained question as a new request, not a follow-up.';
+    if (act === 'acknowledge') return 'Acknowledge the user naturally and briefly.';
+    if (act === 'greet') return 'Respond with a natural brief greeting and invite an OcuTemp question.';
     if (act === 'elaborate') return 'Explain the previous verified result in plain language.';
     if (act === 'follow_up') return 'Answer the follow-up directly without repeating the prior report or visual.';
     if (part.operation === 'count') return 'State the verified count directly in a natural sentence.';
@@ -1251,6 +1379,12 @@ function buildDeterministicAnswer(work: PartWork, user: ChatPrincipal): ChatAnsw
         return base('The requested OcuTemp data could not be read safely right now. Please try again shortly.');
     }
     if (work.requested.domain === 'conversation') {
+        if (work.packet.dialogueAct === 'acknowledge') {
+            return base('You\'re welcome. Ask me whenever you want to check something in OcuTemp.');
+        }
+        if (work.packet.dialogueAct === 'correct') {
+            return base('Understoodâ€”I will treat your next question as a new request, not a follow-up.');
+        }
         return work.requested.operation === 'greet'
             ? base('Hi! What would you like to know about your OcuTemp system?')
             : work.requested.operation === 'deny'
@@ -1269,6 +1403,12 @@ function buildDeterministicAnswer(work: PartWork, user: ChatPrincipal): ChatAnsw
             'I can answer read-only questions about the OcuTemp data your role is allowed to access.',
             [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'info' }],
         );
+    }
+    if (work.requested.domain === 'system_concepts') {
+        const definitions = trustedSystemConceptFacts(work.requested.partId,
+            work.requested.fields).map((fact) => fact.statement);
+        return base(definitions.join(' ') ||
+            'I do not have a verified OcuTemp definition for that concept yet.');
     }
     if (work.requested.domain === 'own_account') return ownAccountAnswer(work, user);
 
@@ -1533,7 +1673,7 @@ function selectDisplayPlan(
     parts: readonly SystemQueryPart[],
     results: readonly ToolExecutionResult[],
 ): ChatDisplayDirective[] {
-    if (['confirm', 'correct', 'elaborate', 'clarify', 'greet', 'deny']
+    if (['confirm', 'correct', 'elaborate', 'clarify', 'greet', 'acknowledge', 'deny']
         .includes(dialogueAct)) return [];
     for (const part of parts) {
         if (part.outputPreference === 'text' || part.needsClarification) continue;
@@ -1601,14 +1741,6 @@ function hasMeaningfulRows(presentation: ChatPresentation): boolean {
     if (presentation.kind === 'climate-suggestions') return presentation.rooms.length >= 2;
     if (presentation.kind === 'recent-events') return presentation.events.length >= 2;
     return false;
-}
-
-function conflictingExplicitVisuals(parts: readonly SystemQueryPart[]): boolean {
-    const requested = parts.filter((part) =>
-        part.outputPreference === 'table' || part.outputPreference === 'graph')
-        .map((part) => part.outputPreference === 'table' ? 'table'
-            : part.fields.includes('energy_trend') ? 'trend_graph' : 'ranking_graph');
-    return new Set(requested).size > 1;
 }
 
 function validateWriterDraft(
@@ -1735,11 +1867,7 @@ function answerPartFromDraft(work: PartWork, draft: GroundedAnswerDraft): ChatAn
 }
 
 function shouldUseWriter(work: PartWork): boolean {
-    if (work.requested.domain === 'own_account' || work.requested.domain === 'unsupported') {
-        return false;
-    }
-    return work.requested.domain !== 'conversation' ||
-        ['greet', 'clarify'].includes(work.requested.operation);
+    return work.requested.domain !== 'own_account';
 }
 
 function boundPacket(packet: AnswerPacket, factLimit: number): AnswerPacket {
@@ -1811,9 +1939,21 @@ function buildStateTurn(
             freshness: work.packet.freshness,
             asOf: stateTimestampFor(work),
             visual: directive?.mode ?? 'none',
+            referenceEligible: isReferenceEligible(work),
         };
     });
-    return { act, contexts, referents, results };
+    return { act, referenceBoundary: act === 'correct', contexts, referents, results };
+}
+
+function isReferenceEligible(work: PartWork): boolean {
+    if (['conversation', 'unsupported'].includes(work.requested.domain)) return false;
+    if (['system_concepts', 'assistant_capabilities', 'app_help'].includes(
+        work.requested.domain,
+    )) return true;
+    return ![
+        'permission_denied', 'room_ambiguous', 'source_unavailable',
+        'insufficient_evidence', 'clarification_required', 'not_applicable',
+    ].includes(work.answerability);
 }
 
 function stateOutcomeFor(work: PartWork): Pick<ChatStateResultMemory, 'outcome' | 'emptyReason'> {
@@ -1944,6 +2084,7 @@ function safeStateForPlanner(state: ChatStatePayload | null): unknown {
     if (!state) return null;
     return state.turns.map((turn) => ({
         act: turn.act,
+        referenceBoundary: turn.referenceBoundary,
         contexts: turn.contexts.map((context) => ({
             partId: context.partId,
             domain: context.domain,
@@ -1958,10 +2099,58 @@ function safeStateForPlanner(state: ChatStatePayload | null): unknown {
     }));
 }
 
-function isSemanticPlanningFailure(error: unknown): boolean {
-    if (error instanceof ProviderResponseError) return true;
-    if (error instanceof BothProvidersFailedError) return true;
-    return error instanceof CapabilityValidationError;
+interface LocatedStateResult {
+    readonly turnIndex: number;
+    readonly result: ChatStateResultMemory;
+}
+
+function latestReferenceableResult(
+    state: ChatStatePayload | null,
+): LocatedStateResult | null {
+    if (!state) return null;
+    let newestEligible: LocatedStateResult | null = null;
+    for (let turnIndex = state.turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+        const turn = state.turns[turnIndex]!;
+        for (let resultIndex = turn.results.length - 1; resultIndex >= 0; resultIndex -= 1) {
+            const result = turn.results[resultIndex]!;
+            if (!result.referenceEligible) continue;
+            const located = { turnIndex, result };
+            if (!newestEligible) newestEligible = located;
+            return located;
+        }
+        if (turn.referenceBoundary) break;
+    }
+    return newestEligible;
+}
+
+function normalizePlannerFailure(
+    error: unknown,
+    provider: 'gemini' | 'groq',
+): ProviderRecoverableError | ProviderResponseError {
+    if (error instanceof ProviderRecoverableError || error instanceof ProviderResponseError) {
+        return error;
+    }
+    return new ProviderResponseError(provider, error);
+}
+
+function plannerFailureCategory(error: unknown): string {
+    if (error instanceof ProviderRecoverableError) return error.category;
+    if (error instanceof ProviderResponseError) {
+        return error.cause instanceof CapabilityValidationError
+            ? 'invalid_semantics' : 'invalid_structure';
+    }
+    return 'invalid_structure';
+}
+
+function boundedProviderTimeout(
+    desiredMs: number,
+    deadlineAtMs: number,
+    reserveMs: number,
+    provider: 'gemini' | 'groq',
+): number {
+    const timeoutMs = Math.floor(Math.min(desiredMs, deadlineAtMs - Date.now() - reserveMs));
+    if (timeoutMs < 250) throw new ProviderRecoverableError(provider, 'timeout');
+    return timeoutMs;
 }
 
 function deterministicHelpTopic(message: string): string | null {
@@ -2060,6 +2249,7 @@ function domainLabel(domain: SystemDomain): string {
         own_account: 'Your own account facts', admin_user_aggregates: 'Aggregate user counts',
         app_help: 'Verified OcuTemp how-to guidance',
         assistant_capabilities: 'Assistant capabilities', conversation: 'Conversation',
+        system_concepts: 'OcuTemp system concepts',
         unsupported: 'Unsupported',
     };
     return labels[domain] ?? domain;
@@ -2071,7 +2261,8 @@ function requiresCurrentReading(part: SystemQueryPart): boolean {
 }
 
 function deterministicDomain(domain: SystemDomain): boolean {
-    return ['conversation', 'unsupported', 'assistant_capabilities', 'own_account'].includes(domain);
+    return ['conversation', 'unsupported', 'assistant_capabilities', 'system_concepts',
+        'own_account'].includes(domain);
 }
 
 function isPriorPartDependency(part: SystemQueryPart): boolean {

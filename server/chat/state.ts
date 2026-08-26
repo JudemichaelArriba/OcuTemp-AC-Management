@@ -18,7 +18,7 @@ export const CHAT_STATE_MAX_TURNS = 5;
 export const CHAT_STATE_LIFETIME_SECONDS = 2 * 60 * 60;
 export const CHAT_STATE_MAX_TOKEN_BYTES = 12 * 1024;
 
-const STATE_VERSION = 4;
+const STATE_VERSION = 5;
 const STATE_TOKEN_TYPE = 'ocutemp-chat-state+jwe';
 const CLOCK_TOLERANCE_SECONDS = 30;
 const MAX_CONTEXTS_PER_TURN = 3;
@@ -74,7 +74,7 @@ export async function encodeChatState(
 }
 
 /**
- * Valid v1/v2/v3 tokens are intentionally treated as context resets. Modified,
+ * Valid v1/v2/v3/v4 tokens are intentionally treated as context resets. Modified,
  * malformed, or UID-bound tokens fail closed instead of being migrated.
  */
 export async function decodeChatState(
@@ -96,11 +96,12 @@ export async function decodeChatState(
         assertNotAborted(abortSignal);
         const version = protectedHeader['v'];
         if (protectedHeader.alg !== 'dir' || protectedHeader.enc !== 'A256GCM' ||
-            protectedHeader.typ !== STATE_TOKEN_TYPE || ![1, 2, 3, STATE_VERSION].includes(Number(version))) {
+            protectedHeader.typ !== STATE_TOKEN_TYPE || ![1, 2, 3, 4, STATE_VERSION].includes(Number(version))) {
             throw contextInvalid();
         }
         const parsed = JSON.parse(textDecoder.decode(plaintext)) as unknown;
-        if (version === 1 || version === 2 || version === 3 || isLegacyPayload(parsed)) {
+        if (version === 1 || version === 2 || version === 3 || version === 4 ||
+            isLegacyPayload(parsed)) {
             if (!isRecord(parsed) || parsed['uid'] !== uid) throw contextInvalid();
             return { state: null, contextReset: true };
         }
@@ -134,15 +135,18 @@ function validateAndNormalizeState(value: unknown, allowExpired: boolean): ChatS
         (!allowExpired && expiresAt <= now) || !Array.isArray(turns) ||
         turns.length > CHAT_STATE_MAX_TURNS) throw contextInvalid();
     return {
-        version: 4, uid, conversationId, issuedAt, expiresAt,
+        version: 5, uid, conversationId, issuedAt, expiresAt,
         turns: turns.map(normalizeTurn),
     };
 }
 
 function normalizeTurn(value: unknown): ChatStateTurn {
-    if (!isRecord(value) || !hasExactKeys(value, ['act', 'contexts', 'referents', 'results']) ||
+    if (!isRecord(value) || !hasExactKeys(
+        value, ['act', 'referenceBoundary', 'contexts', 'referents', 'results'],
+    ) ||
         typeof value['act'] !== 'string' ||
         !CHAT_DIALOGUE_ACTS.includes(value['act'] as ChatDialogueAct) ||
+        typeof value['referenceBoundary'] !== 'boolean' ||
         !Array.isArray(value['contexts']) || value['contexts'].length < 1 ||
         value['contexts'].length > MAX_CONTEXTS_PER_TURN ||
         !Array.isArray(value['referents']) || value['referents'].length > MAX_REFERENTS_PER_TURN ||
@@ -163,12 +167,13 @@ function normalizeTurn(value: unknown): ChatStateTurn {
         results.some((item) => !contexts.some((context) => context.partId === item.sourcePartId))) {
         throw contextInvalid();
     }
-    return { act: value['act'] as ChatDialogueAct, contexts, referents, results };
+    return { act: value['act'] as ChatDialogueAct,
+        referenceBoundary: value['referenceBoundary'], contexts, referents, results };
 }
 
 function normalizeResultMemory(value: unknown): ChatStateResultMemory {
     const keys = ['sourcePartId', 'subject', 'outcome', 'emptyReason', 'counts',
-        'roomNames', 'complete', 'freshness', 'asOf', 'visual'];
+        'roomNames', 'complete', 'freshness', 'asOf', 'visual', 'referenceEligible'];
     if (!isRecord(value) || !hasExactKeys(value, keys) ||
         typeof value['sourcePartId'] !== 'string' ||
         !CHAT_PART_IDS.includes(value['sourcePartId'] as ChatPartId) ||
@@ -184,7 +189,8 @@ function normalizeResultMemory(value: unknown): ChatStateResultMemory {
         !FRESHNESS_OUTCOMES.includes(value['freshness'] as ChatFreshnessOutcome) ||
         typeof value['asOf'] !== 'string' || !isIsoDateTime(value['asOf']) ||
         typeof value['visual'] !== 'string' ||
-        !DISPLAY_MODES.includes(value['visual'] as ChatDisplayMode | 'none')) {
+        !DISPLAY_MODES.includes(value['visual'] as ChatDisplayMode | 'none') ||
+        typeof value['referenceEligible'] !== 'boolean') {
         throw contextInvalid();
     }
     const outcome = value['outcome'] as ChatStateResultOutcome;
@@ -201,6 +207,7 @@ function normalizeResultMemory(value: unknown): ChatStateResultMemory {
         freshness: value['freshness'] as ChatFreshnessOutcome,
         asOf: value['asOf'],
         visual: value['visual'] as ChatDisplayMode | 'none',
+        referenceEligible: value['referenceEligible'],
     };
 }
 
@@ -341,7 +348,7 @@ function cleanName(value: string): string {
 }
 
 function isLegacyPayload(value: unknown): boolean {
-    return isRecord(value) && [1, 2, 3].includes(Number(value['version']));
+    return isRecord(value) && [1, 2, 3, 4].includes(Number(value['version']));
 }
 
 function isIsoDateTime(value: string): boolean {

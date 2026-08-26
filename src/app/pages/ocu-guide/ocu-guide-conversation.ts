@@ -285,7 +285,7 @@ export class OcuGuideConversationComponent implements OnDestroy {
       case 'no_energy_records': return 'No recorded energy data is available for that period.';
       case 'source_unavailable': return 'The verified source could not be read.';
       case 'insufficient_evidence': return 'OcuTemp does not have enough verified evidence.';
-      case 'clarification_required': return 'A narrower question is needed.';
+      case 'clarification_required': return null;
       case 'not_applicable': return null;
       case 'answerable': return null;
     }
@@ -304,7 +304,8 @@ export class OcuGuideConversationComponent implements OnDestroy {
       ? 'Verified facility data'
       : evidence.source === 'application'
         ? 'Verified OcuTemp guidance'
-        : 'No facility data used';
+        : '';
+    if (!source) return '';
     return `${source} · ${this.formatDateTime(evidence.asOf)}`;
   }
 

@@ -61,6 +61,7 @@ export type SystemDomain =
     | 'admin_user_aggregates'
     | 'app_help'
     | 'assistant_capabilities'
+    | 'system_concepts'
     | 'conversation'
     | 'unsupported';
 
@@ -85,6 +86,11 @@ export type SystemField =
     | 'device_assignment'
     | 'device_status'
     | 'device_count'
+    | 'assigned_device_count'
+    | 'online_device_count'
+    | 'stale_device_count'
+    | 'offline_device_count'
+    | 'unknown_device_status_count'
     | 'last_seen'
     | 'temperature'
     | 'last_known_temperature'
@@ -195,7 +201,24 @@ export type ChatDialogueAct =
     | 'elaborate'
     | 'clarify'
     | 'greet'
+    | 'acknowledge'
     | 'deny';
+
+export type DialogueClarificationReason =
+    | 'none'
+    | 'missing_subject'
+    | 'missing_room'
+    | 'missing_period'
+    | 'ambiguous_reference'
+    | 'unrelated_parts';
+
+export type DialoguePresentationIntent =
+    | 'prose'
+    | 'short_list'
+    | 'comparison'
+    | 'ranking'
+    | 'trend'
+    | 'report';
 
 export type DialogueFreshness =
     | 'auto'
@@ -213,14 +236,13 @@ export interface DialoguePart {
     readonly referencePartId: '' | ChatPartId;
     readonly ordinal: 0 | 1 | 2 | 3;
     readonly freshness: DialogueFreshness;
-    readonly outputPreference: ChatOutputPreference;
-    readonly confidence: 'high' | 'medium' | 'low';
-    readonly ambiguity: string;
+    readonly presentationIntent: DialoguePresentationIntent;
 }
 
 export interface DialoguePlan {
     readonly act: ChatDialogueAct;
     readonly parts: DialoguePart[];
+    readonly clarificationReason: DialogueClarificationReason;
 }
 
 export type ChatDisplayMode =
@@ -713,6 +735,7 @@ export interface ChatPrincipal {
 
 export interface ChatStateTurn {
     readonly act: ChatDialogueAct;
+    readonly referenceBoundary: boolean;
     readonly contexts: ChatStateContext[];
     readonly referents: ChatStateReferent[];
     readonly results: ChatStateResultMemory[];
@@ -774,10 +797,11 @@ export interface ChatStateResultMemory {
     readonly freshness: ChatFreshnessOutcome;
     readonly asOf: string;
     readonly visual: ChatDisplayMode | 'none';
+    readonly referenceEligible: boolean;
 }
 
 export interface ChatStatePayload {
-    readonly version: 4;
+    readonly version: 5;
     readonly uid: string;
     readonly conversationId: string;
     readonly issuedAt: number;

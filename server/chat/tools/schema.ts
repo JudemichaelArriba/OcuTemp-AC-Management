@@ -14,7 +14,7 @@ export const SYSTEM_DOMAINS: readonly SystemDomain[] = [
     'rooms', 'devices', 'measurements', 'occupancy', 'ac_control', 'overrides',
     'ai_auto_apply', 'schedules', 'energy', 'climate_suggestions', 'decision_events',
     'floor_plan', 'own_account', 'admin_user_aggregates', 'app_help',
-    'assistant_capabilities', 'conversation', 'unsupported',
+    'assistant_capabilities', 'system_concepts', 'conversation', 'unsupported',
 ];
 export const SYSTEM_OPERATIONS: readonly SystemOperation[] = [
     'greet', 'count', 'list', 'status', 'detail', 'compare', 'summarize', 'explain',
@@ -22,7 +22,9 @@ export const SYSTEM_OPERATIONS: readonly SystemOperation[] = [
 ];
 export const SYSTEM_FIELDS: readonly SystemField[] = [
     'room_name', 'room_status', 'room_count', 'device_assignment', 'device_status',
-    'device_count', 'last_seen', 'temperature', 'last_known_temperature', 'humidity',
+    'device_count', 'assigned_device_count', 'online_device_count',
+    'stale_device_count', 'offline_device_count', 'unknown_device_status_count',
+    'last_seen', 'temperature', 'last_known_temperature', 'humidity',
     'last_known_humidity', 'condition', 'occupancy', 'last_known_occupancy',
     'ac_power', 'last_known_ac_power', 'override_active', 'override_target_temperature', 'override_until',
     'ai_auto_apply', 'schedule_count', 'schedules', 'estimated_kwh', 'runtime_seconds',
@@ -43,7 +45,8 @@ export const CHAT_OUTPUT_PREFERENCES: readonly ChatOutputPreference[] = [
     'auto', 'text', 'table', 'graph',
 ];
 export const CHAT_DIALOGUE_ACTS = [
-    'ask', 'confirm', 'correct', 'follow_up', 'elaborate', 'clarify', 'greet', 'deny',
+    'ask', 'confirm', 'correct', 'follow_up', 'elaborate', 'clarify', 'greet',
+    'acknowledge', 'deny',
 ] as const;
 export const DIALOGUE_FRESHNESS = [
     'auto', 'current', 'last_known', 'configured', 'historical',
@@ -75,13 +78,12 @@ const DIALOGUE_PART_SCHEMA = {
         referencePartId: { type: 'string', enum: ['', ...CHAT_PART_IDS] },
         ordinal: { type: 'integer', minimum: 0, maximum: 3 },
         freshness: { type: 'string', enum: DIALOGUE_FRESHNESS },
-        outputPreference: { type: 'string', enum: CHAT_OUTPUT_PREFERENCES },
-        confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
-        ambiguity: { type: 'string', maxLength: 240 },
+        presentationIntent: { type: 'string', enum: [
+            'prose', 'short_list', 'comparison', 'ranking', 'trend', 'report',
+        ] },
     },
     required: ['domain', 'intent', 'concepts', 'roomNames', 'reference',
-        'referencePartId', 'ordinal', 'freshness', 'outputPreference', 'confidence',
-        'ambiguity'],
+        'referencePartId', 'ordinal', 'freshness', 'presentationIntent'],
 } as const;
 
 export const DIALOGUE_PLAN_SCHEMA: Record<string, unknown> = {
@@ -89,8 +91,12 @@ export const DIALOGUE_PLAN_SCHEMA: Record<string, unknown> = {
     properties: {
         act: { type: 'string', enum: CHAT_DIALOGUE_ACTS },
         parts: { type: 'array', minItems: 1, maxItems: 3, items: DIALOGUE_PART_SCHEMA },
+        clarificationReason: { type: 'string', enum: [
+            'none', 'missing_subject', 'missing_room', 'missing_period',
+            'ambiguous_reference', 'unrelated_parts',
+        ] },
     },
-    required: ['act', 'parts'],
+    required: ['act', 'parts', 'clarificationReason'],
 };
 
 const EVIDENCE_REFS_SCHEMA = { type: 'array', minItems: 1, maxItems: 12,

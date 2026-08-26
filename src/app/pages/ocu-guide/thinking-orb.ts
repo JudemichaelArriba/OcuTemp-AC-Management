@@ -10,8 +10,10 @@ import {
 } from '@angular/core';
 import { MODE_DRAWS, resolvePreset } from 'thinking-orbs/engine';
 
-const ORB_SIZE = 64;
+const ORB_PRESET_SIZE = 64;
+const ORB_RENDER_SIZE = 52;
 const ORB_SPEED = 1.65;
+const ORB_COLOR = '#2563eb';
 
 @Component({
   selector: 'app-thinking-orb',
@@ -19,13 +21,13 @@ const ORB_SPEED = 1.65;
   template: `
     <canvas
       #orbCanvas
-      class="block size-16 shrink-0 motion-reduce:opacity-80"
-      width="64"
-      height="64"
+      class="block size-13 shrink-0 motion-reduce:opacity-80"
+      width="52"
+      height="52"
       aria-hidden="true">
     </canvas>
   `,
-  host: { class: 'block size-16 shrink-0' },
+  host: { class: 'block size-13 shrink-0' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ThinkingOrbComponent {
@@ -52,9 +54,17 @@ export class ThinkingOrbComponent {
     if (!context) return;
 
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(ORB_SIZE * pixelRatio);
-    canvas.height = Math.round(ORB_SIZE * pixelRatio);
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    const renderScale = ORB_RENDER_SIZE / ORB_PRESET_SIZE;
+    canvas.width = Math.round(ORB_RENDER_SIZE * pixelRatio);
+    canvas.height = Math.round(ORB_RENDER_SIZE * pixelRatio);
+    context.setTransform(
+      pixelRatio * renderScale,
+      0,
+      0,
+      pixelRatio * renderScale,
+      0,
+      0,
+    );
 
     this.motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     this.reducedMotion = this.motionQuery.matches;
@@ -104,15 +114,21 @@ export class ThinkingOrbComponent {
   }
 
   private drawFrame(context: CanvasRenderingContext2D, elapsedSeconds: number): void {
-    const preset = resolvePreset('connecting', ORB_SIZE);
-    context.clearRect(0, 0, ORB_SIZE, ORB_SIZE);
+    const preset = resolvePreset('connecting', ORB_PRESET_SIZE);
+    context.clearRect(0, 0, ORB_PRESET_SIZE, ORB_PRESET_SIZE);
+    context.save();
     MODE_DRAWS[preset.mode](
       context,
-      ORB_SIZE,
+      ORB_PRESET_SIZE,
       elapsedSeconds * preset.speed * ORB_SPEED,
       false,
       preset.opts,
     );
+    context.globalCompositeOperation = 'source-in';
+    context.globalAlpha = 1;
+    context.fillStyle = ORB_COLOR;
+    context.fillRect(0, 0, ORB_PRESET_SIZE, ORB_PRESET_SIZE);
+    context.restore();
   }
 
   private cancelFrame(): void {
