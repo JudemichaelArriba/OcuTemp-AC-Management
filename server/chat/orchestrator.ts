@@ -440,8 +440,7 @@ function verifiedContextFallbackPlan(
 ): DialoguePlan | null {
     const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
     if (!isCausalConnectivityFollowUp(normalized)) return null;
-    const located = latestReferenceableResult(state);
-    if (!located || !hasUnavailableCurrentReadingReference(located)) return null;
+    if (!latestUnavailableCurrentReadingReference(state)) return null;
     return {
         act: 'confirm',
         clarificationReason: 'none',
@@ -800,8 +799,7 @@ function contextualizeDialoguePlan(
     state: ChatStatePayload | null,
 ): DialoguePlan {
     const validated = validateDialoguePlan(dialogue);
-    const located = latestReferenceableResult(state);
-    if (!located || !hasUnavailableCurrentReadingReference(located)) return validated;
+    if (!latestUnavailableCurrentReadingReference(state)) return validated;
 
     const normalizedMessage = cleanText(message, 2_000).toLocaleLowerCase('en-US');
     const semanticPartIndex = validated.parts.findIndex((partValue) =>
@@ -853,6 +851,8 @@ function normalizeDialoguePart(
     const requestedOccupancy = requestedRoomOccupancy(normalizedMessage);
     const energyWinnerQuestion = asksForEnergyWinner(normalizedMessage);
     const latestReference = latestReferenceableResult(state);
+    const unavailableCurrentReadingReference =
+        latestUnavailableCurrentReadingReference(state);
     const inferredHelpTopic = resolveHelpTopic(dialogue.helpTopic, normalizedMessage);
     const requestsRoomTotal = /\b(how many|number of|total|configured)\b.*\brooms?\b/u
         .test(normalizedMessage);
@@ -868,8 +868,15 @@ function normalizeDialoguePart(
     let reference = dialogue.reference;
     let ordinal = dialogue.ordinal;
     const definitionConcept = explicitSystemConcept(normalizedMessage);
-    const causalConnectivityFollowUp = isCausalConnectivityFollowUp(normalizedMessage) &&
-        latestReference !== null && hasUnavailableCurrentReadingReference(latestReference);
+    const semanticCausalConnectivityFollowUp = plan.act === 'confirm' &&
+        dialogue.domain === 'devices' && dialogue.reference !== 'none' &&
+        dialogue.concepts.some((concept) => [
+            'device_status', 'online_device_count', 'stale_device_count',
+            'offline_device_count', 'unknown_device_status_count',
+        ].includes(concept));
+    const causalConnectivityFollowUp = unavailableCurrentReadingReference !== null &&
+        (semanticCausalConnectivityFollowUp ||
+            isCausalConnectivityFollowUp(normalizedMessage));
 
     if (definitionConcept) {
         domain = 'system_concepts';
@@ -917,7 +924,14 @@ function normalizeDialoguePart(
         ordinal = 0;
     }
 
-    if (connectivityQuestion && domain === 'devices') {
+    if (causalConnectivityFollowUp && domain === 'devices') {
+        intent = 'count';
+        concepts = [
+            'online_device_count', 'stale_device_count',
+            'offline_device_count', 'unknown_device_status_count',
+        ];
+        presentationIntent = 'prose';
+    } else if (connectivityQuestion && domain === 'devices') {
         const stateCountField = connectivityCountField(normalizedMessage);
         if (requestsRoomTotal) {
             concepts = uniqueFields([...concepts, 'room_count', stateCountField]);
@@ -1192,6 +1206,13 @@ function hasUnavailableCurrentReadingReference(located: LocatedStateResult): boo
             located.result.emptyReason === 'no_online_reading');
 }
 
+function unavailableSubjectLabel(subject: SystemDomain): string {
+    if (subject === 'ac_control') return 'current AC power-state result';
+    if (subject === 'occupancy') return 'current occupancy result';
+    if (subject === 'measurements') return 'current room-measurement result';
+    return 'current device-reading result';
+}
+
 function explicitSystemConcept(message: string): SystemField | null {
     const asksForDefinition = /\b(?:what\s+(?:is|does)|what\s+is\s+.+\s+for|explain|meaning)\b/u
         .test(message);
@@ -1346,20 +1367,20 @@ function buildPartWork(
         const range = partResults.map((result) => result.presentation)
             .find((presentation): presentation is EnergyReportPresentation =>
                 presentation.kind === 'energy-report')?.range ?? null;
-        const previousResult = previousResultFor(state, requested.domain, dialogueAct);
-        const previousReference = latestReferenceableResult(state);
-        const previousHadNoOnlineReading = previousReference !== null &&
-            previousReference.result === previousResult &&
-            hasUnavailableCurrentReadingReference(previousReference);
+        const causalOrigin = dialogueAct === 'confirm' && requested.domain === 'devices' &&
+            requested.fields.includes('online_device_count')
+            ? latestUnavailableCurrentReadingReference(state) : null;
+        const previousResult = causalOrigin?.result ??
+            previousResultFor(state, requested.domain, dialogueAct);
         facts.push(...causalFollowUpFacts(
-            requested, partResults, previousHadNoOnlineReading, dialogueAct,
+            requested, partResults, causalOrigin, dialogueAct,
         ));
         const recommendations = buildRecommendations(requested, partResults);
         const packet: AnswerPacket = {
             partId: requested.partId,
             dialogueAct,
             responseGoal: responseGoalFor(
-                dialogueAct, requested, answerability, previousHadNoOnlineReading,
+                dialogueAct, requested, answerability, causalOrigin !== null,
             ),
             domain: requested.domain,
             operation: requested.operation,
@@ -1541,12 +1562,12 @@ function previousResultFor(
 function causalFollowUpFacts(
     part: SystemQueryPart,
     results: readonly ToolExecutionResult[],
-    previousHadNoOnlineReading: boolean,
+    causalOrigin: LocatedStateResult | null,
     act: ChatDialogueAct,
 ): GroundingFact[] {
     if (act !== 'confirm' || part.domain !== 'devices' ||
         !part.fields.includes('online_device_count') ||
-        !previousHadNoOnlineReading) return [];
+        causalOrigin === null) return [];
     const onlineCount = results.flatMap((result) => {
         const presentation = result.presentation;
         return presentation.kind === 'metric-summary'
@@ -1560,8 +1581,8 @@ function causalFollowUpFacts(
         id: `server.${part.partId}.causal_connectivity`,
         partId: part.partId,
         statement: onlineCount === 0
-            ? 'The previous current room reading was unavailable because the refreshed OcuTemp scope still has zero online devices. This is the immediate data-availability reason; the verified data does not explain why device connectivity was lost.'
-            : `The previous no-online-device result is no longer current because the refreshed OcuTemp scope now has ${onlineCount} online ${onlineCount === 1 ? 'device' : 'devices'}.`,
+            ? `The previous ${unavailableSubjectLabel(causalOrigin.result.subject)} was unavailable because the refreshed OcuTemp scope still has zero online devices. This is the immediate data-availability reason; the verified data does not explain why device connectivity was lost.`
+            : `The previous unavailable ${unavailableSubjectLabel(causalOrigin.result.subject)} result is no longer supported by a zero-online-device state because the refreshed OcuTemp scope now has ${onlineCount} online ${onlineCount === 1 ? 'device' : 'devices'}.`,
     }];
 }
 
@@ -1581,7 +1602,7 @@ function responseGoalFor(
     if (act === 'confirm' && part.domain === 'devices' &&
         part.fields.includes('online_device_count') &&
         previousHadNoOnlineReading) {
-        return 'Connect the causal follow-up explicitly: explain whether the refreshed online-device count is the immediate reason the previous current reading was unavailable. Distinguish that data-availability reason from the unknown reason connectivity was lost.';
+        return 'Connect the causal follow-up explicitly: begin with yes or no, explain whether the refreshed online-device count is the immediate reason the previous current reading was unavailable, and preserve the original requested subject. Distinguish that data-availability reason from the unknown reason connectivity was lost.';
     }
     if (act === 'confirm') return 'Confirm or correct the user directly, then explain the verified distinction.';
     if (act === 'correct') return 'Acknowledge the correction and treat the next self-contained question as a new request, not a follow-up.';
@@ -1859,8 +1880,24 @@ function metricAnswer(
     if (work.packet.dialogueAct === 'confirm' &&
         typeof onlineMetric?.value === 'number') {
         if (onlineMetric.value === 0) {
+            const subject = work.packet.previousResult?.subject;
+            if (subject === 'ac_control') {
+                return answer(work.requested.partId,
+                    'Yes. Because no assigned devices in that scope are online, OcuTemp cannot determine which rooms currently have their AC on. This does not mean the AC units are off; their current power states are unavailable.',
+                    [], caveats);
+            }
+            if (subject === 'occupancy') {
+                return answer(work.requested.partId,
+                    'Yes. Because no assigned devices in that scope are online, OcuTemp cannot determine current room occupancy. This does not mean the rooms are unoccupied; their current occupancy readings are unavailable.',
+                    [], caveats);
+            }
+            if (subject === 'measurements') {
+                return answer(work.requested.partId,
+                    'Yes. Because no assigned devices in that scope are online, OcuTemp cannot provide the requested current room measurements. Last-known values are historical and do not establish current conditions.',
+                    [], caveats);
+            }
             return answer(work.requested.partId,
-                'That is the immediate connectivity reason. The refreshed OcuTemp status still shows no online devices, so current readings cannot be retrieved. This does not identify why connectivity was lost or prove that every unavailable device has the same offline state.',
+                'Yes. Because no assigned devices in that scope are online, the requested current device readings are unavailable. The verified data does not identify why connectivity was lost.',
                 [], caveats);
         }
         return answer(work.requested.partId,
@@ -2211,6 +2248,7 @@ function validateWriterDraft(
     if (packet.responseGoal.startsWith('Connect the causal follow-up')) {
         const directAnswer = clauses[0]!;
         if (!directAnswer.evidenceRefs.some((ref) => ref.endsWith('.causal_connectivity')) ||
+            !/^(?:yes|no)\b/iu.test(directAnswer.text) ||
             !/\b(?:because|reason)\b/iu.test(directAnswer.text)) {
             throw new Error('missing_causal_connection');
         }
@@ -2592,6 +2630,35 @@ function latestReferenceableResult(
         if (turn.referenceBoundary) break;
     }
     return newestEligible;
+}
+
+function latestUnavailableCurrentReadingReference(
+    state: ChatStatePayload | null,
+): LocatedStateResult | null {
+    if (!state) return null;
+    for (let turnIndex = state.turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+        const turn = state.turns[turnIndex]!;
+        const result = [...turn.results].reverse().find((candidate) =>
+            candidate.referenceEligible);
+        const located: LocatedStateResult | null = result ? {
+            turnIndex,
+            result,
+            context: turn.contexts.find((context) =>
+                context.partId === result.sourcePartId) ?? null,
+        } : null;
+        if (located && hasUnavailableCurrentReadingReference(located)) return located;
+        if (turn.referenceBoundary || !isConnectivityConfirmationTurn(turn)) return null;
+    }
+    return null;
+}
+
+function isConnectivityConfirmationTurn(turn: ChatStateTurn): boolean {
+    if (!['confirm', 'follow_up', 'elaborate'].includes(turn.act)) return false;
+    return turn.contexts.some((context) => context.domain === 'devices' &&
+        context.fields.some((field) => [
+            'device_status', 'online_device_count', 'stale_device_count',
+            'offline_device_count', 'unknown_device_status_count',
+        ].includes(field)));
 }
 
 function normalizePlannerFailure(
