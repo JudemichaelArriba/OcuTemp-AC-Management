@@ -158,6 +158,7 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
 
     let requestedPlan: SystemQueryPlan;
     try {
+        dialoguePlan = contextualizeDialoguePlan(dialoguePlan, input.message, input.state);
         requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
             input.state);
         compileSystemQueryPlan(requestedPlan, input.user);
@@ -185,8 +186,8 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         );
         if (repaired) {
             try {
-                dialoguePlan = repaired;
-                requestedPlan = normalizeDialoguePlan(repaired, input.message, input.user,
+                dialoguePlan = contextualizeDialoguePlan(repaired, input.message, input.state);
+                requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
                     input.state);
                 compileSystemQueryPlan(requestedPlan, input.user);
             } catch (repairError: unknown) {
@@ -440,7 +441,7 @@ function verifiedContextFallbackPlan(
     const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
     if (!isCausalConnectivityFollowUp(normalized)) return null;
     const located = latestReferenceableResult(state);
-    if (!located || !hasConnectivityReference(located.result)) return null;
+    if (!located || !hasUnavailableCurrentReadingReference(located)) return null;
     return {
         act: 'confirm',
         clarificationReason: 'none',
@@ -793,6 +794,42 @@ function normalizeDialoguePlan(
     return validateSystemQueryPlan({ parts: coalesceFacilityCounts(parts) });
 }
 
+function contextualizeDialoguePlan(
+    dialogue: DialoguePlan,
+    message: string,
+    state: ChatStatePayload | null,
+): DialoguePlan {
+    const validated = validateDialoguePlan(dialogue);
+    const located = latestReferenceableResult(state);
+    if (!located || !hasUnavailableCurrentReadingReference(located)) return validated;
+
+    const normalizedMessage = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    const semanticPartIndex = validated.parts.findIndex((partValue) =>
+        ['confirm', 'follow_up', 'elaborate'].includes(validated.act) &&
+            partValue.reference !== 'none' &&
+            (partValue.domain === 'devices' || partValue.concepts.some((concept) => [
+                'device_status', 'online_device_count', 'stale_device_count',
+                'offline_device_count', 'unknown_device_status_count',
+            ].includes(concept))));
+    const explicitCausalFollowUp = isCausalConnectivityFollowUp(normalizedMessage);
+    if (semanticPartIndex < 0 && !explicitCausalFollowUp) {
+        return validated;
+    }
+    const causalPartIndex = semanticPartIndex >= 0 ? semanticPartIndex : 0;
+    const parts = validated.parts.map((partValue, index): DialoguePart => index === causalPartIndex
+        ? {
+            domain: 'devices', intent: 'count', concepts: [
+                'online_device_count', 'stale_device_count',
+                'offline_device_count', 'unknown_device_status_count',
+            ],
+            roomNames: [], helpTopic: '', reference: 'previous_request',
+            referencePartId: '', ordinal: 0, freshness: 'current',
+            presentationIntent: 'prose',
+        }
+        : partValue);
+    return { act: 'confirm', parts, clarificationReason: 'none' };
+}
+
 function normalizeDialoguePart(
     plan: DialoguePlan,
     dialogue: DialoguePart,
@@ -815,7 +852,7 @@ function normalizeDialoguePart(
     const requestedAcPower = requestedRoomAcPower(normalizedMessage);
     const requestedOccupancy = requestedRoomOccupancy(normalizedMessage);
     const energyWinnerQuestion = asksForEnergyWinner(normalizedMessage);
-    const latestReference = latestReferenceableResult(state)?.result;
+    const latestReference = latestReferenceableResult(state);
     const inferredHelpTopic = resolveHelpTopic(dialogue.helpTopic, normalizedMessage);
     const requestsRoomTotal = /\b(how many|number of|total|configured)\b.*\brooms?\b/u
         .test(normalizedMessage);
@@ -832,8 +869,7 @@ function normalizeDialoguePart(
     let ordinal = dialogue.ordinal;
     const definitionConcept = explicitSystemConcept(normalizedMessage);
     const causalConnectivityFollowUp = isCausalConnectivityFollowUp(normalizedMessage) &&
-        latestReference !== undefined && latestReference !== null &&
-        hasConnectivityReference(latestReference);
+        latestReference !== null && hasUnavailableCurrentReadingReference(latestReference);
 
     if (definitionConcept) {
         domain = 'system_concepts';
@@ -900,13 +936,14 @@ function normalizeDialoguePart(
         }
         presentationIntent = 'prose';
     }
-    if (energyWinnerQuestion && (domain === 'energy' || latestReference?.subject === 'energy')) {
+    if (energyWinnerQuestion &&
+        (domain === 'energy' || latestReference?.result.subject === 'energy')) {
         domain = 'energy';
         intent = 'compare';
         concepts = uniqueFields([...concepts, 'room_name', 'estimated_kwh', 'energy_rank']);
         presentationIntent = 'prose';
         ordinal = 1;
-        if (reference === 'none' && latestReference?.subject === 'energy' &&
+        if (reference === 'none' && latestReference?.result.subject === 'energy' &&
             !mentionsExplicitEnergyPeriod(normalizedMessage)) {
             reference = 'previous_request';
         }
@@ -1146,9 +1183,13 @@ function isCausalConnectivityFollowUp(message: string): boolean {
         .test(message);
 }
 
-function hasConnectivityReference(result: ChatStateResultMemory): boolean {
-    return ['devices', 'measurements', 'occupancy', 'ac_control'].includes(result.subject) &&
-        result.counts.some((count) => count.field === 'online_device_count');
+function hasUnavailableCurrentReadingReference(located: LocatedStateResult): boolean {
+    const liveDomains: readonly SystemDomain[] = [
+        'devices', 'measurements', 'occupancy', 'ac_control',
+    ];
+    return liveDomains.includes(located.result.subject) &&
+        (located.context?.answerability === 'no_online_reading' ||
+            located.result.emptyReason === 'no_online_reading');
 }
 
 function explicitSystemConcept(message: string): SystemField | null {
@@ -1306,15 +1347,19 @@ function buildPartWork(
             .find((presentation): presentation is EnergyReportPresentation =>
                 presentation.kind === 'energy-report')?.range ?? null;
         const previousResult = previousResultFor(state, requested.domain, dialogueAct);
+        const previousReference = latestReferenceableResult(state);
+        const previousHadNoOnlineReading = previousReference !== null &&
+            previousReference.result === previousResult &&
+            hasUnavailableCurrentReadingReference(previousReference);
         facts.push(...causalFollowUpFacts(
-            requested, partResults, previousResult, dialogueAct,
+            requested, partResults, previousHadNoOnlineReading, dialogueAct,
         ));
         const recommendations = buildRecommendations(requested, partResults);
         const packet: AnswerPacket = {
             partId: requested.partId,
             dialogueAct,
             responseGoal: responseGoalFor(
-                dialogueAct, requested, answerability, previousResult,
+                dialogueAct, requested, answerability, previousHadNoOnlineReading,
             ),
             domain: requested.domain,
             operation: requested.operation,
@@ -1496,12 +1541,12 @@ function previousResultFor(
 function causalFollowUpFacts(
     part: SystemQueryPart,
     results: readonly ToolExecutionResult[],
-    previousResult: ChatStateResultMemory | null,
+    previousHadNoOnlineReading: boolean,
     act: ChatDialogueAct,
 ): GroundingFact[] {
     if (act !== 'confirm' || part.domain !== 'devices' ||
         !part.fields.includes('online_device_count') ||
-        previousResult?.emptyReason !== 'no_online_reading') return [];
+        !previousHadNoOnlineReading) return [];
     const onlineCount = results.flatMap((result) => {
         const presentation = result.presentation;
         return presentation.kind === 'metric-summary'
@@ -1524,7 +1569,7 @@ function responseGoalFor(
     act: ChatDialogueAct,
     part: SystemQueryPart,
     answerability: ChatAnswerabilityOutcome,
-    previousResult: ChatStateResultMemory | null,
+    previousHadNoOnlineReading: boolean,
 ): string {
     if (answerability === 'clarification_required') {
         return 'Explain what was understood and ask for only the missing detail.';
@@ -1535,7 +1580,7 @@ function responseGoalFor(
     }
     if (act === 'confirm' && part.domain === 'devices' &&
         part.fields.includes('online_device_count') &&
-        previousResult?.emptyReason === 'no_online_reading') {
+        previousHadNoOnlineReading) {
         return 'Connect the causal follow-up explicitly: explain whether the refreshed online-device count is the immediate reason the previous current reading was unavailable. Distinguish that data-availability reason from the unknown reason connectivity was lost.';
     }
     if (act === 'confirm') return 'Confirm or correct the user directly, then explain the verified distinction.';
@@ -2373,7 +2418,14 @@ function isReferenceEligible(work: PartWork): boolean {
 }
 
 function stateOutcomeFor(work: PartWork): Pick<ChatStateResultMemory, 'outcome' | 'emptyReason'> {
-    if (work.answerability === 'partial') return { outcome: 'partial', emptyReason: 'none' };
+    if (work.answerability === 'partial') {
+        const hasNoOnlineReading = work.results.some((result) =>
+            result.outcome === 'no_online_reading');
+        return {
+            outcome: 'partial',
+            emptyReason: hasNoOnlineReading ? 'no_online_reading' : 'none',
+        };
+    }
     if (work.answerability === 'permission_denied') {
         return { outcome: 'denied', emptyReason: 'none' };
     }
@@ -2518,6 +2570,7 @@ function safeStateForPlanner(state: ChatStatePayload | null): unknown {
 interface LocatedStateResult {
     readonly turnIndex: number;
     readonly result: ChatStateResultMemory;
+    readonly context: ChatStateContext | null;
 }
 
 function latestReferenceableResult(
@@ -2530,7 +2583,9 @@ function latestReferenceableResult(
         for (let resultIndex = turn.results.length - 1; resultIndex >= 0; resultIndex -= 1) {
             const result = turn.results[resultIndex]!;
             if (!result.referenceEligible) continue;
-            const located = { turnIndex, result };
+            const context = turn.contexts.find((candidate) =>
+                candidate.partId === result.sourcePartId) ?? null;
+            const located = { turnIndex, result, context };
             if (!newestEligible) newestEligible = located;
             return located;
         }
