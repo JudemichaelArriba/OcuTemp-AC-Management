@@ -1,64 +1,52 @@
-<div class="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-slate-50 text-slate-950">
+<div class="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-slate-50/70 text-slate-950">
   <section #conversationLog
     class="min-h-0 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600"
     role="log" aria-label="Conversation with OcuGuide" aria-live="off" tabindex="0" (scroll)="onConversationScroll()">
-    <div #conversationContent class="mx-auto min-h-full w-full max-w-3xl px-3 py-6 sm:px-6 sm:py-10 lg:py-14">
+    <div #conversationContent class="mx-auto min-h-full w-full max-w-6xl px-4 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10">
       @if (messages().length === 0) {
-      <section class="flex min-h-full flex-col justify-start py-4 sm:justify-center sm:py-12"
+      <section class="flex min-h-full flex-col justify-center py-6 sm:py-10"
         aria-labelledby="ocu-guide-welcome-title">
-        <div class="mb-7 flex items-center gap-3" aria-hidden="true">
-          <span class="h-px w-10 bg-blue-600"></span>
-          <span class="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-700">Verified OcuTemp
-            workspace</span>
-        </div>
-        <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_13rem] lg:items-end">
-          <div>
+        <div class="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(28rem,1.1fr)] lg:items-center lg:gap-16">
+          <div class="max-w-xl">
+            <p class="mb-4 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-700">OcuTemp system assistant</p>
             <h2 id="ocu-guide-welcome-title"
-              class="max-w-2xl text-[clamp(2rem,5vw,3.4rem)] font-bold leading-[1.02] tracking-[-0.045em] text-slate-950">
-              Ask the facility.<br><span class="text-blue-700">Get a grounded answer.</span>
+              class="text-[clamp(1.75rem,4vw,2.75rem)] font-bold leading-[1.08] tracking-[-0.04em] text-slate-950">
+              Ask about your rooms, devices, and energy use.
             </h2>
-            <p class="mt-5 max-w-xl text-[0.96rem] leading-7 text-slate-600">
-              OcuGuide checks only the OcuTemp information available to your role, remembers useful follow-up context,
-              and shows visuals only when they improve the answer.
+            <p class="mt-4 text-[0.95rem] leading-7 text-slate-600">
+              OcuGuide reads the OcuTemp data available to your role and keeps useful context for follow-up questions.
+            </p>
+            <p class="mt-6 border-l-2 border-blue-600 pl-3 text-xs leading-5 text-slate-500">
+              Read-only. This conversation cannot change device controls or configuration.
             </p>
           </div>
-          <div class="border-l-2 border-cyan-500 pl-4 text-xs leading-5 text-slate-500">
-            <span class="block font-bold text-slate-800">Read-only by design</span>
-            No controls are changed from this conversation.
+          <div class="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2"
+            aria-label="Suggested questions">
+            @for (suggestion of suggestions; track suggestion.prompt) {
+            <button type="button"
+              class="min-h-20 bg-white px-4 py-4 text-left text-sm font-semibold leading-6 text-slate-700 transition-colors hover:bg-blue-50 hover:text-blue-800 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
+              (click)="send(suggestion.prompt)">{{ suggestion.label }}</button>
+            }
           </div>
-        </div>
-        <div class="mt-10 grid gap-2 sm:grid-cols-2" aria-label="Suggested questions">
-          @for (suggestion of suggestions(); track suggestion.prompt) {
-          <button type="button"
-            class="group grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-slate-700 shadow-sm shadow-slate-200/30 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md hover:shadow-blue-100/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transform-none motion-reduce:transition-none"
-            (click)="send(suggestion.prompt)">
-            <span class="material-symbols-outlined text-xl text-blue-600" aria-hidden="true">{{ suggestion.icon
-              }}</span>
-            <span class="text-sm font-semibold">{{ suggestion.label }}</span>
-            <span
-              class="material-symbols-outlined text-base text-slate-400 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none"
-              aria-hidden="true">arrow_forward</span>
-          </button>
-          }
         </div>
       </section>
       } @else {
-      <ol class="grid list-none gap-7 p-0" aria-label="Chat messages">
+      <ol class="grid list-none gap-8 p-0" aria-label="Chat messages">
         @for (message of messages(); track message.id) {
         <li [class]="message.role === 'user' ? 'flex justify-end' : 'min-w-0'">
           @if (message.role === 'user') {
           <article
-            class="max-w-[92%] rounded-[1.15rem_1.15rem_0.3rem_1.15rem] bg-blue-700 px-4 py-3 text-[0.9375rem] leading-6 text-white shadow-sm [overflow-wrap:anywhere] sm:max-w-[85%]"
+            class="max-w-[92%] rounded-[1rem_1rem_0.25rem_1rem] bg-blue-700 px-4 py-3 text-[0.9375rem] leading-6 text-white [overflow-wrap:anywhere] sm:max-w-[72%]"
             aria-label="You said">
             <p>{{ message.text }}</p>
           </article>
           } @else {
-          <article class="relative min-w-0 pl-4 sm:pl-5" [class.text-amber-950]="message.errorCode"
+          <article class="relative min-w-0 max-w-5xl pl-4 sm:pl-5" [class.text-amber-950]="message.errorCode"
             aria-label="OcuGuide response">
             <span class="absolute inset-y-1 left-0 w-0.5 rounded-full"
               [class]="message.errorCode ? 'bg-amber-400' : 'bg-blue-600'" aria-hidden="true"></span>
             @if (message.errorCode) {
-            <p class="max-w-2xl whitespace-pre-line text-[0.975rem] font-medium leading-7 [overflow-wrap:anywhere]">{{
+            <p class="max-w-4xl whitespace-pre-line text-[0.975rem] font-medium leading-7 [overflow-wrap:anywhere]">{{
               message.text }}</p>
             @if (canRetry(message)) {
             <button type="button"
@@ -73,29 +61,23 @@
             <section class="[&+&]:mt-6 [&+&]:border-t [&+&]:border-slate-200 [&+&]:pt-6"
               [attr.aria-label]="'Answer ' + ($index + 1)">
               <p
-                class="max-w-2xl whitespace-pre-line text-[0.975rem] font-medium leading-7 text-slate-900 [overflow-wrap:anywhere]">
+                class="max-w-4xl whitespace-pre-line text-[0.975rem] font-medium leading-7 text-slate-900 [overflow-wrap:anywhere]">
                 {{ part.text }}</p>
-              @if (contextStatus(context); as status) {
-              <p [class]="contextStatusClass(context)">
-                <span class="material-symbols-outlined mt-0.5 text-base" aria-hidden="true">{{ context?.answerability
-                  === 'permission_denied' ? 'lock' : 'info' }}</span>{{ status }}
-              </p>
-              }
               @for (block of part.blocks; track answerBlockTrackKey(block, $index)) {
               @if (shouldRenderBlock(part, block)) {
               @switch (block.kind) {
               @case ('paragraph') { <p
-                class="mt-3 max-w-2xl whitespace-pre-line text-[0.95rem] leading-7 text-slate-700 [overflow-wrap:anywhere]">
+                class="mt-3 max-w-4xl whitespace-pre-line text-[0.95rem] leading-7 text-slate-700 [overflow-wrap:anywhere]">
                 {{ block.text }}</p> }
               @case ('bullet-list') {
-              @if (block.text) { <p class="mt-3 max-w-2xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
+              @if (block.text) { <p class="mt-3 max-w-4xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
               }
               <ul class="mt-3 ml-5 grid list-disc gap-2 text-[0.9375rem] leading-6 text-slate-700 marker:text-blue-600">
                 @for (item of block.items; track textTrackKey(item, $index)) { <li>{{ item }}</li> }
               </ul>
               }
               @case ('numbered-list') {
-              @if (block.text) { <p class="mt-3 max-w-2xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
+              @if (block.text) { <p class="mt-3 max-w-4xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
               }
               <ol
                 class="mt-3 ml-5 grid list-decimal gap-2 text-[0.9375rem] leading-6 text-slate-700 marker:font-bold marker:text-blue-600">
@@ -108,7 +90,7 @@
                 {{ block.text }}</p>
               }
               @case ('key-value') {
-              @if (block.text) { <p class="mt-3 max-w-2xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
+              @if (block.text) { <p class="mt-3 max-w-4xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
               }
               <dl
                 class="mt-3 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2">
@@ -154,25 +136,20 @@
             </section>
             }
             @if (message.evidence && message.evidence.source !== 'none') {
-            <footer class="mt-4 flex flex-wrap items-center gap-1 text-[0.7rem] tabular-nums text-slate-500">
-              <span class="material-symbols-outlined text-[0.95rem] text-cyan-700"
-                aria-hidden="true">verified</span><span>{{ evidenceLabel(message) }}</span>
-              @if (message.evidence.partial) { <span>· Partial result</span> }
+            <footer class="mt-4 text-[0.7rem] tabular-nums text-slate-500">
+              {{ evidenceLabel(message) }}
             </footer>
             }
             @if (message.presentations.length > 0) {
             <section class="mt-2" aria-label="Tools and projected results">
               <button type="button"
-                class="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-xs font-semibold text-slate-500 hover:bg-white hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                class="inline-flex min-h-10 items-center rounded-lg px-1 text-xs font-semibold text-slate-500 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                 [attr.aria-expanded]="isToolDisclosureOpen(message.id)"
                 [attr.aria-controls]="toolDisclosureId(message.id)" (click)="toggleToolDisclosure(message.id)">
-                <span class="material-symbols-outlined text-base" aria-hidden="true">construction</span>{{
-                isToolDisclosureOpen(message.id) ? 'Hide tools used' : 'Show tools used' }}<span
-                  class="material-symbols-outlined text-base" aria-hidden="true">{{ isToolDisclosureOpen(message.id) ?
-                  'expand_less' : 'expand_more' }}</span>
+                {{ isToolDisclosureOpen(message.id) ? 'Hide tools used' : 'Show tools used' }}
               </button>
               @if (isToolDisclosureOpen(message.id)) {
-              <div class="mt-1 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+              <div class="mt-1 max-w-4xl border-l border-slate-300 py-2 pl-3"
                 [id]="toolDisclosureId(message.id)">
                 <ul class="grid list-none gap-2.5 p-0">
                   @for (presentation of message.presentations; track presentation.id) {
@@ -220,8 +197,7 @@
         @for (suggestion of latestFollowUps(); track suggestion.prompt) {
         <button type="button"
           class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
-          (click)="send(suggestion.prompt)">{{ suggestion.label }}<span class="material-symbols-outlined text-[0.95rem]"
-            aria-hidden="true">{{ suggestion.icon }}</span></button>
+          (click)="send(suggestion.prompt)">{{ suggestion.label }}</button>
         }
       </nav>
       }
@@ -230,14 +206,14 @@
   </section>
   @if (showJumpToLatest()) {
   <button type="button"
-    class="absolute right-4 bottom-28 z-10 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-lg shadow-slate-900/10 hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:right-[max(1.5rem,calc((100%_-_48rem)/2))]"
+    class="absolute right-4 bottom-28 z-10 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-lg shadow-slate-900/10 hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:right-[max(1.75rem,calc((100%_-_72rem)/2))]"
     (click)="jumpToLatest()"><span class="material-symbols-outlined text-[0.95rem]"
       aria-hidden="true">arrow_downward</span>Latest</button>
   }
   <footer
-    class="border-t border-slate-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-[max(1.5rem,calc((100%_-_48rem)/2))]">
+    class="border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-[max(2.5rem,calc((100%_-_72rem)/2))]">
     <div
-      class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 rounded-2xl border border-slate-300 bg-white py-2 pr-2 pl-4 shadow-[0_8px_30px_rgb(15_23_42/0.06)] transition-[border-color,box-shadow] focus-within:border-blue-400 focus-within:shadow-[0_0_0_3px_rgb(37_99_235/0.12)] motion-reduce:transition-none">
+      class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 rounded-xl border border-slate-300 bg-white py-2 pr-2 pl-4 transition-[border-color,box-shadow] focus-within:border-blue-500 focus-within:shadow-[0_0_0_3px_rgb(37_99_235/0.1)] motion-reduce:transition-none">
       <label class="sr-only" for="ocu-guide-composer">Ask OcuGuide about the OcuTemp system</label>
       <textarea #composer id="ocu-guide-composer"
         class="max-h-44 w-full resize-none border-0 bg-transparent py-2 text-[0.9375rem] leading-6 text-slate-950 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"

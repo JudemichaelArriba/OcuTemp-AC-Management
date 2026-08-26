@@ -1234,10 +1234,13 @@ function augmentGroundingFacts(
     for (const result of results) {
         const presentation = result.presentation;
         if (presentation.kind === 'room-data') {
+            const filteredResult = part.filters.length > 0;
             facts.push({
                 id: `server.${part.partId}.room_count`,
                 partId: part.partId,
-                statement: `The verified result contains ${presentation.rooms.length} configured ${presentation.rooms.length === 1 ? 'room' : 'rooms'}.`,
+                statement: filteredResult
+                    ? `The verified result contains ${presentation.rooms.length} matching ${presentation.rooms.length === 1 ? 'room row' : 'room rows'} after applying the requested current-state filter; this is not the configured room count.`
+                    : `The verified result contains ${presentation.rooms.length} configured ${presentation.rooms.length === 1 ? 'room' : 'rooms'}.`,
             });
             if (presentation.rooms.length > 0) {
                 facts.push({
@@ -1255,6 +1258,14 @@ function augmentGroundingFacts(
                     statement: requestedPower
                         ? 'No configured room with a current online reading has its AC power on.'
                         : 'No configured room with a current online reading has its AC power off.',
+                });
+            }
+            if (presentation.rooms.length === 0 && requestedPower !== null &&
+                answerability === 'no_online_reading' && result.scope.activeRoomNames.length > 0) {
+                facts.push({
+                    id: `server.${part.partId}.configured_room_context`,
+                    partId: part.partId,
+                    statement: `OcuTemp still has ${result.scope.activeRoomNames.length} configured ${result.scope.activeRoomNames.length === 1 ? 'room record' : 'room records'} eligible for operation; unavailable current readings do not prove that their AC units are off.`,
                 });
             }
             const requestedOccupancyValue = requestedOccupancyFilter(part);
@@ -1378,6 +1389,10 @@ function responseGoalFor(
 ): string {
     if (answerability === 'clarification_required') {
         return 'Explain what was understood and ask for only the missing detail.';
+    }
+    if (act === 'confirm' && answerability === 'no_online_reading' &&
+        part.domain === 'ac_control') {
+        return 'Correct the inference directly: unavailable current online readings mean AC activity is unknown, not that zero rooms have their AC on.';
     }
     if (act === 'confirm') return 'Confirm or correct the user directly, then explain the verified distinction.';
     if (act === 'correct') return 'Acknowledge the correction and treat the next self-contained question as a new request, not a follow-up.';
@@ -1514,6 +1529,10 @@ function buildDeterministicAnswer(work: PartWork, user: ChatPrincipal): ChatAnsw
         return base(`More than one configured room matches ${formatNames(work.packet.scope.ambiguousRoomNames)}. Please use the exact room name.`);
     }
     if (work.answerability === 'no_online_reading') {
+        const requestedPower = requestedAcPowerFilter(work.requested);
+        if (work.packet.dialogueAct === 'confirm' && requestedPower !== null) {
+            return base('Not exactly—there are no current online device readings, so OcuTemp cannot determine which rooms have their AC on right now. That does not prove that no room is active.');
+        }
         return base('No selected room has an online device with a current reading, so I cannot answer that as a current measurement. You can ask for the last-known value instead.');
     }
     if (work.answerability === 'no_energy_records') {

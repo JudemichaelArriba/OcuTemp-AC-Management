@@ -9,7 +9,6 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { OcuGuideReportComponent } from '../../components/ocu-guide-report/ocu-guide-report';
 import {
   ChatAnswerBlock,
@@ -20,14 +19,12 @@ import {
   ChatResponseContext,
   RenderableChatMessage,
 } from '../../models/chat.models';
-import { AuthStateService } from '../../services/auth-state.service';
 import { ChatService } from '../../services/chat.service';
 import { ThinkingOrbComponent } from './thinking-orb';
 
 interface ChatSuggestion {
   readonly label: string;
   readonly prompt: string;
-  readonly icon: string;
 }
 
 const RETRYABLE_CHAT_ERROR_CODES = new Set([
@@ -47,7 +44,6 @@ const RETRYABLE_CHAT_ERROR_CODES = new Set([
 })
 export class OcuGuideConversationComponent implements OnDestroy {
   private readonly chatService = inject(ChatService);
-  private readonly authState = inject(AuthStateService);
   private readonly conversationLog = viewChild<ElementRef<HTMLElement>>('conversationLog');
   private readonly conversationContent = viewChild<ElementRef<HTMLElement>>('conversationContent');
   private readonly composer = viewChild<ElementRef<HTMLTextAreaElement>>('composer');
@@ -67,56 +63,36 @@ export class OcuGuideConversationComponent implements OnDestroy {
 
   readonly messages = this.chatService.messages;
   readonly loading = this.chatService.loading;
-  readonly currentUser = toSignal(this.authState.currentUser$, { initialValue: null });
   readonly draft = signal('');
   readonly showJumpToLatest = signal(false);
   readonly maxMessageLength = 500;
   readonly charactersRemaining = computed(() => (
     this.maxMessageLength - Array.from(this.draft()).length
   ));
-  readonly suggestions = computed<readonly ChatSuggestion[]>(() => {
-    const roleSuggestion: ChatSuggestion = this.currentUser()?.role === 'admin'
-      ? {
-        label: 'Pending staff',
-        prompt: 'How many staff accounts are awaiting approval?',
-        icon: 'admin_panel_settings',
-      }
-      : {
-        label: 'My access',
-        prompt: 'What can I do in OcuTemp with my current role?',
-        icon: 'shield_person',
-      };
-    return [
-      {
-        label: 'Room overview',
-        prompt: 'How many rooms are in OcuTemp, and how many have an online device?',
-        icon: 'meeting_room',
-      },
-      {
-        label: 'Current temperatures',
-        prompt: 'What is the current temperature in every online room?',
-        icon: 'device_thermostat',
-      },
-      {
-        label: 'Configured schedules',
-        prompt: 'List the configured schedules for all active rooms.',
-        icon: 'event_note',
-      },
-      {
-        label: 'Active overrides',
-        prompt: 'Which rooms currently have an active override?',
-        icon: 'tune',
-      },
-      roleSuggestion,
-    ];
-  });
+  readonly suggestions: readonly ChatSuggestion[] = [
+    {
+      label: 'Room and device overview',
+      prompt: 'How many rooms are in OcuTemp, and how many have an online device?',
+    },
+    {
+      label: 'Rooms with AC on',
+      prompt: 'Which rooms currently have their AC on?',
+    },
+    {
+      label: 'Available rooms',
+      prompt: 'Which rooms are currently available or unoccupied?',
+    },
+    {
+      label: 'Energy comparison',
+      prompt: 'Compare room energy usage for the current month.',
+    },
+  ];
   readonly latestFollowUps = computed<readonly ChatSuggestion[]>(() => {
     const latest = [...this.messages()].reverse().find((message) => message.role === 'assistant');
     if (!latest || latest.errorCode) return [];
     return latest.followUps.map((followUp) => ({
       label: followUp.label,
       prompt: followUp.prompt,
-      icon: 'arrow_outward',
     }));
   });
 
@@ -271,30 +247,6 @@ export class OcuGuideConversationComponent implements OnDestroy {
 
   textTrackKey(value: string, index: number): string {
     return `${value}\u0000${index}`;
-  }
-
-  contextStatus(context: ChatResponseContext | undefined): string | null {
-    if (!context) return null;
-    switch (context.answerability) {
-      case 'permission_denied': return 'Your role does not permit this information.';
-      case 'partial': return 'Some requested information was unavailable.';
-      case 'room_not_found': return 'The named room is not in OcuTemp.';
-      case 'room_inactive': return 'The named room is inactive.';
-      case 'room_ambiguous': return 'More than one room matches that name.';
-      case 'no_online_reading': return 'No current online reading is available.';
-      case 'no_energy_records': return 'No recorded energy data is available for that period.';
-      case 'source_unavailable': return 'The verified source could not be read.';
-      case 'insufficient_evidence': return 'OcuTemp does not have enough verified evidence.';
-      case 'clarification_required': return null;
-      case 'not_applicable': return null;
-      case 'answerable': return null;
-    }
-  }
-
-  contextStatusClass(context: ChatResponseContext | undefined): string {
-    return context?.answerability === 'permission_denied'
-      ? 'mt-3 flex items-start gap-2 border-l-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-sm leading-6 text-amber-950'
-      : 'mt-3 flex items-start gap-2 border-l-2 border-sky-400 bg-sky-50 px-3 py-2.5 text-sm leading-6 text-sky-950';
   }
 
   evidenceLabel(message: RenderableChatMessage): string {
