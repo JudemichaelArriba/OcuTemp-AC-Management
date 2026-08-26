@@ -1305,12 +1305,17 @@ function buildPartWork(
         const range = partResults.map((result) => result.presentation)
             .find((presentation): presentation is EnergyReportPresentation =>
                 presentation.kind === 'energy-report')?.range ?? null;
-        const recommendations = buildRecommendations(requested, partResults);
         const previousResult = previousResultFor(state, requested.domain, dialogueAct);
+        facts.push(...causalFollowUpFacts(
+            requested, partResults, previousResult, dialogueAct,
+        ));
+        const recommendations = buildRecommendations(requested, partResults);
         const packet: AnswerPacket = {
             partId: requested.partId,
             dialogueAct,
-            responseGoal: responseGoalFor(dialogueAct, requested, answerability),
+            responseGoal: responseGoalFor(
+                dialogueAct, requested, answerability, previousResult,
+            ),
             domain: requested.domain,
             operation: requested.operation,
             fields: [...requested.fields],
@@ -1488,10 +1493,38 @@ function previousResultFor(
         ? located.result : null;
 }
 
+function causalFollowUpFacts(
+    part: SystemQueryPart,
+    results: readonly ToolExecutionResult[],
+    previousResult: ChatStateResultMemory | null,
+    act: ChatDialogueAct,
+): GroundingFact[] {
+    if (act !== 'confirm' || part.domain !== 'devices' ||
+        !part.fields.includes('online_device_count') ||
+        previousResult?.emptyReason !== 'no_online_reading') return [];
+    const onlineCount = results.flatMap((result) => {
+        const presentation = result.presentation;
+        return presentation.kind === 'metric-summary'
+            ? presentation.metrics.filter((metric) =>
+                metric.field === 'online_device_count' &&
+                typeof metric.value === 'number').map((metric) => metric.value as number)
+            : [];
+    })[0];
+    if (onlineCount === undefined) return [];
+    return [{
+        id: `server.${part.partId}.causal_connectivity`,
+        partId: part.partId,
+        statement: onlineCount === 0
+            ? 'The previous current room reading was unavailable because the refreshed OcuTemp scope still has zero online devices. This is the immediate data-availability reason; the verified data does not explain why device connectivity was lost.'
+            : `The previous no-online-device result is no longer current because the refreshed OcuTemp scope now has ${onlineCount} online ${onlineCount === 1 ? 'device' : 'devices'}.`,
+    }];
+}
+
 function responseGoalFor(
     act: ChatDialogueAct,
     part: SystemQueryPart,
     answerability: ChatAnswerabilityOutcome,
+    previousResult: ChatStateResultMemory | null,
 ): string {
     if (answerability === 'clarification_required') {
         return 'Explain what was understood and ask for only the missing detail.';
@@ -1499,6 +1532,11 @@ function responseGoalFor(
     if (act === 'confirm' && answerability === 'no_online_reading' &&
         part.domain === 'ac_control') {
         return 'Correct the inference directly: unavailable current online readings mean AC activity is unknown, not that zero rooms have their AC on.';
+    }
+    if (act === 'confirm' && part.domain === 'devices' &&
+        part.fields.includes('online_device_count') &&
+        previousResult?.emptyReason === 'no_online_reading') {
+        return 'Connect the causal follow-up explicitly: explain whether the refreshed online-device count is the immediate reason the previous current reading was unavailable. Distinguish that data-availability reason from the unknown reason connectivity was lost.';
     }
     if (act === 'confirm') return 'Confirm or correct the user directly, then explain the verified distinction.';
     if (act === 'correct') return 'Acknowledge the correction and treat the next self-contained question as a new request, not a follow-up.';
@@ -2124,6 +2162,13 @@ function validateWriterDraft(
     });
     if (clauses.filter((clause) => clause.role === 'direct_answer').length !== 1) {
         throw new Error('invalid_direct_answer_count');
+    }
+    if (packet.responseGoal.startsWith('Connect the causal follow-up')) {
+        const directAnswer = clauses[0]!;
+        if (!directAnswer.evidenceRefs.some((ref) => ref.endsWith('.causal_connectivity')) ||
+            !/\b(?:because|reason)\b/iu.test(directAnswer.text)) {
+            throw new Error('missing_causal_connection');
+        }
     }
     const requiresExplanation = packet.responseGoal.includes('explain one useful');
     if (requiresExplanation && !clauses.some((clause) => clause.role === 'context')) {
