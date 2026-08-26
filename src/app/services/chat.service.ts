@@ -383,6 +383,11 @@ export class ChatService {
         return 'OcuTemp data is temporarily unavailable. Try again in a moment.';
       case 'configuration_error':
         return 'OcuGuide is not configured for this deployment.';
+      case 'assistant_unavailable':
+        return error.message ===
+          'OcuGuide is temporarily unable to interpret requests because its AI providers are unavailable. Please try again shortly.'
+          ? error.message
+          : 'OcuGuide is temporarily unavailable. Please try again shortly.';
       default:
         return 'OcuGuide could not complete that request. Try again in a moment.';
     }

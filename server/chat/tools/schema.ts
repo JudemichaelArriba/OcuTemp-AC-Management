@@ -67,14 +67,15 @@ export const ANSWERABILITY_OUTCOMES: readonly ChatAnswerabilityOutcome[] = [
 const DIALOGUE_PART_SCHEMA = {
     type: 'object', additionalProperties: false,
     properties: {
-        domain: { type: 'string' },
-        intent: { type: 'string' },
-        concepts: { type: 'array', items: { type: 'string' } },
-        roomNames: { type: 'array', items: { type: 'string' } },
+        domain: { type: 'string', enum: SYSTEM_DOMAINS },
+        intent: { type: 'string', enum: SYSTEM_OPERATIONS },
+        concepts: { type: 'array', minItems: 1, maxItems: 8,
+            items: { type: 'string', enum: SYSTEM_FIELDS } },
+        roomNames: { type: 'array', maxItems: 50, items: { type: 'string' } },
         reference: { type: 'string', enum: ['none', 'previous_request',
             'previous_result', 'prior_part'] },
-        referencePartId: { type: 'string' },
-        ordinal: { type: 'integer' },
+        referencePartId: { type: 'string', enum: ['', ...CHAT_PART_IDS] },
+        ordinal: { type: 'integer', minimum: 0, maximum: 3 },
         freshness: { type: 'string', enum: DIALOGUE_FRESHNESS },
         presentationIntent: { type: 'string', enum: [
             'prose', 'short_list', 'comparison', 'ranking', 'trend', 'report',
@@ -88,7 +89,7 @@ export const DIALOGUE_PLAN_SCHEMA: Record<string, unknown> = {
     type: 'object', additionalProperties: false,
     properties: {
         act: { type: 'string', enum: CHAT_DIALOGUE_ACTS },
-        parts: { type: 'array', items: DIALOGUE_PART_SCHEMA },
+        parts: { type: 'array', minItems: 1, maxItems: 3, items: DIALOGUE_PART_SCHEMA },
         clarificationReason: { type: 'string', enum: [
             'none', 'missing_subject', 'missing_room', 'missing_period',
             'ambiguous_reference', 'unrelated_parts',

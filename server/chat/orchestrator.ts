@@ -373,7 +373,7 @@ async function planWithProviders(
         throw new BothProvidersFailedError(firstFailure,
             new ProviderRecoverableError('groq', 'timeout'));
     }
-    const semanticRepair = failureCategory === 'invalid_semantics';
+    const semanticRepair = isSemanticPlannerFailure(firstFailure);
     const fallbackPrompt = semanticRepair ? JSON.stringify({
         currentManilaDate: manilaDateKey(new Date()),
         callerRole: input.user.role,
@@ -2065,8 +2065,22 @@ function normalizePlannerFailure(
 function plannerFailureCategory(error: unknown): string {
     if (error instanceof ProviderRecoverableError) return error.category;
     if (error instanceof ProviderRequestError) return error.category;
-    if (error instanceof ProviderResponseError) return error.category;
+    if (error instanceof ProviderResponseError) {
+        if (error.category === 'invalid_semantics' &&
+            error.cause instanceof CapabilityValidationError) {
+            return safeCapabilityValidationReason(error.cause.reason);
+        }
+        return error.category;
+    }
     return 'generated_output_mismatch';
+}
+
+function isSemanticPlannerFailure(error: unknown): boolean {
+    return error instanceof ProviderResponseError && error.category === 'invalid_semantics';
+}
+
+function safeCapabilityValidationReason(reason: string): string {
+    return /^[a-z][a-z0-9_]{0,63}$/u.test(reason) ? reason : 'invalid_semantics';
 }
 
 function providerFailureSummary(error: unknown): string {

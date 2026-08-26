@@ -200,10 +200,11 @@ export function validateDialoguePlan(value: unknown): DialoguePlan {
         throw new CapabilityValidationError('invalid_dialogue_plan');
     }
     const act = value['act'] as ChatDialogueAct;
-    const clarificationReason = value['clarificationReason'] as DialogueClarificationReason;
-    if ((act === 'clarify') !== (clarificationReason !== 'none')) {
+    const suppliedClarificationReason = value['clarificationReason'] as DialogueClarificationReason;
+    if (act === 'clarify' && suppliedClarificationReason === 'none') {
         throw new CapabilityValidationError('invalid_clarification_reason');
     }
+    const clarificationReason = act === 'clarify' ? suppliedClarificationReason : 'none';
     return {
         act,
         parts: value['parts'].map(validateDialoguePart),
@@ -234,24 +235,33 @@ function validateDialoguePart(value: unknown, index: number): DialoguePart {
             .includes(value['presentationIntent'])) {
         throw new CapabilityValidationError('invalid_dialogue_part');
     }
-    const reference = value['reference'] as DialoguePart['reference'];
-    const roomNames = normalizeTextArray(value['roomNames'], MAX_EXPLICIT_ROOMS, 100);
-    if (reference === 'none' && value['referencePartId'] !== '' ||
-        reference === 'prior_part' && (value['referencePartId'] === '' ||
-            CHAT_PART_IDS.indexOf(value['referencePartId'] as ChatPartId) >= index) ||
-        reference !== 'prior_part' && value['referencePartId'] !== '' ||
-        reference !== 'none' && roomNames.length > 0) {
+    const roomNames = normalizeDialogueTextArray(value['roomNames'], MAX_EXPLICIT_ROOMS, 100);
+    let reference = value['reference'] as DialoguePart['reference'];
+    let referencePartId = value['referencePartId'] as DialoguePart['referencePartId'];
+    let ordinal = value['ordinal'] as DialoguePart['ordinal'];
+
+    // Explicit room names make the part self-contained. Other reference fields are
+    // formatting defaults, so normalize them before enforcing semantic relationships.
+    if (roomNames.length > 0 && reference !== 'none') reference = 'none';
+    if (reference !== 'prior_part') referencePartId = '';
+    if (reference === 'none') ordinal = 0;
+    if (reference === 'prior_part' && referencePartId === '' && index > 0) {
+        referencePartId = CHAT_PART_IDS[index - 1]!;
+    }
+    if (reference === 'prior_part' && (referencePartId === '' ||
+        CHAT_PART_IDS.indexOf(referencePartId) >= index)) {
         throw new CapabilityValidationError('invalid_dialogue_reference');
     }
+    const concepts = normalizeEnumArray(value['concepts'], SYSTEM_FIELDS, MAX_PART_FIELDS,
+        'invalid_dialogue_concepts', true);
     return {
         domain: value['domain'] as SystemDomain,
         intent: value['intent'] as SystemOperation,
-        concepts: normalizeEnumArray(value['concepts'], SYSTEM_FIELDS, MAX_PART_FIELDS,
-            'invalid_dialogue_concepts'),
+        concepts,
         roomNames,
         reference,
-        referencePartId: value['referencePartId'] as DialoguePart['referencePartId'],
-        ordinal: value['ordinal'] as DialoguePart['ordinal'],
+        referencePartId,
+        ordinal,
         freshness: value['freshness'] as DialogueFreshness,
         presentationIntent: value['presentationIntent'] as DialoguePart['presentationIntent'],
     };
@@ -676,13 +686,36 @@ function normalizeEnumArray<T extends string>(
     allowed: readonly T[],
     maximum: number,
     reason: string,
+    deduplicate = false,
 ): T[] {
     if (values.length > maximum || values.some((value) =>
         typeof value !== 'string' || !allowed.includes(value as T))) {
         throw new CapabilityValidationError(reason);
     }
     const result = [...new Set(values as T[])];
-    if (result.length !== values.length) throw new CapabilityValidationError(reason);
+    if (!deduplicate && result.length !== values.length) {
+        throw new CapabilityValidationError(reason);
+    }
+    return result;
+}
+
+function normalizeDialogueTextArray(
+    values: unknown[],
+    maximum: number,
+    maxLength: number,
+): string[] {
+    if (values.length > maximum) throw new CapabilityValidationError('too_many_values');
+    const result: string[] = [];
+    const seen = new Set<string>();
+    for (const value of values) {
+        if (typeof value !== 'string') throw new CapabilityValidationError('invalid_text_value');
+        const cleaned = cleanText(value, maxLength);
+        const key = cleaned.toLocaleLowerCase('en-US');
+        if (!cleaned) throw new CapabilityValidationError('invalid_text_value');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(cleaned);
+    }
     return result;
 }
 
