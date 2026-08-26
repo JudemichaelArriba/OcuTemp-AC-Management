@@ -213,21 +213,18 @@ export function validateDialoguePlan(value: unknown): DialoguePlan {
 }
 
 function validateDialoguePart(value: unknown, index: number): DialoguePart {
-    const keys = ['domain', 'intent', 'concepts', 'roomNames', 'reference',
+    const keys = ['domain', 'intent', 'concepts', 'roomNames', 'helpTopic', 'reference',
         'referencePartId', 'ordinal', 'freshness', 'presentationIntent'];
     if (!isRecord(value) || !hasExactKeys(value, keys) ||
         typeof value['domain'] !== 'string' ||
-        !SYSTEM_DOMAINS.includes(value['domain'] as SystemDomain) ||
         typeof value['intent'] !== 'string' ||
-        !SYSTEM_OPERATIONS.includes(value['intent'] as SystemOperation) ||
-        !Array.isArray(value['concepts']) || value['concepts'].length < 1 ||
+        !Array.isArray(value['concepts']) ||
         value['concepts'].length > MAX_PART_FIELDS || !Array.isArray(value['roomNames']) ||
+        typeof value['helpTopic'] !== 'string' ||
         typeof value['reference'] !== 'string' ||
         !['none', 'previous_request', 'previous_result', 'prior_part'].includes(value['reference']) ||
         typeof value['referencePartId'] !== 'string' ||
-        !['', ...CHAT_PART_IDS].includes(value['referencePartId'] as ChatPartId) ||
         typeof value['ordinal'] !== 'number' || !Number.isInteger(value['ordinal']) ||
-        value['ordinal'] < 0 || value['ordinal'] > 3 ||
         typeof value['freshness'] !== 'string' ||
         !DIALOGUE_FRESHNESS.includes(value['freshness'] as DialogueFreshness) ||
         typeof value['presentationIntent'] !== 'string' ||
@@ -235,10 +232,15 @@ function validateDialoguePart(value: unknown, index: number): DialoguePart {
             .includes(value['presentationIntent'])) {
         throw new CapabilityValidationError('invalid_dialogue_part');
     }
+    const domain = normalizeDialogueDomain(value['domain']);
+    const intent = normalizeDialogueOperation(value['intent']);
     const roomNames = normalizeDialogueTextArray(value['roomNames'], MAX_EXPLICIT_ROOMS, 100);
     let reference = value['reference'] as DialoguePart['reference'];
-    let referencePartId = value['referencePartId'] as DialoguePart['referencePartId'];
-    let ordinal = value['ordinal'] as DialoguePart['ordinal'];
+    let referencePartId: DialoguePart['referencePartId'] =
+        CHAT_PART_IDS.includes(value['referencePartId'] as ChatPartId)
+        ? value['referencePartId'] as ChatPartId : '';
+    let ordinal = value['ordinal'] >= 0 && value['ordinal'] <= 3
+        ? value['ordinal'] as DialoguePart['ordinal'] : 0;
 
     // Explicit room names make the part self-contained. Other reference fields are
     // formatting defaults, so normalize them before enforcing semantic relationships.
@@ -252,19 +254,68 @@ function validateDialoguePart(value: unknown, index: number): DialoguePart {
         CHAT_PART_IDS.indexOf(referencePartId) >= index)) {
         throw new CapabilityValidationError('invalid_dialogue_reference');
     }
-    const concepts = normalizeEnumArray(value['concepts'], SYSTEM_FIELDS, MAX_PART_FIELDS,
-        'invalid_dialogue_concepts', true);
+    const concepts = normalizeDialogueConcepts(value['concepts']);
+    const helpTopic = domain === 'app_help' ? cleanText(value['helpTopic'], 80) : '';
     return {
-        domain: value['domain'] as SystemDomain,
-        intent: value['intent'] as SystemOperation,
+        domain,
+        intent,
         concepts,
         roomNames,
+        helpTopic,
         reference,
         referencePartId,
         ordinal,
         freshness: value['freshness'] as DialogueFreshness,
         presentationIntent: value['presentationIntent'] as DialoguePart['presentationIntent'],
     };
+}
+
+function normalizeDialogueDomain(value: string): SystemDomain {
+    const token = normalizeDialogueToken(value);
+    if (SYSTEM_DOMAINS.includes(token as SystemDomain)) return token as SystemDomain;
+    const aliases: Readonly<Record<string, SystemDomain>> = {
+        room: 'rooms', device: 'devices', telemetry: 'measurements', measurement: 'measurements',
+        schedule: 'schedules', energy_usage: 'energy', climate: 'climate_suggestions',
+        events: 'decision_events', help: 'app_help', system_help: 'app_help',
+        capabilities: 'assistant_capabilities', account: 'own_account',
+    };
+    const domain = aliases[token];
+    if (!domain) throw new CapabilityValidationError('unknown_dialogue_domain');
+    return domain;
+}
+
+function normalizeDialogueOperation(value: string): SystemOperation {
+    const token = normalizeDialogueToken(value);
+    if (SYSTEM_OPERATIONS.includes(token as SystemOperation)) return token as SystemOperation;
+    const aliases: Readonly<Record<string, SystemOperation>> = {
+        get: 'detail', retrieve: 'detail', show: 'detail', describe: 'explain',
+        definition: 'explain', rank: 'compare', ranking: 'compare', help: 'how_to',
+        greeting: 'greet', acknowledgement: 'greet', request_clarification: 'clarify',
+    };
+    return aliases[token] ?? 'detail';
+}
+
+function normalizeDialogueConcepts(values: unknown[]): SystemField[] {
+    const aliases: Readonly<Record<string, SystemField>> = {
+        online_devices: 'online_device_count', online_rooms: 'online_device_count',
+        device_online_status: 'device_status', energy_usage: 'estimated_kwh',
+        ranking: 'energy_rank', rank: 'energy_rank', room: 'room_name',
+        password: 'help_topic', help: 'help_topic',
+    };
+    const fields: SystemField[] = [];
+    for (const value of values) {
+        if (typeof value !== 'string') continue;
+        const token = normalizeDialogueToken(value);
+        const field = SYSTEM_FIELDS.includes(token as SystemField)
+            ? token as SystemField : aliases[token];
+        if (field && !fields.includes(field)) fields.push(field);
+    }
+    return fields;
+}
+
+function normalizeDialogueToken(value: string): string {
+    return cleanText(value, 100).toLocaleLowerCase('en-US')
+        .replace(/[\s-]+/gu, '_').replace(/[^a-z0-9_]/gu, '');
 }
 
 /**
@@ -290,11 +341,12 @@ export function compileSystemQueryPlan(
             deniedParts.push({ partId: part.partId, reason: 'role_not_permitted' });
             continue;
         }
+        if (part.needsClarification) continue;
         if (part.domain === 'app_help' && !helpTopicAllowed(part, principal.role)) {
             deniedParts.push({ partId: part.partId, reason: 'help_topic_not_permitted' });
             continue;
         }
-        if (part.needsClarification || capability.source === 'principal' ||
+        if (capability.source === 'principal' ||
             capability.source === 'deterministic') continue;
         tools.push(compileTool(part, capability.source));
 

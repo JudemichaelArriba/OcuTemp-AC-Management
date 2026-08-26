@@ -232,6 +232,7 @@ export interface DialoguePart {
     readonly intent: SystemOperation;
     readonly concepts: SystemField[];
     readonly roomNames: string[];
+    readonly helpTopic: string;
     readonly reference: 'none' | 'previous_request' | 'previous_result' | 'prior_part';
     readonly referencePartId: '' | ChatPartId;
     readonly ordinal: 0 | 1 | 2 | 3;

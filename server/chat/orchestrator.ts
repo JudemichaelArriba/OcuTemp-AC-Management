@@ -2,6 +2,7 @@ import type { FirebaseRestClient } from './firebase-rest.js';
 import {
     CAPABILITY_REGISTRY,
     CapabilityValidationError,
+    HELP_TOPIC_ROLES,
     capabilitiesForRole,
     compileSystemQueryPlan,
     plannerCapabilitySlice,
@@ -681,6 +682,7 @@ interface DialoguePartOptions {
     readonly freshness?: DialoguePart['freshness'];
     readonly presentationIntent?: DialoguePart['presentationIntent'];
     readonly reference?: DialoguePart['reference'];
+    readonly helpTopic?: string;
 }
 
 function dialoguePart(options: DialoguePartOptions): DialoguePart {
@@ -689,6 +691,7 @@ function dialoguePart(options: DialoguePartOptions): DialoguePart {
         intent: options.intent,
         concepts: options.concepts,
         roomNames: [],
+        helpTopic: options.helpTopic ?? '',
         reference: 'none',
         referencePartId: '',
         ordinal: 0,
@@ -735,7 +738,7 @@ function normalizeDialoguePlan(
     const validated = validateDialoguePlan(dialogue);
     const parts = validated.parts.map((dialogueValue, index) =>
         normalizeDialoguePart(validated, dialogueValue, index, message, user, state));
-    return validateSystemQueryPlan({ parts });
+    return validateSystemQueryPlan({ parts: coalesceFacilityCounts(parts) });
 }
 
 function normalizeDialoguePart(
@@ -744,7 +747,7 @@ function normalizeDialoguePart(
     index: number,
     message: string,
     _user: ChatPrincipal,
-    _state: ChatStatePayload | null,
+    state: ChatStatePayload | null,
 ): SystemQueryPart {
     const partId = `part-${index + 1}` as ChatPartId;
     const act = plan.act;
@@ -755,39 +758,117 @@ function normalizeDialoguePart(
         }, partId);
     }
 
-    const capability = CAPABILITY_REGISTRY.find((candidate) =>
-        candidate.domain === dialogue.domain);
-    if (!capability) throw new CapabilityValidationError('unknown_dialogue_domain');
-    const operation = capability.operations.includes(dialogue.intent)
-        ? dialogue.intent
-        : defaultOperationFor(dialogue.domain, act, capability.operations);
     const normalizedMessage = cleanText(message, 2_000).toLocaleLowerCase('en-US');
+    const connectivityQuestion = asksAboutDeviceConnectivity(normalizedMessage);
+    const requestedAcPower = requestedRoomAcPower(normalizedMessage);
+    const requestedOccupancy = requestedRoomOccupancy(normalizedMessage);
+    const energyWinnerQuestion = asksForEnergyWinner(normalizedMessage);
+    const latestReference = latestReferenceableResult(state)?.result;
+    const inferredHelpTopic = resolveHelpTopic(dialogue.helpTopic, normalizedMessage);
+    const requestsRoomTotal = /\b(how many|number of|total|configured)\b.*\brooms?\b/u
+        .test(normalizedMessage);
+    const explicitRoomCountPart = dialogue.domain === 'rooms' &&
+        dialogue.concepts.includes('room_count') && requestsRoomTotal;
+    const repairConnectivityDomain = connectivityQuestion && !explicitRoomCountPart &&
+        ['rooms', 'devices', 'conversation', 'unsupported'].includes(dialogue.domain);
+    let domain: SystemDomain = repairConnectivityDomain
+        ? 'devices' : dialogue.domain;
+    let intent: SystemOperation = dialogue.intent;
+    let concepts = [...dialogue.concepts];
+    let presentationIntent = dialogue.presentationIntent;
+    let reference = dialogue.reference;
+    let ordinal = dialogue.ordinal;
+
+    if (requestedAcPower !== null &&
+        ['rooms', 'devices', 'ac_control', 'conversation', 'unsupported'].includes(domain)) {
+        domain = 'ac_control';
+        intent = 'list';
+        concepts = ['room_name', 'ac_power', 'device_status'];
+        presentationIntent = 'prose';
+    }
+
+    if (requestedOccupancy !== null &&
+        ['rooms', 'devices', 'occupancy', 'conversation', 'unsupported'].includes(domain)) {
+        domain = 'occupancy';
+        intent = 'list';
+        concepts = ['room_name', 'occupancy', 'device_status'];
+        presentationIntent = 'prose';
+    }
+
+    if (inferredHelpTopic && asksForAppHelp(normalizedMessage)) {
+        domain = 'app_help';
+        intent = 'how_to';
+        concepts = ['help_topic'];
+        presentationIntent = 'short_list';
+        reference = 'none';
+        ordinal = 0;
+    }
+
+    if (connectivityQuestion && domain === 'devices') {
+        const stateCountField = connectivityCountField(normalizedMessage);
+        if (requestsRoomTotal) {
+            concepts = uniqueFields([...concepts, 'room_count', stateCountField]);
+        }
+        const combinedCounts = concepts.includes('room_count') &&
+            concepts.some((field) => ['online_device_count', 'stale_device_count',
+                'offline_device_count'].includes(field));
+        if (combinedCounts) {
+            intent = 'count';
+        } else if (asksForConnectivityList(normalizedMessage)) {
+            intent = 'list';
+            concepts = ['room_name', 'device_status'];
+        } else {
+            intent = 'count';
+            concepts = [stateCountField];
+        }
+        presentationIntent = 'prose';
+    }
+    if (energyWinnerQuestion && (domain === 'energy' || latestReference?.subject === 'energy')) {
+        domain = 'energy';
+        intent = 'compare';
+        concepts = uniqueFields([...concepts, 'room_name', 'estimated_kwh', 'energy_rank']);
+        presentationIntent = 'prose';
+        ordinal = 1;
+        if (reference === 'none' && latestReference?.subject === 'energy' &&
+            !mentionsExplicitEnergyPeriod(normalizedMessage)) {
+            reference = 'previous_request';
+        }
+    }
+
+    const capability = CAPABILITY_REGISTRY.find((candidate) =>
+        candidate.domain === domain);
+    if (!capability) throw new CapabilityValidationError('unknown_dialogue_domain');
+    const operation = capability.operations.includes(intent)
+        ? intent
+        : defaultOperationFor(domain, act, capability.operations);
     const freshness = requestsCurrentRefresh(normalizedMessage) &&
-        liveDataDomain(dialogue.domain)
+        liveDataDomain(domain)
         ? 'current'
         : dialogue.freshness;
-    let fields = dialogue.concepts.filter((field) => capability.fields.includes(field));
-    fields = applyFreshnessToFields(dialogue.domain, freshness, fields);
+    let fields = concepts.filter((field) => capability.fields.includes(field));
+    fields = applyFreshnessToFields(domain, freshness, fields);
     const mandatoryCountFields: Partial<Record<SystemDomain, SystemField>> = {
         rooms: 'room_count', devices: 'device_count', schedules: 'schedule_count',
     };
-    if (operation === 'count' && mandatoryCountFields[dialogue.domain] &&
+    if (operation === 'count' && mandatoryCountFields[domain] &&
         !fields.some((field) => field.endsWith('_count'))) {
-        fields = [mandatoryCountFields[dialogue.domain]!, ...fields];
+        fields = [mandatoryCountFields[domain]!, ...fields];
     }
-    if (fields.length === 0) fields = defaultFieldsFor(dialogue.domain, operation);
+    if (fields.length === 0) fields = defaultFieldsFor(domain, operation);
     fields = uniqueFields(fields.filter((field) => capability.fields.includes(field))).slice(0, 8);
     if (fields.length === 0) throw new CapabilityValidationError('no_permitted_dialogue_fields');
 
     const roomNames = uniqueStrings(dialogue.roomNames
         .map((name) => cleanText(name, 100))).slice(0, 50);
-    let reference = freshness === 'current' &&
-        dialogue.reference === 'previous_result'
+    reference = freshness === 'current' &&
+        reference === 'previous_result'
         ? 'previous_request'
-        : dialogue.reference;
+        : reference;
     if (roomNames.length > 0) reference = 'none';
     const inventory: SystemQueryPart['scope']['inventory'] =
-        configuredDomain(dialogue.domain) || operation === 'count' ? 'all' : 'active';
+        requestedAcPower !== null || requestedOccupancy !== null ||
+            configuredDomain(domain) || operation === 'count'
+            ? 'all' : 'active';
     const scopeValue: SystemQueryPart['scope'] = roomNames.length > 0
         ? scope('named_rooms', roomNames, inventory)
         : reference === 'prior_part'
@@ -795,43 +876,54 @@ function normalizeDialoguePart(
                 referencePartId: dialogue.referencePartId }
             : reference === 'previous_request' || reference === 'previous_result'
                 ? scope(reference, [], inventory)
-                : dialogue.domain === 'own_account'
+                : domain === 'own_account'
                     ? scope('own_account', [], 'all')
                     : scope('facility', [], inventory);
     const filters: SystemFilter[] = [];
+    const connectivityState = requestedConnectivityState(normalizedMessage);
+    if (connectivityQuestion && domain === 'devices' &&
+        asksForConnectivityList(normalizedMessage) && connectivityState) {
+        filters.push(stringFilter('device_status', connectivityState));
+    }
+    if (requestedAcPower !== null && domain === 'ac_control') {
+        filters.push(booleanFilter('ac_power', requestedAcPower));
+    }
+    if (requestedOccupancy !== null && domain === 'occupancy') {
+        filters.push(booleanFilter('occupancy', requestedOccupancy));
+    }
     let clarification = '';
-    if (dialogue.domain === 'app_help') {
-        const topic = deterministicHelpTopic(normalizedMessage);
+    if (domain === 'app_help') {
+        const topic = inferredHelpTopic;
         if (topic) filters.push(stringFilter('help_topic', topic));
         else clarification = clarification ||
             'Please name the OcuTemp feature you want step-by-step help with.';
     }
-    const ranking = dialogue.domain === 'energy' &&
+    const ranking = domain === 'energy' &&
         (operation === 'compare' || fields.includes('energy_rank'));
     if (ranking && !fields.includes('estimated_kwh')) {
         fields = uniqueFields([...fields, 'estimated_kwh']).slice(0, 8);
     }
-    const singleRank = ranking && (dialogue.ordinal > 0 ||
+    const singleRank = ranking && (ordinal > 0 || energyWinnerQuestion ||
         /\b(first|top(?:-ranked)?|rank(?:ed)? one|number one)\b/u.test(normalizedMessage) ||
         (act === 'follow_up' && reference !== 'none'));
     const followReference: SystemQueryPart['followUpReference'] = {
         kind: reference,
         partId: reference === 'prior_part' ? dialogue.referencePartId : '',
-        ordinal: dialogue.ordinal,
+        ordinal,
     };
     return part({
-        domain: dialogue.domain,
+        domain,
         operation,
         fields,
         filters,
         scope: scopeValue,
-        timeRange: dialogue.domain === 'energy' || dialogue.domain === 'decision_events'
+        timeRange: domain === 'energy' || domain === 'decision_events'
             ? energyRangeFor(normalizedMessage)
             : defaultTimeRange(),
         sort: ranking
             ? { field: 'estimated_kwh', direction: 'desc' }
             : { field: fields[0]!, direction: 'none' },
-        outputPreference: outputPreferenceFor(dialogue.presentationIntent),
+        outputPreference: outputPreferenceFor(presentationIntent),
         followUpReference: followReference,
         limit: singleRank ? 1 : operation === 'report' ? 50 : 25,
         clarification,
@@ -916,8 +1008,109 @@ function requestsCurrentRefresh(message: string): boolean {
     return /\b(now|currently|right now|rn|at the moment)\b/u.test(message);
 }
 
+function asksAboutDeviceConnectivity(message: string): boolean {
+    return requestedConnectivityState(message) !== null;
+}
+
+function requestedConnectivityState(message: string): 'online' | 'stale' | 'offline' | null {
+    if (/\b(online|connected|live device|live unit)\b/u.test(message)) return 'online';
+    if (/\b(stale)\b/u.test(message)) return 'stale';
+    if (/\b(offline|disconnected|down)\b/u.test(message)) return 'offline';
+    return null;
+}
+
+function requestedRoomAcPower(message: string): boolean | null {
+    if (/\boverrides?\b/u.test(message)) return null;
+    const roomContext = /\brooms?\b/u.test(message);
+    if ((roomContext && /\b(active|running)\b/u.test(message)) ||
+        /\b(?:ac|air\s*condition(?:er|ing)?)\b.*\b(on|running)\b/u.test(message)) {
+        return true;
+    }
+    if ((roomContext && /\bidle\b/u.test(message)) ||
+        /\b(?:ac|air\s*condition(?:er|ing)?)\b.*\boff\b/u.test(message)) {
+        return false;
+    }
+    return null;
+}
+
+function requestedRoomOccupancy(message: string): boolean | null {
+    const roomContext = /\brooms?\b/u.test(message);
+    const asksReadingAvailability = /\boccupancy\s+(?:reading|readings|data)\b.*\bavailable\b/u
+        .test(message) || /\bavailable\b.*\boccupancy\s+(?:reading|readings|data)\b/u
+        .test(message);
+    if (asksReadingAvailability) return null;
+    const occupied = roomContext && /\boccupied\b/u.test(message);
+    const available = roomContext && /\b(available|unoccupied|vacant|free)\b/u.test(message);
+    if (occupied === available) return null;
+    return occupied;
+}
+
+function asksForConnectivityList(message: string): boolean {
+    return /\b(which|list|show|name|what)\b.*\b(rooms?|devices?|units?)\b/u.test(message) ||
+        /\b(rooms?|devices?|units?)\b.*\b(which|list|show|name)\b/u.test(message);
+}
+
+function asksForAppHelp(message: string): boolean {
+    return /\b(where|how\s+to|how\s+(?:do|can)\s+i|steps?|guide|help)\b/u.test(message);
+}
+
+function connectivityCountField(message: string): SystemField {
+    const state = requestedConnectivityState(message);
+    if (state === 'offline') return 'offline_device_count';
+    if (state === 'stale') return 'stale_device_count';
+    return 'online_device_count';
+}
+
+function asksForEnergyWinner(message: string): boolean {
+    return /\b(rank(?:ed)? first|first place|number one|top(?:-ranked)?|highest|most|greatest|largest)\b/u
+        .test(message) && /\b(energy|usage|consumer|consumption|kwh|rank)\b/u.test(message);
+}
+
+function mentionsExplicitEnergyPeriod(message: string): boolean {
+    return /\b(today|this week|last week|last 7 days?|this month|last month|last 12 months?|past year|this year|whole year|current year|yearly|annual)\b/u
+        .test(message) || /\b\d{4}-\d{2}-\d{2}\b/u.test(message);
+}
+
 function uniqueFields(fields: readonly SystemField[]): SystemField[] {
     return [...new Set(fields)];
+}
+
+function coalesceFacilityCounts(parts: readonly SystemQueryPart[]): SystemQueryPart[] {
+    if (parts.length !== 2 || !parts.every((item) => item.operation === 'count' &&
+        (item.domain === 'rooms' || item.domain === 'devices') &&
+        item.filters.length === 0 && item.followUpReference.kind === 'none') ||
+        queryScopeSignature(parts[0]!) !== queryScopeSignature(parts[1]!) ||
+        queryRangeSignature(parts[0]!) !== queryRangeSignature(parts[1]!)) {
+        return [...parts];
+    }
+    const deviceCapability = CAPABILITY_REGISTRY.find((item) => item.domain === 'devices');
+    const fields = uniqueFields(parts.flatMap((item) => item.fields));
+    if (!deviceCapability || fields.some((field) => !deviceCapability.fields.includes(field))) {
+        return [...parts];
+    }
+    const first = parts[0]!;
+    return [{
+        ...first,
+        partId: 'part-1',
+        domain: 'devices',
+        fields,
+        sort: { field: fields[0]!, direction: 'none' },
+        outputPreference: 'text',
+        limit: Math.max(first.limit, parts[1]!.limit),
+    }];
+}
+
+function queryScopeSignature(partValue: SystemQueryPart): string {
+    return JSON.stringify({
+        kind: partValue.scope.kind,
+        inventory: partValue.scope.inventory,
+        roomNames: partValue.scope.roomNames.map((name) =>
+            name.toLocaleLowerCase('en-US')),
+    });
+}
+
+function queryRangeSignature(partValue: SystemQueryPart): string {
+    return JSON.stringify(partValue.timeRange);
 }
 
 
@@ -973,6 +1166,11 @@ function defaultTimeRange(): SystemTimeRange {
 function stringFilter(field: SystemField, value: string): SystemFilter {
     return { field, operator: 'eq', valueType: 'string', stringValue: value,
         numberValue: 0, booleanValue: false, stringValues: [] };
+}
+
+function booleanFilter(field: SystemField, value: boolean): SystemFilter {
+    return { field, operator: 'eq', valueType: 'boolean', stringValue: '',
+        numberValue: 0, booleanValue: value, stringValues: [] };
 }
 
 function buildPartWork(
@@ -1046,6 +1244,28 @@ function augmentGroundingFacts(
                     id: `server.${part.partId}.room_names`,
                     partId: part.partId,
                     statement: `The matching configured room names are: ${presentation.rooms.map((room) => room.roomName).join('; ')}.`,
+                });
+            }
+            const requestedPower = requestedAcPowerFilter(part);
+            if (presentation.rooms.length === 0 && requestedPower !== null &&
+                answerability !== 'no_online_reading') {
+                facts.push({
+                    id: `server.${part.partId}.ac_power_match`,
+                    partId: part.partId,
+                    statement: requestedPower
+                        ? 'No configured room with a current online reading has its AC power on.'
+                        : 'No configured room with a current online reading has its AC power off.',
+                });
+            }
+            const requestedOccupancyValue = requestedOccupancyFilter(part);
+            if (presentation.rooms.length === 0 && requestedOccupancyValue !== null &&
+                answerability !== 'no_online_reading') {
+                facts.push({
+                    id: `server.${part.partId}.occupancy_match`,
+                    partId: part.partId,
+                    statement: requestedOccupancyValue
+                        ? 'No configured room with a current online reading is occupied.'
+                        : 'No configured room with a current online reading is available or unoccupied.',
                 });
             }
             const statuses = presentation.rooms.flatMap((room) => room.values)
@@ -1454,6 +1674,18 @@ function roomDataAnswer(
     caveats: string[],
 ): ChatAnswerPart {
     if (presentation.rooms.length === 0) {
+        const requestedPower = requestedAcPowerFilter(work.requested);
+        if (requestedPower !== null) {
+            return answer(work.requested.partId, requestedPower
+                ? 'No room with a current online reading has its AC on right now.'
+                : 'No room with a current online reading has its AC off right now.', [], caveats);
+        }
+        const requestedOccupancyValue = requestedOccupancyFilter(work.requested);
+        if (requestedOccupancyValue !== null) {
+            return answer(work.requested.partId, requestedOccupancyValue
+                ? 'No room with a current online reading is occupied right now.'
+                : 'No room with a current online reading is available right now.', [], caveats);
+        }
         return answer(work.requested.partId, 'No rooms matched the requested OcuTemp scope.', [], caveats);
     }
     const relevant = presentation.rooms.map((room) => ({
@@ -1479,6 +1711,18 @@ function roomDataAnswer(
         items.length <= 6
             ? [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'neutral' }]
             : [], caveats);
+}
+
+function requestedAcPowerFilter(partValue: SystemQueryPart): boolean | null {
+    const filter = partValue.filters.find((item) => item.field === 'ac_power' &&
+        item.operator === 'eq' && item.valueType === 'boolean');
+    return filter?.booleanValue ?? null;
+}
+
+function requestedOccupancyFilter(partValue: SystemQueryPart): boolean | null {
+    const filter = partValue.filters.find((item) => item.field === 'occupancy' &&
+        item.operator === 'eq' && item.valueType === 'boolean');
+    return filter?.booleanValue ?? null;
 }
 
 function scheduleAnswer(
@@ -2102,12 +2346,13 @@ function boundedProviderTimeout(
     return timeoutMs;
 }
 
-function deterministicHelpTopic(message: string): string | null {
-    if (!/\b(how (do|can) i|where (do|can) i|steps? to)\b/u.test(message)) return null;
-    if (/change.*password/u.test(message)) return 'change-password';
-    if (/add|create.*room/u.test(message)) return 'add-room';
-    if (/edit|update.*room/u.test(message)) return 'edit-room';
-    if (/assign.*floor|floor.*assign/u.test(message)) return 'assign-floor-plan-cell';
+function resolveHelpTopic(plannedTopic: string, message: string): string | null {
+    const planned = normalizeHelpTopic(plannedTopic);
+    if (planned) return planned;
+    if (/\b(password|change\s+pass(?:word)?)\b/u.test(message)) return 'change-password';
+    if (/\b(add|create|new)\b.*\broom\b/u.test(message)) return 'add-room';
+    if (/\b(edit|update|modify)\b.*\broom\b/u.test(message)) return 'edit-room';
+    if (/\bassign\b.*\bfloor|\bfloor\b.*\bassign/u.test(message)) return 'assign-floor-plan-cell';
     if (/floor.*legend/u.test(message)) return 'floor-plan-legend';
     if (/schedule/u.test(message)) return 'manage-schedules';
     if (/approve.*staff/u.test(message)) return 'approve-staff';
@@ -2116,6 +2361,22 @@ function deterministicHelpTopic(message: string): string | null {
     if (/override/u.test(message)) return 'manual-override';
     if (/ocu.?guide|chat/u.test(message)) return 'ocu-guide';
     return null;
+}
+
+function normalizeHelpTopic(value: string): string | null {
+    const token = cleanText(value, 80).toLocaleLowerCase('en-US')
+        .replace(/[\s_]+/gu, '-');
+    if (Object.prototype.hasOwnProperty.call(HELP_TOPIC_ROLES, token)) return token;
+    const aliases: Readonly<Record<string, string>> = {
+        password: 'change-password', 'change-pass': 'change-password',
+        room: 'add-room', 'room-add': 'add-room', 'create-room': 'add-room',
+        'room-edit': 'edit-room', 'update-room': 'edit-room',
+        'floor-plan': 'assign-floor-plan-cell', schedules: 'manage-schedules',
+        energy: 'view-energy-reports', overrides: 'manual-override', chat: 'ocu-guide',
+    };
+    const resolved = aliases[token];
+    return resolved && Object.prototype.hasOwnProperty.call(HELP_TOPIC_ROLES, resolved)
+        ? resolved : null;
 }
 
 function explicitRoomNames(message: string): string[] {

@@ -1659,7 +1659,12 @@ async function executeTelemetry(
     const requiresCurrentReading = plan.fields.some((field) => [
         'temperature', 'humidity', 'condition', 'occupancy', 'ac_power',
     ].includes(field));
-    const hasCurrentReading = limited.some((room) => room.measurementStatus === 'current');
+    const filtersCurrentState = plan.filters.some((filter) => [
+        'temperature', 'humidity', 'condition', 'occupancy', 'ac_power',
+    ].includes(filter.field));
+    const currentReadingScope = filtersCurrentState ? loaded.rooms : limited;
+    const hasCurrentReading = currentReadingScope.some((room) =>
+        room.measurementStatus === 'current');
     if (requiresCurrentReading && !hasCurrentReading) {
         facts.unshift({
             id: `t${ordinal}.current.unavailable`,
