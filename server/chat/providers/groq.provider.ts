@@ -11,7 +11,7 @@ export class GroqProvider implements ChatProvider {
     readonly id = 'groq' as const;
 
     async generateStructured<T>(request: StructuredGenerationRequest): Promise<T> {
-        const apiKey = process.env['GROQ_API_KEY'];
+        const apiKey = process.env['GROQ_API_KEY']?.trim();
         if (!apiKey) throw new ProviderRecoverableError(this.id, 'unavailable');
 
         const groq = createGroq({ apiKey });
@@ -26,14 +26,15 @@ export class GroqProvider implements ChatProvider {
                     description: request.schemaDescription,
                 }),
                 maxOutputTokens: request.maxOutputTokens,
-                temperature: request.temperature,
+                ...(request.temperature === undefined
+                    ? {}
+                    : { temperature: request.temperature }),
                 maxRetries: 0,
                 timeout: { totalMs: request.timeoutMs },
                 abortSignal: request.abortSignal,
                 providerOptions: {
                     groq: {
                         reasoningEffort: request.reasoningEffort ?? 'low',
-                        reasoningFormat: 'hidden',
                         structuredOutputs: true,
                         strictJsonSchema: true,
                     },

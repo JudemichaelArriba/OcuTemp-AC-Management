@@ -17,9 +17,10 @@ import { GeminiProvider } from './providers/gemini.provider.js';
 import { GroqProvider } from './providers/groq.provider.js';
 import {
     ProviderRecoverableError,
+    ProviderRequestError,
     ProviderResponseError,
 } from './providers/provider.interface.js';
-import { generateWithFallback } from './retry.js';
+import { BothProvidersFailedError, generateWithFallback } from './retry.js';
 import { trustedSystemConceptFacts } from './system-concepts.js';
 import { ANSWER_OUTPUT_SCHEMA, DIALOGUE_PLAN_SCHEMA } from './tools/schema.js';
 import { executeToolPlans } from './tools/executor.js';
@@ -119,8 +120,8 @@ interface PartWork {
 
 interface PlannerOutcome {
     readonly plan: DialoguePlan;
-    readonly attempts: 0 | 1 | 2;
-    readonly source: 'primary' | 'fallback' | 'emergency';
+    readonly attempts: 1 | 2;
+    readonly source: 'primary' | 'fallback';
 }
 
 const geminiProvider = new GeminiProvider();
@@ -132,7 +133,7 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
     const deadlineAtMs = input.deadlineAtMs ?? startedAt + 20_000;
     const explicitQuestionCount = countExplicitQuestions(input.message);
     let dialoguePlan: DialoguePlan;
-    let dialogueSource: 'safety' | 'semantic' | 'provider_fallback' | 'emergency';
+    let dialogueSource: 'safety' | 'semantic' | 'provider_fallback';
     let plannerAttempts: 0 | 1 | 2 = 0;
     const safety = safetyDialoguePlan(input.message);
     if (explicitQuestionCount > 3) {
@@ -145,8 +146,7 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         const planned = await planWithProviders(input, deadlineAtMs, startedAt);
         dialoguePlan = planned.plan;
         plannerAttempts = planned.attempts;
-        dialogueSource = planned.source === 'primary' ? 'semantic'
-            : planned.source === 'fallback' ? 'provider_fallback' : 'emergency';
+        dialogueSource = planned.source === 'primary' ? 'semantic' : 'provider_fallback';
     }
 
     let requestedPlan: SystemQueryPlan;
@@ -156,9 +156,26 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
         compileSystemQueryPlan(requestedPlan, input.user);
     } catch (error: unknown) {
         if (!(error instanceof CapabilityValidationError)) throw error;
-        const repaired = plannerAttempts < 2
-            ? await repairDialoguePlan(input, error.reason, deadlineAtMs, startedAt)
-            : null;
+        if (plannerAttempts === 0) throw error;
+        const invalidPlanProvider = plannerAttempts === 1 ? 'gemini' : 'groq';
+        logSafe(input.requestId, 'planning_semantics', {
+            provider: invalidPlanProvider,
+            safeFailureCategory: 'invalid_semantics',
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: plannerAttempts === 1 ? 'repair_started' : 'repair_unavailable',
+        });
+        if (plannerAttempts === 2) {
+            throw new BothProvidersFailedError(
+                new ProviderResponseError('gemini', 'generated_output_mismatch'),
+                new ProviderResponseError('groq', 'invalid_semantics', error),
+            );
+        }
+        const repaired = await repairDialoguePlan(
+            input,
+            error.reason,
+            deadlineAtMs,
+            startedAt,
+        );
         if (repaired) {
             try {
                 dialoguePlan = repaired;
@@ -167,16 +184,16 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
                 compileSystemQueryPlan(requestedPlan, input.user);
             } catch (repairError: unknown) {
                 if (!(repairError instanceof CapabilityValidationError)) throw repairError;
-                dialoguePlan = emergencyDialoguePlan(input.message, input.state, input.user.role);
-                requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
-                    input.state);
-                dialogueSource = 'emergency';
+                throw new BothProvidersFailedError(
+                    new ProviderResponseError('gemini', 'invalid_semantics', error),
+                    new ProviderResponseError('groq', 'invalid_semantics', repairError),
+                );
             }
         } else {
-            dialoguePlan = emergencyDialoguePlan(input.message, input.state, input.user.role);
-            requestedPlan = normalizeDialoguePlan(dialoguePlan, input.message, input.user,
-                input.state);
-            dialogueSource = 'emergency';
+            throw new BothProvidersFailedError(
+                new ProviderResponseError('gemini', 'invalid_semantics', error),
+                new ProviderRecoverableError('groq', 'timeout'),
+            );
         }
     }
 
@@ -329,7 +346,6 @@ async function planWithProviders(
             schemaName: 'dialogue_plan',
             schemaDescription: 'A compact semantic interpretation of an OcuTemp turn.',
             maxOutputTokens: 600,
-            temperature: 0,
             timeoutMs: boundedProviderTimeout(PLANNER_PRIMARY_MS, deadlineAtMs,
                 PLANNING_RESERVE_MS, 'gemini'),
             reasoningEffort: 'low',
@@ -347,11 +363,17 @@ async function planWithProviders(
     }
 
     const failureCategory = plannerFailureCategory(firstFailure);
+    logSafe(input.requestId, 'planning', {
+        provider: 'gemini',
+        safeFailureCategory: failureCategory,
+        durationBucket: durationBucket(Date.now() - startedAt),
+        fallbackOutcome: 'fallback_started',
+    });
     if (deadlineAtMs - Date.now() < 250 + PLANNING_RESERVE_MS) {
-        return emergencyPlannerOutcome(input, startedAt, 'insufficient_time');
+        throw new BothProvidersFailedError(firstFailure,
+            new ProviderRecoverableError('groq', 'timeout'));
     }
-    const semanticRepair = failureCategory === 'invalid_structure' ||
-        failureCategory === 'invalid_semantics';
+    const semanticRepair = failureCategory === 'invalid_semantics';
     const fallbackPrompt = semanticRepair ? JSON.stringify({
         currentManilaDate: manilaDateKey(new Date()),
         callerRole: input.user.role,
@@ -383,8 +405,14 @@ async function planWithProviders(
         return { plan: result, attempts: 2, source: 'fallback' };
     } catch (error: unknown) {
         if (input.abortSignal?.aborted) throw error;
-        return emergencyPlannerOutcome(input, startedAt,
-            plannerFailureCategory(normalizePlannerFailure(error, 'groq')));
+        const fallbackFailure = normalizePlannerFailure(error, 'groq');
+        logSafe(input.requestId, 'planning', {
+            provider: 'groq',
+            safeFailureCategory: plannerFailureCategory(fallbackFailure),
+            durationBucket: durationBucket(Date.now() - startedAt),
+            fallbackOutcome: 'providers_unavailable',
+        });
+        throw new BothProvidersFailedError(firstFailure, fallbackFailure);
     }
 }
 
@@ -429,7 +457,7 @@ async function repairDialoguePlan(
             provider: 'groq',
             safeFailureCategory: plannerFailureCategory(normalizePlannerFailure(error, 'groq')),
             durationBucket: durationBucket(Date.now() - startedAt),
-            fallbackOutcome: 'emergency_fallback',
+            fallbackOutcome: 'repair_failed',
         });
         return null;
     }
@@ -482,6 +510,7 @@ async function writeWithFallback(
         if (abortSignal?.aborted) throw error;
         logSafe(requestId, 'writing', {
             provider: 'none',
+            safeFailureCategory: providerFailureSummary(error),
             domain: work.requested.domain,
             operation: work.requested.operation,
             durationBucket: durationBucket(Date.now() - startedAt),
@@ -675,110 +704,6 @@ function dialogueClarification(
     return { act: 'clarify', clarificationReason: reason, parts: [dialoguePart({
         domain: 'conversation', intent: 'clarify', concepts: ['capabilities'],
     })] };
-}
-
-function emergencyPlannerOutcome(
-    input: RunChatTurnInput,
-    startedAt: number,
-    safeFailureCategory: string,
-): PlannerOutcome {
-    logSafe(input.requestId, 'planning', {
-        provider: 'none',
-        safeFailureCategory,
-        durationBucket: durationBucket(Date.now() - startedAt),
-        fallbackOutcome: 'emergency_fallback',
-    });
-    return {
-        plan: emergencyDialoguePlan(input.message, input.state, input.user.role),
-        attempts: 2,
-        source: 'emergency',
-    };
-}
-
-/** Used only when model planning cannot complete; it is never the normal router. */
-function emergencyDialoguePlan(
-    message: string,
-    state: ChatStatePayload | null,
-    role: ChatPrincipal['role'],
-): DialoguePlan {
-    const normalized = cleanText(message, 2_000).toLocaleLowerCase('en-US');
-    const make = (act: ChatDialogueAct, partValue: DialoguePart): DialoguePlan => ({
-        act, parts: [partValue], clarificationReason: 'none',
-    });
-    if (/^(h+i+|hello+|hey+|good (morning|afternoon|evening))[!.? ]*$/u.test(normalized)) {
-        return make('greet', dialoguePart({
-            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
-        }));
-    }
-    if (/^(thanks?|thank you|ty)[!.? ]*$/u.test(normalized)) {
-        return make('acknowledge', dialoguePart({
-            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
-        }));
-    }
-    if (/\bi (?:am|['’]m) not (?:following up|asking about that)\b/u.test(normalized)) {
-        return make('correct', dialoguePart({
-            domain: 'conversation', intent: 'greet', concepts: ['capabilities'],
-        }));
-    }
-    if (/\bwhat (?:is|does) ocutemp (?:for|do)|\bpurpose of ocutemp\b/u.test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'system_concepts', intent: 'explain', concepts: ['capabilities'],
-        }));
-    }
-    if (/^what (?:is|does) humidity(?: mean)?[?.! ]*$/u.test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'system_concepts', intent: 'explain', concepts: ['humidity'],
-        }));
-    }
-    if (/\bhow many (?:configured )?rooms\b/u.test(normalized) &&
-        /\b(online|connected|live)\b/u.test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'devices', intent: 'count',
-            concepts: ['room_count', 'online_device_count'], freshness: 'current',
-        }));
-    }
-    if (/\bhow many (?:configured )?rooms\b/u.test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'rooms', intent: 'count', concepts: ['room_count'],
-            freshness: 'configured',
-        }));
-    }
-    if (/\b(?:what|which|list).*(?:rooms|spaces).*(?:system|ocutemp)|\bwhat rooms are\b/u
-        .test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'rooms', intent: 'list', concepts: ['room_name', 'room_status'],
-            freshness: 'configured', presentationIntent: 'short_list',
-        }));
-    }
-    if (/\b(staff|accounts?).*\b(awaiting|pending).*\bapproval\b|\bhow many staff accounts\b/u
-        .test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'admin_user_aggregates', intent: 'count',
-            concepts: ['pending_staff_count'],
-        }));
-    }
-    if (/^(what do you mean|really|eh+\??)[?.! ]*$/u.test(normalized)) {
-        const previous = latestReferenceableResult(state);
-        const context = previous ? state?.turns[previous.turnIndex]?.contexts.find((item) =>
-            item.partId === previous.result.sourcePartId) : undefined;
-        if (previous && context) {
-            return make(normalized.startsWith('really') ? 'confirm' : 'elaborate', {
-                ...dialoguePart({
-                    domain: context.domain,
-                    intent: context.operation,
-                    concepts: [...context.fields],
-                    reference: 'previous_result',
-                }),
-                ordinal: 0,
-            });
-        }
-    }
-    if (role === 'staff' && /\b(?:users?|staff accounts?|admins?)\b/u.test(normalized)) {
-        return make('ask', dialoguePart({
-            domain: 'admin_user_aggregates', intent: 'count', concepts: ['user_total'],
-        }));
-    }
-    return dialogueClarification('missing_subject');
 }
 
 function clarificationForReason(reason: DialoguePlan['clarificationReason']): string {
@@ -2126,20 +2051,30 @@ function latestReferenceableResult(
 function normalizePlannerFailure(
     error: unknown,
     provider: 'gemini' | 'groq',
-): ProviderRecoverableError | ProviderResponseError {
-    if (error instanceof ProviderRecoverableError || error instanceof ProviderResponseError) {
+): ProviderRecoverableError | ProviderRequestError | ProviderResponseError {
+    if (error instanceof ProviderRecoverableError || error instanceof ProviderRequestError ||
+        error instanceof ProviderResponseError) {
         return error;
     }
-    return new ProviderResponseError(provider, error);
+    if (error instanceof CapabilityValidationError) {
+        return new ProviderResponseError(provider, 'invalid_semantics', error);
+    }
+    return new ProviderResponseError(provider, 'generated_output_mismatch', error);
 }
 
 function plannerFailureCategory(error: unknown): string {
     if (error instanceof ProviderRecoverableError) return error.category;
-    if (error instanceof ProviderResponseError) {
-        return error.cause instanceof CapabilityValidationError
-            ? 'invalid_semantics' : 'invalid_structure';
+    if (error instanceof ProviderRequestError) return error.category;
+    if (error instanceof ProviderResponseError) return error.category;
+    return 'generated_output_mismatch';
+}
+
+function providerFailureSummary(error: unknown): string {
+    if (error instanceof BothProvidersFailedError) {
+        return `${plannerFailureCategory(error.primaryError)}_then_${
+            plannerFailureCategory(error.fallbackError)}`;
     }
-    return 'invalid_structure';
+    return plannerFailureCategory(error);
 }
 
 function boundedProviderTimeout(

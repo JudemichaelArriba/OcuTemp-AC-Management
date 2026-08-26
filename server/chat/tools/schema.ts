@@ -67,16 +67,14 @@ export const ANSWERABILITY_OUTCOMES: readonly ChatAnswerabilityOutcome[] = [
 const DIALOGUE_PART_SCHEMA = {
     type: 'object', additionalProperties: false,
     properties: {
-        domain: { type: 'string', enum: SYSTEM_DOMAINS },
-        intent: { type: 'string', enum: SYSTEM_OPERATIONS },
-        concepts: { type: 'array', minItems: 1, maxItems: 8, uniqueItems: true,
-            items: { type: 'string', enum: SYSTEM_FIELDS } },
-        roomNames: { type: 'array', maxItems: 50, uniqueItems: true,
-            items: { type: 'string', minLength: 1, maxLength: 100 } },
+        domain: { type: 'string' },
+        intent: { type: 'string' },
+        concepts: { type: 'array', items: { type: 'string' } },
+        roomNames: { type: 'array', items: { type: 'string' } },
         reference: { type: 'string', enum: ['none', 'previous_request',
             'previous_result', 'prior_part'] },
-        referencePartId: { type: 'string', enum: ['', ...CHAT_PART_IDS] },
-        ordinal: { type: 'integer', minimum: 0, maximum: 3 },
+        referencePartId: { type: 'string' },
+        ordinal: { type: 'integer' },
         freshness: { type: 'string', enum: DIALOGUE_FRESHNESS },
         presentationIntent: { type: 'string', enum: [
             'prose', 'short_list', 'comparison', 'ranking', 'trend', 'report',
@@ -90,7 +88,7 @@ export const DIALOGUE_PLAN_SCHEMA: Record<string, unknown> = {
     type: 'object', additionalProperties: false,
     properties: {
         act: { type: 'string', enum: CHAT_DIALOGUE_ACTS },
-        parts: { type: 'array', minItems: 1, maxItems: 3, items: DIALOGUE_PART_SCHEMA },
+        parts: { type: 'array', items: DIALOGUE_PART_SCHEMA },
         clarificationReason: { type: 'string', enum: [
             'none', 'missing_subject', 'missing_room', 'missing_period',
             'ambiguous_reference', 'unrelated_parts',
@@ -99,23 +97,24 @@ export const DIALOGUE_PLAN_SCHEMA: Record<string, unknown> = {
     required: ['act', 'parts', 'clarificationReason'],
 };
 
-const EVIDENCE_REFS_SCHEMA = { type: 'array', minItems: 1, maxItems: 12,
-    uniqueItems: true, items: { type: 'string', minLength: 1, maxLength: 80 } } as const;
+const EVIDENCE_REFS_SCHEMA = {
+    type: 'array', items: { type: 'string' },
+} as const;
 export const ANSWER_OUTPUT_SCHEMA: Record<string, unknown> = {
     type: 'object', additionalProperties: false,
     properties: {
-        clauses: { type: 'array', minItems: 1, maxItems: 4, items: {
+        clauses: { type: 'array', items: {
             type: 'object', additionalProperties: false,
             properties: {
                 role: { type: 'string', enum: ['direct_answer', 'context', 'next_step'] },
-                text: { type: 'string', minLength: 1, maxLength: 600 },
+                text: { type: 'string' },
                 evidenceRefs: EVIDENCE_REFS_SCHEMA,
             }, required: ['role', 'text', 'evidenceRefs'],
         } },
-        highlights: { type: 'array', maxItems: 6, items: {
+        highlights: { type: 'array', items: {
             type: 'object', additionalProperties: false,
             properties: {
-                text: { type: 'string', minLength: 1, maxLength: 240 },
+                text: { type: 'string' },
                 evidenceRefs: EVIDENCE_REFS_SCHEMA,
             }, required: ['text', 'evidenceRefs'],
         } },

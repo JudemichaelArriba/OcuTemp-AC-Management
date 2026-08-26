@@ -162,8 +162,10 @@ function handleError(
     if (error instanceof BothProvidersFailedError) {
         logFailure(requestId, stage, 'providers_unavailable', durationMs);
         return jsonResponse(JSON.stringify({
-            error: { code: 'assistant_unavailable',
-                message: 'OcuGuide is temporarily unavailable. Please try again shortly.' },
+            error: {
+                code: 'assistant_unavailable',
+                message: 'OcuGuide is temporarily unable to interpret requests because its AI providers are unavailable. Please try again shortly.',
+            },
             requestId,
         } satisfies ChatErrorResponse), 503);
     }

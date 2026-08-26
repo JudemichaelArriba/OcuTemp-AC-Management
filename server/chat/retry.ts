@@ -1,5 +1,9 @@
 import type { ChatProvider, ChatProviderId, StructuredGenerationRequest } from './providers/provider.interface.js';
-import { ProviderRecoverableError, ProviderResponseError } from './providers/provider.interface.js';
+import {
+    ProviderRecoverableError,
+    ProviderRequestError,
+    ProviderResponseError,
+} from './providers/provider.interface.js';
 
 export interface GenerateWithFallbackResult<T> {
     readonly result: T;
@@ -35,6 +39,7 @@ export async function generateWithFallback<T>(
         };
     } catch (primaryError: unknown) {
         if (!(primaryError instanceof ProviderRecoverableError) &&
+            !(primaryError instanceof ProviderRequestError) &&
             !(primaryError instanceof ProviderResponseError)) throw primaryError;
         if (request.abortSignal?.aborted) throw primaryError;
         if (options.allowFallback === false) {
@@ -90,7 +95,7 @@ function validateProviderResult<T>(
     try {
         return validate(result);
     } catch (error: unknown) {
-        throw new ProviderResponseError(providerId, error);
+        throw new ProviderResponseError(providerId, 'invalid_semantics', error);
     }
 }
 
