@@ -20,6 +20,7 @@ import {
   RenderableChatMessage,
 } from '../../models/chat.models';
 import { ChatService } from '../../services/chat.service';
+import { ThinkingOrbComponent } from './thinking-orb';
 
 interface ChatSuggestion {
   readonly label: string;
@@ -38,7 +39,7 @@ const RETRYABLE_CHAT_ERROR_CODES = new Set([
 @Component({
   selector: 'app-ocu-guide-conversation',
   standalone: true,
-  imports: [OcuGuideReportComponent],
+  imports: [OcuGuideReportComponent, ThinkingOrbComponent],
   templateUrl: './ocu-guide-conversation.html',
   host: { class: 'block h-full min-h-0' },
   changeDetection: ChangeDetectionStrategy.OnPush,

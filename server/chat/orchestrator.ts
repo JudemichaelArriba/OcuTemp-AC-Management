@@ -729,6 +729,17 @@ function outputPreferenceFor(
     return 'auto';
 }
 
+function explicitPresentationIntent(
+    message: string,
+): DialoguePart['presentationIntent'] | null {
+    const asksForGraph = /\b(graph|chart|visuali[sz]e)\b/u.test(message);
+    if (asksForGraph && /\b(line|trend|timeline|over time)\b/u.test(message)) return 'trend';
+    if (asksForGraph || /\bbar\s+(?:graph|chart)\b/u.test(message)) return 'ranking';
+    if (/\btable\b/u.test(message)) return 'comparison';
+    if (/\b(?:full\s+)?report\b/u.test(message)) return 'report';
+    return null;
+}
+
 function normalizeDialoguePlan(
     dialogue: DialoguePlan,
     message: string,
@@ -834,6 +845,17 @@ function normalizeDialoguePart(
             reference = 'previous_request';
         }
     }
+    const explicitPresentation = explicitPresentationIntent(normalizedMessage);
+    if (explicitPresentation) {
+        presentationIntent = explicitPresentation;
+        if (domain === 'energy' && explicitPresentation === 'ranking') {
+            intent = 'compare';
+            concepts = uniqueFields([...concepts, 'room_name', 'estimated_kwh', 'energy_rank']);
+        }
+        if (domain === 'energy' && explicitPresentation === 'trend') {
+            concepts = uniqueFields([...concepts, 'estimated_kwh', 'energy_trend']);
+        }
+    }
 
     const capability = CAPABILITY_REGISTRY.find((candidate) =>
         candidate.domain === domain);
@@ -904,8 +926,7 @@ function normalizeDialoguePart(
         fields = uniqueFields([...fields, 'estimated_kwh']).slice(0, 8);
     }
     const singleRank = ranking && (ordinal > 0 || energyWinnerQuestion ||
-        /\b(first|top(?:-ranked)?|rank(?:ed)? one|number one)\b/u.test(normalizedMessage) ||
-        (act === 'follow_up' && reference !== 'none'));
+        /\b(first|top(?:-ranked)?|rank(?:ed)? one|number one)\b/u.test(normalizedMessage));
     const followReference: SystemQueryPart['followUpReference'] = {
         kind: reference,
         partId: reference === 'prior_part' ? dialogue.referencePartId : '',
@@ -1399,9 +1420,14 @@ function responseGoalFor(
     if (act === 'acknowledge') return 'Acknowledge the user naturally and briefly.';
     if (act === 'greet') return 'Respond with a natural brief greeting and invite an OcuTemp question.';
     if (act === 'elaborate') return 'Explain the previous verified result in plain language.';
+    if (part.outputPreference === 'graph') {
+        return 'Introduce the requested graph and explain one useful verified comparison, pattern, or coverage limitation. Do not merely restate the total or chart title.';
+    }
     if (act === 'follow_up') return 'Answer the follow-up directly without repeating the prior report or visual.';
     if (part.operation === 'count') return 'State the verified count directly in a natural sentence.';
-    if (part.operation === 'list') return 'Summarize the verified list naturally and keep details concise.';
+    if (part.operation === 'list') {
+        return 'State what the verified list contains, then explain one useful pattern or scope detail supported by the facts before the structured items.';
+    }
     return 'Answer the OcuTemp question directly and naturally from the verified facts.';
 }
 
@@ -1756,8 +1782,23 @@ function scheduleAnswer(
     const items = presentation.schedules.slice(0, 8).map((schedule) =>
         `${schedule.roomName}: ${schedule.day}, ${schedule.startTime}–${schedule.endTime}` +
         (schedule.subject ? ` (${schedule.subject})` : ''));
+    const schedulesByRoom = new Map<string, number>();
+    for (const schedule of presentation.schedules) {
+        schedulesByRoom.set(schedule.roomName,
+            (schedulesByRoom.get(schedule.roomName) ?? 0) + 1);
+    }
+    const roomCounts = [...schedulesByRoom.entries()];
+    const highestCount = Math.max(...roomCounts.map(([, count]) => count));
+    const lowestCount = Math.min(...roomCounts.map(([, count]) => count));
+    const busiestRooms = roomCounts.filter(([, count]) => count === highestCount)
+        .map(([roomName]) => roomName);
+    const context = roomCounts.length === 1
+        ? ` All of them belong to ${roomCounts[0]![0]}.`
+        : highestCount === lowestCount
+            ? ` Each of the ${roomCounts.length} rooms has ${highestCount} ${highestCount === 1 ? 'schedule' : 'schedules'}.`
+            : ` ${formatNames(busiestRooms)} ${busiestRooms.length === 1 ? 'has' : 'have'} the most, with ${highestCount} schedules.`;
     return answer(work.requested.partId,
-        `${presentation.schedules.length} configured ${presentation.schedules.length === 1 ? 'schedule is' : 'schedules are'} available.`,
+        `${presentation.schedules.length} configured ${presentation.schedules.length === 1 ? 'schedule is' : 'schedules are'} available across ${roomCounts.length} ${roomCounts.length === 1 ? 'room' : 'rooms'}.${context}`,
         presentation.schedules.length <= 8
             ? [{ kind: 'bullet-list', text: '', items, entries: [], tone: 'neutral' }]
             : [], caveats);
@@ -1772,6 +1813,19 @@ function energyAnswer(
     if (recorded.length === 0 || presentation.metrics.totalKwh === null) {
         return answer(work.requested.partId,
             `There are no recorded estimated energy values for ${presentation.range.label}.`, [], caveats);
+    }
+    if (work.requested.outputPreference === 'graph') {
+        const ranked = [...recorded].sort((left, right) =>
+            (left.rank ?? 999) - (right.rank ?? 999));
+        const firstRank = ranked[0]?.rank;
+        const leaders = ranked.filter((room) => room.rank === firstRank);
+        const leadingValue = leaders[0]?.estimatedKwh;
+        const comparison = leadingValue === null || leadingValue === undefined
+            ? ''
+            : ` ${formatNames(leaders.map((room) => room.roomName))} ${leaders.length === 1 ? 'has' : 'tie for'} the highest recorded estimate at ${formatNumber(leadingValue)} kWh.`;
+        return answer(work.requested.partId,
+            `The graph compares ${recorded.length} rooms with recorded estimated energy for ${presentation.range.label}.${comparison} Their combined recorded estimate is ${formatNumber(presentation.metrics.totalKwh)} kWh.`,
+            [], caveats);
     }
     if (work.requested.operation === 'compare' && work.requested.limit === 1) {
         const rank = Math.min(...recorded.map((room) => room.rank ?? Number.MAX_SAFE_INTEGER));
@@ -1973,6 +2027,10 @@ function validateWriterDraft(
     });
     if (clauses.filter((clause) => clause.role === 'direct_answer').length !== 1) {
         throw new Error('invalid_direct_answer_count');
+    }
+    const requiresExplanation = packet.responseGoal.includes('explain one useful');
+    if (requiresExplanation && !clauses.some((clause) => clause.role === 'context')) {
+        throw new Error('missing_context_explanation');
     }
     const highlights = value['highlights'].map((highlight) => {
         if (!isRecord(highlight) || !hasExactKeys(highlight, ['text', 'evidenceRefs']) ||
