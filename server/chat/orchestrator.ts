@@ -279,7 +279,7 @@ export async function runChatTurn(input: RunChatTurnInput): Promise<ChatTurnCore
                 input.abortSignal,
             );
         }
-        answerParts.push(answer);
+        answerParts.push(normalizeAnswerTypography(answer));
     }
 
     const responseContexts = partWorks.map((work): ChatResponseContext => ({
@@ -2051,6 +2051,34 @@ function answerPartFromDraft(work: PartWork, draft: GroundedAnswerDraft): ChatAn
         blocks: [],
         highlights: draft.highlights.map((highlight) => ({ text: highlight.text })),
         caveats: work.packet.notices.slice(0, 3),
+    };
+}
+
+function normalizeAnswerTypography(partValue: ChatAnswerPart): ChatAnswerPart {
+    const normalize = (value: string): string => value
+        .replace(/(\d)\s*[\u2013\u2014\u2015]\s*(\d)/gu, '$1 to $2')
+        .replace(/\s*[\u2013\u2014\u2015]\s*/gu, ', ')
+        .replace(/[\u2010\u2011\u2012]/gu, ' ')
+        .replace(/\s+,/gu, ',')
+        .replace(/,\s*,+/gu, ', ')
+        .replace(/\s{2,}/gu, ' ')
+        .trim();
+    return {
+        ...partValue,
+        text: normalize(partValue.text),
+        blocks: partValue.blocks.map((block) => ({
+            ...block,
+            text: normalize(block.text),
+            items: block.items.map(normalize),
+            entries: block.entries.map((entry) => ({
+                label: normalize(entry.label),
+                value: normalize(entry.value),
+            })),
+        })),
+        highlights: partValue.highlights.map((highlight) => ({
+            text: normalize(highlight.text),
+        })),
+        caveats: partValue.caveats.map(normalize),
     };
 }
 
