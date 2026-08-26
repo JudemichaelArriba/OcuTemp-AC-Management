@@ -21,7 +21,8 @@ export const SYSTEM_OPERATIONS: readonly SystemOperation[] = [
     'report', 'how_to', 'clarify', 'deny',
 ];
 export const SYSTEM_FIELDS: readonly SystemField[] = [
-    'room_name', 'room_status', 'room_count', 'device_assignment', 'device_status',
+    'room_name', 'room_status', 'room_count', 'device_assignment', 'device_identifier',
+    'device_status',
     'device_count', 'assigned_device_count', 'online_device_count',
     'stale_device_count', 'offline_device_count', 'unknown_device_status_count',
     'last_seen', 'temperature', 'last_known_temperature', 'humidity',

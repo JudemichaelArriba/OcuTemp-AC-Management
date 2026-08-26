@@ -84,6 +84,7 @@ export type SystemField =
     | 'room_status'
     | 'room_count'
     | 'device_assignment'
+    | 'device_identifier'
     | 'device_status'
     | 'device_count'
     | 'assigned_device_count'

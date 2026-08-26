@@ -72,11 +72,12 @@ export interface CapabilityDefinition {
 
 export const CAPABILITY_REGISTRY: readonly CapabilityDefinition[] = [
     capability('rooms', DATA_OPERATIONS,
-        ['room_name', 'room_status', 'room_count', 'device_assignment'],
+        ['room_name', 'room_status', 'room_count', 'device_assignment', 'device_identifier'],
         BOTH_ROLES, 'get_facility_summary', ROOM_SCOPES,
         ['compact_metrics', 'bullet_list', 'key_value', 'table']),
     capability('devices', DATA_OPERATIONS,
-        ['room_name', 'room_count', 'device_assignment', 'device_status', 'device_count',
+        ['room_name', 'room_count', 'device_assignment', 'device_identifier', 'device_status',
+            'device_count',
             'assigned_device_count', 'online_device_count', 'stale_device_count',
             'offline_device_count', 'unknown_device_status_count', 'last_seen'],
         BOTH_ROLES, 'get_facility_summary', ROOM_SCOPES,
@@ -300,6 +301,7 @@ function normalizeDialogueConcepts(values: unknown[]): SystemField[] {
         online_devices: 'online_device_count', online_rooms: 'online_device_count',
         device_online_status: 'device_status', energy_usage: 'estimated_kwh',
         ranking: 'energy_rank', rank: 'energy_rank', room: 'room_name',
+        device_id: 'device_identifier', assigned_device: 'device_identifier',
         password: 'help_topic', help: 'help_topic',
     };
     const fields: SystemField[] = [];

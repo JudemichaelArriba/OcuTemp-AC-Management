@@ -1016,6 +1016,15 @@ function projectRoomValue(
                 noAssignment ? 'not_applicable' : unavailableAssignment ? 'unavailable' : 'configured',
                 'none',
             );
+        case 'device_identifier':
+            return projectedValue(
+                field,
+                'Assigned device',
+                noAssignment || unavailableAssignment ? null : source.room.deviceId,
+                noAssignment ? 'not_applicable' : unavailableAssignment
+                    ? 'unavailable' : 'configured',
+                'none',
+            );
         case 'device_status':
             return projectedValue(
                 field,
@@ -1417,6 +1426,7 @@ function roomFilterValue(
         case 'room_name': return source.room.roomName;
         case 'room_status': return source.room.status;
         case 'device_assignment': return source.deviceAssignmentStatus;
+        case 'device_identifier': return source.room.deviceId;
         case 'device_status': return source.onlineState;
         case 'last_seen': return source.lastSeen;
         case 'temperature':

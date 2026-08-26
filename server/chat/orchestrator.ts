@@ -846,7 +846,9 @@ function normalizeDialoguePart(
     }
 
     const normalizedMessage = cleanText(message, 2_000).toLocaleLowerCase('en-US');
-    const connectivityQuestion = asksAboutDeviceConnectivity(normalizedMessage);
+    const deviceAssignmentQuestion = asksForDeviceAssignment(normalizedMessage);
+    const connectivityQuestion = !deviceAssignmentQuestion &&
+        asksAboutDeviceConnectivity(normalizedMessage);
     const requestedAcPower = requestedRoomAcPower(normalizedMessage);
     const requestedOccupancy = requestedRoomOccupancy(normalizedMessage);
     const energyWinnerQuestion = asksForEnergyWinner(normalizedMessage);
@@ -882,6 +884,16 @@ function normalizeDialoguePart(
         domain = 'system_concepts';
         intent = 'explain';
         concepts = [definitionConcept];
+        presentationIntent = 'prose';
+        reference = 'none';
+        ordinal = 0;
+    }
+
+    if (deviceAssignmentQuestion &&
+        ['rooms', 'devices', 'conversation', 'unsupported'].includes(domain)) {
+        domain = 'rooms';
+        intent = 'detail';
+        concepts = ['room_name', 'device_identifier', 'device_assignment'];
         presentationIntent = 'prose';
         reference = 'none';
         ordinal = 0;
@@ -1093,7 +1105,7 @@ function defaultFieldsFor(domain: SystemDomain, operation: SystemOperation): Sys
     };
     if (operation === 'count' && countFields[domain]) return countFields[domain]!;
     const fields: Record<SystemDomain, SystemField[]> = {
-        rooms: ['room_name', 'room_status', 'device_assignment'],
+        rooms: ['room_name', 'room_status', 'device_assignment', 'device_identifier'],
         devices: ['room_name', 'device_status', 'last_seen'],
         measurements: ['room_name', 'temperature', 'device_status'],
         occupancy: ['room_name', 'occupancy', 'device_status'],
@@ -1148,6 +1160,12 @@ function requestsCurrentRefresh(message: string): boolean {
 
 function asksAboutDeviceConnectivity(message: string): boolean {
     return requestedConnectivityState(message) !== null;
+}
+
+function asksForDeviceAssignment(message: string): boolean {
+    return /\bdevices?\b.*\b(?:assigned|linked|connected)\s+to\b.*\brooms?\b/u.test(message) ||
+        /\b(?:what|which)\s+devices?\b.*\brooms?\b/u.test(message) ||
+        /\brooms?\b.*\b(?:assigned|linked)\s+devices?\b/u.test(message);
 }
 
 function requestedConnectivityState(message: string): 'online' | 'stale' | 'offline' | null {
@@ -1956,6 +1974,16 @@ function roomDataAnswer(
     }));
     if (relevant.length === 1) {
         const room = relevant[0]!;
+        const deviceIdentifier = room.values.find((value) =>
+            value.field === 'device_identifier');
+        if (deviceIdentifier) {
+            const identifier = deviceIdentifier.value;
+            return answer(work.requested.partId,
+                typeof identifier === 'string' && identifier.length > 0
+                    ? `${room.roomName} is assigned to device ${identifier}.`
+                    : `${room.roomName} does not have an available configured device assignment.`,
+                [], caveats);
+        }
         const values = room.values.map((value) => `${value.label}: ${formatProjectedValue(value)}`);
         const causeBoundary = work.requested.operation === 'explain' &&
             work.requested.domain === 'measurements'
@@ -2366,7 +2394,8 @@ function normalizeAnswerTypography(partValue: ChatAnswerPart): ChatAnswerPart {
 }
 
 function shouldUseWriter(work: PartWork): boolean {
-    return work.requested.domain !== 'own_account';
+    return work.requested.domain !== 'own_account' &&
+        !work.requested.fields.includes('device_identifier');
 }
 
 function boundPacket(packet: AnswerPacket, factLimit: number): AnswerPacket {

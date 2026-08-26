@@ -18,6 +18,17 @@ const providerState = vi.hoisted(() => ({
 function planForPrompt(prompt: string): DialoguePlan {
     const payload = JSON.parse(prompt) as { untrustedUserMessage?: string };
     const message = payload.untrustedUserMessage?.toLocaleLowerCase('en-US') ?? '';
+    if (/\b(?:what|which)\s+device\b.*\broom\s*1\b/u.test(message)) {
+        return {
+            act: 'ask', clarificationReason: 'none',
+            parts: [{
+                domain: 'devices', intent: 'list',
+                concepts: ['room_name', 'device_status'], roomNames: ['Room 1'],
+                helpTopic: '', reference: 'none', referencePartId: '', ordinal: 0,
+                freshness: 'current', presentationIntent: 'prose',
+            }],
+        };
+    }
     if (message.includes('which rooms')) {
         return {
             act: 'ask', clarificationReason: 'none',
@@ -192,5 +203,23 @@ describe('OcuGuide multi-turn causal context', () => {
         expect(result.responseContexts[0]).toMatchObject({
             domain: 'ac_control', answerability: 'no_online_reading',
         });
+    });
+
+    it.each([
+        'what device is connected to the room 1?',
+        'which device is assigned to Room 1?',
+        'what device is linked to Room 1?',
+    ])('treats "%s" as configured assignment', async (message) => {
+        const result = await turn(message, null);
+        expect(result.responseContexts[0]).toMatchObject({
+            domain: 'rooms', operation: 'detail', answerability: 'answerable',
+        });
+        expect(result.responseContexts[0]?.fields).toEqual(expect.arrayContaining([
+            'room_name', 'device_identifier', 'device_assignment',
+        ]));
+        expect(result.answerParts[0]?.text).toBe('Room 1 is assigned to device device1.');
+        expect(result.answerParts[0]?.text).not.toMatch(/No rooms matched/iu);
+        expect(result.displayPlan).toEqual([]);
+        expect(JSON.stringify(result.stateTurn)).not.toContain('device1');
     });
 });
