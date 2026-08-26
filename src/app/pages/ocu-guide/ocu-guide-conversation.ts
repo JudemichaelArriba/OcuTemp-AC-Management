@@ -25,6 +25,8 @@ import { ThinkingOrbComponent } from './thinking-orb';
 interface ChatSuggestion {
   readonly label: string;
   readonly prompt: string;
+  readonly icon: string;
+  readonly description?: string;
 }
 
 const RETRYABLE_CHAT_ERROR_CODES = new Set([
@@ -73,18 +75,26 @@ export class OcuGuideConversationComponent implements OnDestroy {
     {
       label: 'Room and device overview',
       prompt: 'How many rooms are in OcuTemp, and how many have an online device?',
+      icon: 'domain',
+      description: 'Configured rooms and device connectivity',
     },
     {
       label: 'Rooms with AC on',
       prompt: 'Which rooms currently have their AC on?',
+      icon: 'mode_fan',
+      description: 'Current verified AC power states',
     },
     {
       label: 'Available rooms',
       prompt: 'Which rooms are currently available or unoccupied?',
+      icon: 'meeting_room',
+      description: 'Latest room occupancy information',
     },
     {
       label: 'Energy comparison',
       prompt: 'Compare room energy usage for the current month.',
+      icon: 'query_stats',
+      description: 'Compare recorded monthly estimates',
     },
   ];
   readonly latestFollowUps = computed<readonly ChatSuggestion[]>(() => {
@@ -93,6 +103,7 @@ export class OcuGuideConversationComponent implements OnDestroy {
     return latest.followUps.map((followUp) => ({
       label: followUp.label,
       prompt: followUp.prompt,
+      icon: 'north_east',
     }));
   });
 

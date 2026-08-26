@@ -4,28 +4,38 @@
     role="log" aria-label="Conversation with OcuGuide" aria-live="off" tabindex="0" (scroll)="onConversationScroll()">
     <div #conversationContent class="mx-auto min-h-full w-full max-w-6xl px-4 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10">
       @if (messages().length === 0) {
-      <section class="flex min-h-full flex-col justify-center py-6 sm:py-10"
+      <section class="flex min-h-full flex-col justify-center py-8 sm:py-12"
         aria-labelledby="ocu-guide-welcome-title">
-        <div class="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(28rem,1.1fr)] lg:items-center lg:gap-16">
-          <div class="max-w-xl">
-            <p class="mb-4 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-blue-700">OcuTemp system assistant</p>
+        <div class="mx-auto w-full max-w-4xl">
+          <div class="border-l-2 border-blue-600 pl-5 sm:pl-7">
+            <p class="mb-3 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-blue-700">OcuGuide workspace</p>
             <h2 id="ocu-guide-welcome-title"
-              class="text-[clamp(1.75rem,4vw,2.75rem)] font-bold leading-[1.08] tracking-[-0.04em] text-slate-950">
-              Ask about your rooms, devices, and energy use.
+              class="max-w-2xl text-[clamp(1.85rem,4vw,3rem)] font-bold leading-[1.06] tracking-[-0.045em] text-slate-950">
+              What do you need to know about OcuTemp?
             </h2>
-            <p class="mt-4 text-[0.95rem] leading-7 text-slate-600">
-              OcuGuide reads the OcuTemp data available to your role and keeps useful context for follow-up questions.
-            </p>
-            <p class="mt-6 border-l-2 border-blue-600 pl-3 text-xs leading-5 text-slate-500">
-              Read-only. This conversation cannot change device controls or configuration.
+            <p class="mt-4 max-w-2xl text-[0.95rem] leading-7 text-slate-600">
+              Start with a system view below, or write your own question.
             </p>
           </div>
-          <div class="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2"
+          <div class="mt-10 overflow-hidden rounded-xl border border-slate-200 bg-white"
             aria-label="Suggested questions">
             @for (suggestion of suggestions; track suggestion.prompt) {
             <button type="button"
-              class="min-h-20 bg-white px-4 py-4 text-left text-sm font-semibold leading-6 text-slate-700 transition-colors hover:bg-blue-50 hover:text-blue-800 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
-              (click)="send(suggestion.prompt)">{{ suggestion.label }}</button>
+              class="group grid min-h-20 w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-blue-50/70 focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none sm:grid-cols-[2.75rem_minmax(0,1fr)_auto] sm:px-5"
+              (click)="send(suggestion.prompt)">
+              <span
+                class="grid size-10 place-items-center rounded-lg bg-slate-100 text-blue-700 transition-colors group-hover:bg-blue-100 motion-reduce:transition-none"
+                aria-hidden="true"><span class="material-symbols-outlined text-xl">{{ suggestion.icon }}</span></span>
+              <span class="min-w-0">
+                <span class="block text-sm font-bold leading-5 text-slate-800 group-hover:text-blue-900">{{ suggestion.label }}</span>
+                @if (suggestion.description) {
+                <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ suggestion.description }}</span>
+                }
+              </span>
+              <span
+                class="material-symbols-outlined text-lg text-slate-400 transition-[color,transform] group-hover:translate-x-0.5 group-hover:text-blue-700 motion-reduce:transform-none motion-reduce:transition-none"
+                aria-hidden="true">arrow_forward</span>
+            </button>
             }
           </div>
         </div>
@@ -197,7 +207,8 @@
         @for (suggestion of latestFollowUps(); track suggestion.prompt) {
         <button type="button"
           class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
-          (click)="send(suggestion.prompt)">{{ suggestion.label }}</button>
+          (click)="send(suggestion.prompt)">{{ suggestion.label }}<span
+            class="material-symbols-outlined text-[0.95rem]" aria-hidden="true">{{ suggestion.icon }}</span></button>
         }
       </nav>
       }
@@ -226,7 +237,7 @@
           class="material-symbols-outlined text-lg" aria-hidden="true">arrow_upward</span></button>
     </div>
     <div class="flex justify-between gap-4 px-1 pt-2 text-[0.68rem] text-slate-500">
-      <p>Read-only · Verified for your role</p><span class="tabular-nums" [class.font-bold]="charactersRemaining() < 50"
+      <p>OcuTemp data · Access follows your role</p><span class="tabular-nums" [class.font-bold]="charactersRemaining() < 50"
         [class.text-amber-700]="charactersRemaining() < 50">{{ charactersRemaining() }}</span>
     </div>
   </footer>
