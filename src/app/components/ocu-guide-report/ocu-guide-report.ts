@@ -183,11 +183,7 @@ export class OcuGuideReportComponent implements OnDestroy {
   }
 
   topEnergyRooms(report: EnergyReportPresentation): EnergyRoomRow[] {
-    return this.recordedEnergyRooms(report).slice(0, 20);
-  }
-
-  recordedTrendPoints(report: EnergyReportPresentation): EnergyTrendPoint[] {
-    return report.trend.filter((point) => point.estimatedKwh !== null);
+    return this.recordedEnergyRooms(report).slice(0, 8);
   }
 
   formatRuntime(seconds: number | null): string {
@@ -353,13 +349,15 @@ export class OcuGuideReportComponent implements OnDestroy {
     return new Chart(canvas, {
       type: 'bar',
       data: {
-        labels: rows.map((row) => row.roomName),
+        labels: rows.map((row) => row.roomName.length > 18 ? `${row.roomName.slice(0, 17)}…` : row.roomName),
         datasets: [{
           data: rows.map((row) => row.estimatedKwh ?? 0),
-          backgroundColor: rows.map((row) => row.rank === 1 ? '#1d4ed8' : '#93c5fd'),
-          borderRadius: 6,
+          backgroundColor: rows.map((row) => row.rank === 1 ? '#1d4ed8' : '#67e8f9'),
+          hoverBackgroundColor: rows.map((row) => row.rank === 1 ? '#1e40af' : '#22d3ee'),
+          borderRadius: 999,
           borderSkipped: false,
-          barThickness: 14,
+          barPercentage: 0.55,
+          categoryPercentage: 0.8,
         }],
       },
       options: {
@@ -372,20 +370,36 @@ export class OcuGuideReportComponent implements OnDestroy {
           tooltip: {
             displayColors: false,
             backgroundColor: '#0f172a',
-            callbacks: { label: (context) => `${Number(context.parsed.x).toFixed(2)} kWh estimated` },
+            bodyFont: { weight: 600 },
+            cornerRadius: 8,
+            padding: 10,
+            callbacks: {
+              title: (items) => rows[items[0]?.dataIndex ?? -1]?.roomName ?? '',
+              label: (context) => `${Number(context.parsed.x).toFixed(2)} kWh estimated`,
+            },
           },
         },
         scales: {
           x: {
             beginAtZero: true,
             border: { display: false },
-            grid: { color: '#e2e8f0' },
-            ticks: { color: '#64748b', callback: (value) => `${value} kWh` },
+            grid: { color: '#dbeafe', drawTicks: false },
+            ticks: {
+              color: '#64748b',
+              maxTicksLimit: 4,
+              padding: 8,
+              precision: 0,
+            },
           },
           y: {
             border: { display: false },
             grid: { display: false },
-            ticks: { color: '#334155', font: { weight: 600 } },
+            ticks: {
+              color: '#334155',
+              font: { size: 11, weight: 600 },
+              padding: 10,
+              autoSkip: false,
+            },
           },
         },
       },
@@ -403,15 +417,17 @@ export class OcuGuideReportComponent implements OnDestroy {
         labels: report.trend.map((point) => point.label),
         datasets: [{
           data: report.trend.map((point) => point.estimatedKwh),
-          borderColor: '#2563eb',
-          backgroundColor: 'rgb(37 99 235 / .1)',
+          borderColor: '#0284c7',
+          backgroundColor: 'rgb(14 165 233 / .1)',
           pointBackgroundColor: '#fff',
-          pointBorderColor: '#2563eb',
-          pointRadius: 3,
-          pointHoverRadius: 5,
+          pointBorderColor: '#0284c7',
+          pointBorderWidth: 2,
+          pointRadius: 0,
+          pointHitRadius: 12,
+          pointHoverRadius: 4,
           fill: true,
           spanGaps: false,
-          tension: .25,
+          tension: .32,
         }],
       },
       options: {
@@ -423,6 +439,11 @@ export class OcuGuideReportComponent implements OnDestroy {
           tooltip: {
             displayColors: false,
             backgroundColor: '#0f172a',
+            bodyFont: { weight: 600 },
+            cornerRadius: 8,
+            padding: 10,
+            intersect: false,
+            mode: 'index',
             callbacks: {
               label: (context) => context.parsed.y === null
                 ? 'No recorded value'
@@ -434,13 +455,24 @@ export class OcuGuideReportComponent implements OnDestroy {
           x: {
             border: { display: false },
             grid: { display: false },
-            ticks: { color: '#64748b', maxRotation: 0, autoSkip: true },
+            ticks: {
+              color: '#64748b',
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 5,
+              padding: 8,
+            },
           },
           y: {
             beginAtZero: true,
             border: { display: false },
-            grid: { color: '#e2e8f0' },
-            ticks: { color: '#64748b', callback: (value) => `${value} kWh` },
+            grid: { color: '#dbeafe', drawTicks: false },
+            ticks: {
+              color: '#64748b',
+              maxTicksLimit: 4,
+              padding: 8,
+              precision: 0,
+            },
           },
         },
       },

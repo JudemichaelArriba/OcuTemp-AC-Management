@@ -18,12 +18,26 @@ const providerState = vi.hoisted(() => ({
 function planForPrompt(prompt: string): DialoguePlan {
     const payload = JSON.parse(prompt) as { untrustedUserMessage?: string };
     const message = payload.untrustedUserMessage?.toLocaleLowerCase('en-US') ?? '';
-    if (/\b(?:what|which)\s+device\b.*\broom\s*1\b/u.test(message)) {
+    const roomMatch = message.match(/\broom\s*(\d+|[a-z])\b/u);
+    const roomName = roomMatch ? `Room ${roomMatch[1]!.toLocaleUpperCase('en-US')}` : null;
+    if (/\b(?:what|which)\s+device\b.*\b(?:assigned|linked|connected)\b.*\broom\b/u
+        .test(message)) {
         return {
             act: 'ask', clarificationReason: 'none',
             parts: [{
                 domain: 'devices', intent: 'list',
-                concepts: ['room_name', 'device_status'], roomNames: ['Room 1'],
+                concepts: ['room_name', 'device_status'], roomNames: roomName ? [roomName] : [],
+                helpTopic: '', reference: 'none', referencePartId: '', ordinal: 0,
+                freshness: 'current', presentationIntent: 'prose',
+            }],
+        };
+    }
+    if (roomName && /\b(?:online|offline|status)\b/u.test(message)) {
+        return {
+            act: 'ask', clarificationReason: 'none',
+            parts: [{
+                domain: 'devices', intent: 'status',
+                concepts: ['room_name', 'device_status'], roomNames: [roomName],
                 helpTopic: '', reference: 'none', referencePartId: '', ordinal: 0,
                 freshness: 'current', presentationIntent: 'prose',
             }],
@@ -128,6 +142,27 @@ const firebase = {
         devices[deviceId as keyof typeof devices] ?? null,
 } as unknown as FirebaseRestClient;
 
+function firebaseWith(
+    roomSnapshot: Record<string, unknown>,
+    deviceSnapshot: Record<string, unknown>,
+    failDeviceRead = false,
+): FirebaseRestClient {
+    return {
+        getRooms: async () => roomSnapshot,
+        getDevices: async () => {
+            if (failDeviceRead) throw new Error('device snapshot unavailable');
+            return deviceSnapshot;
+        },
+        getDeviceKeys: async () => Object.fromEntries(
+            Object.keys(deviceSnapshot).map((key) => [key, true]),
+        ),
+        getDeviceProjection: async (deviceId: string) => {
+            if (failDeviceRead) throw new Error('device projection unavailable');
+            return deviceSnapshot[deviceId] as Record<string, unknown> | undefined ?? null;
+        },
+    } as unknown as FirebaseRestClient;
+}
+
 function stateWithTurns(turns: ChatStatePayload['turns']): ChatStatePayload {
     return {
         version: 5,
@@ -139,13 +174,17 @@ function stateWithTurns(turns: ChatStatePayload['turns']): ChatStatePayload {
     };
 }
 
-async function turn(message: string, state: ChatStatePayload | null) {
+async function turn(
+    message: string,
+    state: ChatStatePayload | null,
+    firebaseClient: FirebaseRestClient = firebase,
+) {
     return runChatTurn({
         requestId: `integration-${state?.turns.length ?? 0}`,
         message,
         user,
         state,
-        firebase,
+        firebase: firebaseClient,
         deadlineAtMs: Date.now() + 20_000,
     });
 }
@@ -221,5 +260,69 @@ describe('OcuGuide multi-turn causal context', () => {
         expect(result.answerParts[0]?.text).not.toMatch(/No rooms matched/iu);
         expect(result.displayPlan).toEqual([]);
         expect(JSON.stringify(result.stateTurn)).not.toContain('device1');
+    });
+
+    it('keeps explicit online status separate from configured assignment', async () => {
+        const result = await turn('Is the device in Room 1 online?', null);
+        expect(result.responseContexts[0]).toMatchObject({ domain: 'devices' });
+        expect(result.responseContexts[0]?.fields).toContain('online_device_count');
+        expect(result.responseContexts[0]?.fields).not.toContain('device_identifier');
+        expect(result.answerParts[0]?.text).not.toContain('device1');
+    });
+
+    it('answers an assignment without reading the device snapshot', async () => {
+        const assignmentOnlyFirebase = firebaseWith(
+            { room1: rooms.room1 },
+            { device1: devices.device1 },
+            true,
+        );
+        const result = await turn(
+            'Which device is assigned to Room 1?', null, assignmentOnlyFirebase,
+        );
+        expect(result.answerParts[0]?.text).toBe('Room 1 is assigned to device device1.');
+    });
+
+    it('distinguishes a room with no assignment from a missing room', async () => {
+        const noAssignmentFirebase = firebaseWith({
+            room4: { roomName: 'Room 4', status: 'active', device: '' },
+        }, {});
+        const result = await turn(
+            'Which device is assigned to Room 4?', null, noAssignmentFirebase,
+        );
+        expect(result.responseContexts[0]?.answerability).toBe('answerable');
+        expect(result.answerParts[0]?.text).toContain('does not have');
+        expect(result.answerParts[0]?.text).not.toMatch(/not found|No rooms matched/iu);
+    });
+
+    it('returns room not found only for a genuinely unknown room', async () => {
+        const result = await turn('Which device is assigned to Room 404?', null);
+        expect(result.responseContexts[0]?.answerability).toBe('room_not_found');
+        expect(result.answerParts[0]?.text).toMatch(/not configured/iu);
+    });
+
+    it('resolves a future room dynamically without a production code branch', async () => {
+        const dynamicFirebase = firebaseWith({
+            room55: { roomName: 'Room 55', status: 'active', device: 'device55' },
+        }, {
+            device55: { status: { lastSeen: '2020-01-01T00:00:00.000Z' } },
+        });
+        const result = await turn(
+            'What device is linked to Room 55?', null, dynamicFirebase,
+        );
+        expect(result.answerParts[0]?.text).toBe('Room 55 is assigned to device device55.');
+        expect(JSON.stringify(result.stateTurn)).not.toContain('device55');
+    });
+
+    it('does not expose a duplicate device assignment as verified', async () => {
+        const conflictFirebase = firebaseWith({
+            roomA: { roomName: 'Room A', status: 'active', device: 'shared-device' },
+            roomB: { roomName: 'Room B', status: 'active', device: 'shared-device' },
+        }, { 'shared-device': {} });
+        const result = await turn(
+            'Which device is assigned to Room A?', null, conflictFirebase,
+        );
+        expect(result.answerParts[0]?.text).toContain('does not have an available');
+        expect(result.answerParts[0]?.text).not.toContain('shared-device');
+        expect(JSON.stringify(result.stateTurn)).not.toContain('shared-device');
     });
 });

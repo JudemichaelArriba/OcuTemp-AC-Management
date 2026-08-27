@@ -20,8 +20,9 @@
   [&_.room-list>li]:border-l-2 [&_.room-list>li]:border-blue-300 [&_.room-list>li]:py-0.5 [&_.room-list>li]:pl-3 [&_.schedule-list>li]:border-l-2 [&_.schedule-list>li]:border-blue-300 [&_.schedule-list>li]:py-0.5 [&_.schedule-list>li]:pl-3
   [&_.room-list_strong]:text-sm [&_.room-list_strong]:text-slate-950 [&_.schedule-list_strong]:text-sm [&_.schedule-list_strong]:text-slate-950 [&_.room-list_ul]:mt-1.5 [&_.room-list_ul]:ml-4 [&_.room-list_ul]:grid [&_.room-list_ul]:list-disc [&_.room-list_ul]:gap-1 [&_.room-list_ul]:text-xs [&_.room-list_ul]:text-slate-500 [&_.room-list_li_span]:font-semibold [&_.room-list_li_span]:text-slate-700
   [&_.schedule-list_li]:grid [&_.schedule-list_li]:grid-cols-[minmax(7rem,auto)_1fr] [&_.schedule-list_li]:gap-x-3 [&_.schedule-list_li]:gap-y-0.5 [&_.schedule-list_li]:text-[0.8rem] [&_.schedule-list_li]:text-slate-600 [&_.schedule-list_small]:col-start-2 [&_.schedule-list_small]:text-slate-500 max-[520px]:[&_.schedule-list_li]:grid-cols-1 max-[520px]:[&_.schedule-list_small]:col-start-1
-  [&_.chart-heading]:mt-5 [&_.chart-heading]:mb-2.5 [&_.chart-heading]:flex [&_.chart-heading]:items-baseline [&_.chart-heading]:justify-between [&_.chart-heading]:gap-4 [&_.chart-heading_h4]:text-sm [&_.chart-heading_h4]:font-bold [&_.chart-heading_span]:text-[0.7rem] [&_.chart-heading_span]:text-slate-500
-  [&_.chart-frame]:relative [&_.chart-frame]:w-full [&_.chart-frame--ranking]:h-[clamp(15rem,45vw,20rem)] [&_.chart-frame--trend]:h-[clamp(14rem,42vw,18rem)] [&_.energy-metrics]:mb-4
+  [&_.chart-panel]:mt-5 [&_.chart-panel]:overflow-hidden [&_.chart-panel]:rounded-xl [&_.chart-panel]:border [&_.chart-panel]:border-sky-100 [&_.chart-panel]:border-t-2 [&_.chart-panel]:border-t-cyan-500 [&_.chart-panel]:bg-slate-50/70 [&_.chart-panel]:px-3 [&_.chart-panel]:pt-3 [&_.chart-panel]:pb-2 sm:[&_.chart-panel]:px-4 sm:[&_.chart-panel]:pt-4
+  [&_.chart-heading]:mb-1 [&_.chart-heading]:flex [&_.chart-heading]:items-center [&_.chart-heading]:justify-between [&_.chart-heading]:gap-4 [&_.chart-heading_h4]:text-xs [&_.chart-heading_h4]:font-bold [&_.chart-heading_h4]:tracking-[-0.01em] [&_.chart-heading_h4]:text-slate-800 [&_.chart-unit]:rounded-full [&_.chart-unit]:bg-sky-100 [&_.chart-unit]:px-2 [&_.chart-unit]:py-0.5 [&_.chart-unit]:text-[0.65rem] [&_.chart-unit]:font-bold [&_.chart-unit]:uppercase [&_.chart-unit]:tracking-[0.08em] [&_.chart-unit]:text-sky-800
+  [&_.chart-frame]:relative [&_.chart-frame]:w-full [&_.chart-frame--ranking]:h-[clamp(15rem,42vw,18rem)] [&_.chart-frame--trend]:h-[clamp(13rem,38vw,17rem)] [&_.energy-metrics]:mb-4
   [&_.help-steps]:grid [&_.help-steps]:list-decimal [&_.help-steps]:gap-2 [&_.help-steps]:border-y [&_.help-steps]:border-slate-200 [&_.help-steps]:py-4 [&_.help-steps]:pr-4 [&_.help-steps]:pl-8 [&_.help-steps]:text-sm [&_.help-steps]:leading-6 [&_.help-steps]:text-slate-700 [&_.help-steps_li]:marker:font-bold [&_.help-steps_li]:marker:text-blue-600
   [&_.report-link]:mt-4 [&_.report-link]:inline-flex [&_.report-link]:min-h-11 [&_.report-link]:items-center [&_.report-link]:gap-1.5 [&_.report-link]:rounded-xl [&_.report-link]:bg-blue-700 [&_.report-link]:px-3 [&_.report-link]:py-2 [&_.report-link]:text-xs [&_.report-link]:font-bold [&_.report-link]:text-white [&_.report-link]:no-underline [&_.report-link]:hover:bg-blue-800 [&_.report-link]:focus-visible:outline-2 [&_.report-link]:focus-visible:outline-offset-2 [&_.report-link]:focus-visible:outline-blue-600 [&_.report-link_span]:text-base">
   @if (item.availability === 'unavailable') {
@@ -226,15 +227,18 @@
     }
 
     @if (mode === 'ranking_chart') {
-    <div class="chart-heading">
-      <h4>Room ranking</h4><span>{{ topEnergyRooms(item).length }} recorded rooms</span>
-    </div>
-    <div class="chart-frame chart-frame--ranking">
-      <canvas #reportChart class="!block !h-full !w-full" role="img" [attr.data-presentation-id]="item.id"
-        data-chart-kind="ranking" [attr.aria-label]="'Estimated energy ranking for ' + item.range.label"
-        [attr.aria-describedby]="presentationDomId('ranking-fallback', item.id)">
-      </canvas>
-    </div>
+    <section class="chart-panel" [attr.aria-labelledby]="presentationDomId('ranking-title', item.id)">
+      <div class="chart-heading">
+        <h4 [id]="presentationDomId('ranking-title', item.id)">Highest-use rooms</h4>
+        <span class="chart-unit" aria-hidden="true">kWh</span>
+      </div>
+      <div class="chart-frame chart-frame--ranking">
+        <canvas #reportChart class="!block !h-full !w-full" role="img" [attr.data-presentation-id]="item.id"
+          data-chart-kind="ranking" [attr.aria-label]="'Estimated energy ranking for ' + item.range.label"
+          [attr.aria-describedby]="presentationDomId('ranking-fallback', item.id)">
+        </canvas>
+      </div>
+    </section>
     <div class="sr-only" [id]="presentationDomId('ranking-fallback', item.id)">
       <table>
         <caption>Estimated energy ranking</caption>
@@ -259,15 +263,18 @@
     }
 
     @if (mode === 'trend_chart' || mode === 'full_report') {
-    <div class="chart-heading">
-      <h4>Estimated energy over time</h4><span>{{ recordedTrendPoints(item).length }} recorded intervals</span>
-    </div>
-    <div class="chart-frame chart-frame--trend">
-      <canvas #reportChart class="!block !h-full !w-full" role="img" [attr.data-presentation-id]="item.id"
-        data-chart-kind="trend" [attr.aria-label]="'Estimated energy trend for ' + item.range.label"
-        [attr.aria-describedby]="presentationDomId('trend-fallback', item.id)">
-      </canvas>
-    </div>
+    <section class="chart-panel" [attr.aria-labelledby]="presentationDomId('trend-title', item.id)">
+      <div class="chart-heading">
+        <h4 [id]="presentationDomId('trend-title', item.id)">Energy over time</h4>
+        <span class="chart-unit" aria-hidden="true">kWh</span>
+      </div>
+      <div class="chart-frame chart-frame--trend">
+        <canvas #reportChart class="!block !h-full !w-full" role="img" [attr.data-presentation-id]="item.id"
+          data-chart-kind="trend" [attr.aria-label]="'Estimated energy trend for ' + item.range.label"
+          [attr.aria-describedby]="presentationDomId('trend-fallback', item.id)">
+        </canvas>
+      </div>
+    </section>
     <div class="sr-only" [id]="presentationDomId('trend-fallback', item.id)">
       <table>
         <caption>Estimated energy trend</caption>
