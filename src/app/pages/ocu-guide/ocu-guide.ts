@@ -12,7 +12,7 @@ import { OcuGuideConversationComponent } from './ocu-guide-conversation';
   standalone: true,
   imports: [OcuGuideConversationComponent],
   templateUrl: './ocu-guide.html',
-  styleUrl: './ocu-guide.css',
+  host: { class: 'block min-h-0' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OcuGuidePage {

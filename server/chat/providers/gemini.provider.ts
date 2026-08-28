@@ -11,7 +11,7 @@ export class GeminiProvider implements ChatProvider {
     readonly id = 'gemini' as const;
 
     async generateStructured<T>(request: StructuredGenerationRequest): Promise<T> {
-        const apiKey = process.env['GOOGLE_GENERATIVE_AI_API_KEY'];
+        const apiKey = process.env['GOOGLE_GENERATIVE_AI_API_KEY']?.trim();
         if (!apiKey) throw new ProviderRecoverableError(this.id, 'unavailable');
 
         const google = createGoogleGenerativeAI({ apiKey });
@@ -26,7 +26,6 @@ export class GeminiProvider implements ChatProvider {
                     description: request.schemaDescription,
                 }),
                 maxOutputTokens: request.maxOutputTokens,
-                temperature: request.temperature,
                 maxRetries: 0,
                 timeout: { totalMs: request.timeoutMs },
                 abortSignal: request.abortSignal,

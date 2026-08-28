@@ -173,7 +173,7 @@ Data at `energy/{deviceId}/daily/{YYYY-MM-DD}/kwh`. `EnergyReportService` aggreg
 - Rate limiting via edge middleware
 - All tool operations are snapshots (no live streams exposed to LLM)
 
-**UI:** `ChatSidebarComponent` with role-aware suggestions, loading states, fallback tables. Messages rendered via `ChatMessageComponent`.
+**UI:** The standalone OcuGuide conversation page renders role-aware suggestions, loading states, answer blocks, and deferred `OcuGuideReportComponent` presentations. Energy ranking and trend charts use Chart.js with reduced-motion support, viewport-aware creation/destruction, concise axes, tooltips, and accessible fallback tables. The conversation follows new messages while the user is near the bottom and shows a centered "Latest" button when they scroll away from the newest response.
 
 ---
 

@@ -1,328 +1,239 @@
-<div class="flex h-full min-h-0 flex-col bg-white">
-  <div class="relative min-h-0 flex-1 overflow-hidden">
-    <div #conversationLog
-      class="conversation-log h-full overflow-y-auto overscroll-contain bg-white"
-      role="region" tabindex="0" aria-label="OcuGuide conversation history"
-      [attr.aria-busy]="loading()" (scroll)="onConversationScroll()">
-      <div #conversationContent class="grid min-h-full">
-      @if (messages().length === 0 && !loading()) {
-        <section class="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-4 py-10 sm:px-6"
-          aria-labelledby="ocu-guide-empty-title">
-          <div class="max-w-xl">
-            <span class="mb-5 grid size-11 place-items-center rounded-2xl bg-blue-50 text-blue-600" aria-hidden="true">
-              <span class="material-symbols-outlined text-2xl">mode_cool</span>
-            </span>
-            <h2 id="ocu-guide-empty-title" class="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-              How can I help with your facility?
+<div class="relative grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] bg-slate-50/70 text-slate-950">
+  <section #conversationLog
+    class="min-h-0 overflow-y-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600"
+    role="log" aria-label="Conversation with OcuGuide" aria-live="off" tabindex="0" (scroll)="onConversationScroll()">
+    <div #conversationContent class="mx-auto min-h-full w-full max-w-6xl px-4 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10">
+      @if (messages().length === 0) {
+      <section class="flex min-h-full flex-col justify-center py-8 sm:py-12" aria-labelledby="ocu-guide-welcome-title">
+        <div class="mx-auto w-full max-w-3xl">
+          <div class="text-center">
+            <h2 id="ocu-guide-welcome-title"
+              class="text-[clamp(1.75rem,4vw,2.5rem)] font-bold leading-[1.08] tracking-[-0.04em] text-slate-950">
+              What would you like to check?
             </h2>
-            <p class="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
-              Ask about verified OcuTemp rooms, readings, energy, AI settings, schedules, or application help. A table or chart appears only when it adds useful context.
+            <p class="mx-auto mt-3 max-w-xl text-[0.95rem] leading-7 text-slate-600">
+              Ask about OcuTemp rooms, devices, schedules, or energy.
             </p>
           </div>
-
-          <section class="mt-8" aria-labelledby="facility-prompts-title">
-            <h3 id="facility-prompts-title" class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-              <span class="size-1.5 rounded-full bg-blue-500" aria-hidden="true"></span>
-              Start with OcuTemp
-            </h3>
-              <div class="grid gap-2 sm:grid-cols-2">
-                @for (suggestion of suggestions(); track suggestion.prompt) {
-                  <button type="button"
-                    class="group flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-left text-sm text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50/60 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-                    (click)="send(suggestion.prompt)">
-                    <span class="material-symbols-outlined text-lg text-slate-400 transition-colors group-hover:text-blue-600" aria-hidden="true">{{ suggestion.icon }}</span>
-                    <span class="font-medium leading-5">{{ suggestion.label }}</span>
-                  </button>
+          <div class="mt-9">
+            <p class="mb-3 text-xs font-semibold text-slate-500">Suggested questions</p>
+            <div class="grid gap-2 sm:grid-cols-2" aria-label="Suggested questions">
+              @for (suggestion of suggestions; track suggestion.prompt) {
+              <button type="button"
+                class="group grid min-h-16 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition-[border-color,background-color] hover:border-blue-300 hover:bg-blue-50/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
+                (click)="send(suggestion.prompt)">
+                <span class="material-symbols-outlined text-xl text-blue-700" aria-hidden="true">{{ suggestion.icon
+                  }}</span>
+                <span class="min-w-0 text-sm font-semibold leading-5 text-slate-700 group-hover:text-blue-900">{{
+                  suggestion.label }}</span>
+                <span
+                  class="material-symbols-outlined text-base text-slate-400 transition-colors group-hover:text-blue-700 motion-reduce:transition-none"
+                  aria-hidden="true">north_east</span>
+              </button>
+              }
+            </div>
+          </div>
+        </div>
+      </section>
+      } @else {
+      <ol class="grid list-none gap-8 p-0" aria-label="Chat messages">
+        @for (message of messages(); track message.id) {
+        <li [class]="message.role === 'user' ? 'flex justify-end' : 'min-w-0'">
+          @if (message.role === 'user') {
+          <article
+            class="max-w-[92%] rounded-[1rem_1rem_0.25rem_1rem] bg-blue-700 px-4 py-3 text-[0.9375rem] leading-6 text-white [overflow-wrap:anywhere] sm:max-w-[72%]"
+            aria-label="You said">
+            <p>{{ message.text }}</p>
+          </article>
+          } @else {
+          <article class="relative min-w-0 max-w-5xl pl-4 sm:pl-5" [class.text-amber-950]="message.errorCode"
+            aria-label="OcuGuide response">
+            <span class="absolute inset-y-1 left-0 w-0.5 rounded-full"
+              [class]="message.errorCode ? 'bg-amber-400' : 'bg-blue-600'" aria-hidden="true"></span>
+            @if (message.errorCode) {
+            <p class="max-w-4xl whitespace-pre-line text-[0.975rem] font-medium leading-7 [overflow-wrap:anywhere]">{{
+              message.text }}</p>
+            @if (canRetry(message)) {
+            <button type="button"
+              class="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-sm font-semibold text-slate-600 hover:bg-white hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              (click)="retry()" [disabled]="loading()">
+              <span class="material-symbols-outlined text-base" aria-hidden="true">refresh</span>Try again
+            </button>
+            }
+            } @else {
+            @for (part of message.answerParts; track answerPartTrackKey(part)) {
+            @let context = contextFor(message, part.partId);
+            <section class="[&+&]:mt-6 [&+&]:border-t [&+&]:border-slate-200 [&+&]:pt-6"
+              [attr.aria-label]="'Answer ' + ($index + 1)">
+              <p
+                class="max-w-4xl whitespace-pre-line text-[0.975rem] font-medium leading-7 text-slate-900 [overflow-wrap:anywhere]">
+                {{ part.text }}</p>
+              @for (block of part.blocks; track answerBlockTrackKey(block, $index)) {
+              @if (shouldRenderBlock(part, block)) {
+              @switch (block.kind) {
+              @case ('paragraph') { <p
+                class="mt-3 max-w-4xl whitespace-pre-line text-[0.95rem] leading-7 text-slate-700 [overflow-wrap:anywhere]">
+                {{ block.text }}</p> }
+              @case ('bullet-list') {
+              @if (block.text) { <p class="mt-3 max-w-4xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
+              }
+              <ul class="mt-3 ml-5 grid list-disc gap-2 text-[0.9375rem] leading-6 text-slate-700 marker:text-blue-600">
+                @for (item of block.items; track textTrackKey(item, $index)) { <li>{{ item }}</li> }
+              </ul>
+              }
+              @case ('numbered-list') {
+              @if (block.text) { <p class="mt-3 max-w-4xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
+              }
+              <ol
+                class="mt-3 ml-5 grid list-decimal gap-2 text-[0.9375rem] leading-6 text-slate-700 marker:font-bold marker:text-blue-600">
+                @for (item of block.items; track textTrackKey(item, $index)) { <li>{{ item }}</li> }
+              </ol>
+              }
+              @case ('callout') {
+              <p class="mt-3 border-l-2 px-3 py-2.5 text-sm leading-6"
+                [class]="block.tone === 'warning' ? 'border-amber-400 bg-amber-50 text-amber-950' : 'border-sky-400 bg-sky-50 text-sky-950'">
+                {{ block.text }}</p>
+              }
+              @case ('key-value') {
+              @if (block.text) { <p class="mt-3 max-w-4xl text-[0.95rem] leading-7 text-slate-700">{{ block.text }}</p>
+              }
+              <dl
+                class="mt-3 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2">
+                @for (entry of block.entries; track entry.label + ':' + $index) {
+                <div class="min-w-0 bg-white p-3">
+                  <dt class="text-xs text-slate-500">{{ entry.label }}</dt>
+                  <dd class="mt-1 text-sm font-semibold text-slate-900 [overflow-wrap:anywhere]">{{ entry.value }}</dd>
+                </div>
+                }
+              </dl>
+              }
+              }
+              }
+              }
+              @if (part.highlights.length > 0) {
+              <ul class="mt-3 grid list-none gap-1.5 p-0" aria-label="Key verified points">
+                @for (highlight of part.highlights; track textTrackKey(highlight.text, $index)) { <li
+                  class="border-l-2 border-emerald-500 pl-3 text-sm leading-6 text-emerald-900">{{ highlight.text }}
+                </li> }
+              </ul>
+              }
+              @if (directiveFor(message, part.partId); as directive) {
+              @if (presentationFor(message, directive); as presentation) {
+              <div class="mt-5">
+                @defer (on viewport) {
+                <app-ocu-guide-report [presentation]="presentation" [displayDirective]="directive" [context]="context"
+                  [evidence]="message.evidence" [turnId]="message.id" />
+                } @placeholder {
+                <div
+                  class="h-32 animate-pulse rounded-xl border border-slate-200 bg-slate-100 motion-reduce:animate-none"
+                  aria-hidden="true"></div>
                 }
               </div>
-          </section>
-        </section>
-      }
-
-      @if (messages().length > 0 || loading()) {
-        <ol class="mx-auto grid w-full max-w-4xl list-none gap-8 px-4 py-8 sm:px-6 sm:py-10">
-        @for (message of messages(); track message.id) {
-          <li class="message-turn flex min-w-0" [class.justify-end]="message.role === 'user'">
-            @if (message.role === 'user') {
-              <article class="max-w-[85%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-white sm:max-w-[75%]"
-                aria-label="Your message">
-                <p class="whitespace-pre-wrap break-words text-sm leading-6 sm:text-[.9375rem]">{{ message.text }}</p>
-              </article>
-            } @else {
-              <article class="min-w-0 w-full" [attr.aria-label]="message.errorCode ? 'OcuGuide error response' : 'OcuGuide response'">
-                <header class="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-500">
-                  <span class="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600" aria-hidden="true">
-                    <span class="material-symbols-outlined text-base">mode_cool</span>
-                  </span>
-                  <span>OcuGuide</span>
-                  @if (hasFacilityData(message.questionFocus, message.presentations) && !message.errorCode) {
-                    <span class="ml-1 inline-flex items-center gap-1.5 font-medium text-blue-700"
-                      title="This answer includes verified OcuTemp facility data">
-                      <span class="facility-pulse relative flex size-2" aria-hidden="true">
-                        <span class="absolute inline-flex size-full rounded-full bg-blue-400 opacity-50"></span>
-                        <span class="relative inline-flex size-2 rounded-full bg-blue-600"></span>
-                      </span>
-                      Facility data
-                    </span>
-                  }
-                </header>
-
-                @if (message.answer; as answer) {
-                  <div class="answer-content max-w-3xl text-[.9375rem] leading-7 text-slate-700">
-                    @if (answer.headline) {
-                      <h2 class="mb-3 text-xl font-bold tracking-tight text-slate-950">{{ answer.headline }}</h2>
-                    }
-                    @if (answer.summary) {
-                      <p class="whitespace-pre-wrap break-words">{{ answer.summary }}</p>
-                    }
-
-                    @if (shouldRenderAnswerDetails(message) && answer.blocks.length > 0) {
-                      <div class="mt-4 grid gap-4 empty:hidden">
-                        @for (block of answer.blocks; track answerBlockTrackKey(block, $index)) {
-                          @if (!isRepeatedSummary(block, answer.summary)) {
-                            @switch (block.kind) {
-                              @case ('paragraph') {
-                                <p class="whitespace-pre-line break-words">{{ block.text }}</p>
-                              }
-                              @case ('bullet-list') {
-                                <section>
-                                  @if (block.text) { <p class="mb-2 font-semibold text-slate-900">{{ block.text }}</p> }
-                                  <ul class="grid list-disc gap-1.5 pl-5 marker:text-blue-500">
-                                    @for (item of block.items; track textTrackKey(item, $index)) { <li class="pl-1">{{ item }}</li> }
-                                  </ul>
-                                </section>
-                              }
-                              @case ('numbered-list') {
-                                <section>
-                                  @if (block.text) { <p class="mb-2 font-semibold text-slate-900">{{ block.text }}</p> }
-                                  <ol class="grid list-decimal gap-2 pl-5 marker:font-semibold marker:text-blue-600">
-                                    @for (item of block.items; track textTrackKey(item, $index)) { <li class="pl-1">{{ item }}</li> }
-                                  </ol>
-                                </section>
-                              }
-                              @case ('callout') {
-                                <aside class="rounded-r-xl border-l-2 px-4 py-3 text-sm leading-6"
-                                  [class.border-slate-300]="block.tone === 'neutral'"
-                                  [class.border-blue-500]="block.tone === 'info'"
-                                  [class.bg-slate-50]="block.tone !== 'warning'"
-                                  [class.text-slate-700]="block.tone !== 'warning'"
-                                  [class.border-amber-500]="block.tone === 'warning'"
-                                  [class.bg-amber-50]="block.tone === 'warning'"
-                                  [class.text-amber-900]="block.tone === 'warning'">
-                                  {{ block.text }}
-                                </aside>
-                              }
-                              @case ('key-value') {
-                                <section>
-                                  @if (block.text) { <p class="mb-2 font-semibold text-slate-900">{{ block.text }}</p> }
-                                  <dl class="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2">
-                                    @for (entry of block.entries; track keyValueTrackKey(entry, $index)) {
-                                      <div class="bg-white px-3 py-2.5">
-                                        <dt class="text-xs font-medium text-slate-500">{{ entry.label }}</dt>
-                                        <dd class="mt-0.5 break-words font-semibold text-slate-900">{{ entry.value }}</dd>
-                                      </div>
-                                    }
-                                  </dl>
-                                </section>
-                              }
-                            }
-                          }
-                        }
-                      </div>
-                    }
-                    @if (shouldRenderAnswerDetails(message) && hasAdditionalHighlights(answer.highlights, answer.summary, answer.blocks)) {
-                      <ul class="mt-4 grid list-disc gap-1.5 pl-5 marker:text-blue-500" aria-label="Answer highlights">
-                        @for (highlight of answer.highlights; track textTrackKey(highlight.text, $index)) {
-                          @if (!isRepeatedAnswerText(highlight.text, answer.summary, answer.blocks)) { <li class="pl-1">{{ highlight.text }}</li> }
-                        }
-                      </ul>
-                    }
-                  </div>
-
-                  @if (answer.caveats.length > 0 || (message.evidence?.notices?.length ?? 0) > 0) {
-                    <aside class="mt-5 flex max-w-3xl gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-6 text-amber-900"
-                      aria-label="Important answer notes">
-                      <span class="material-symbols-outlined mt-0.5 text-lg" aria-hidden="true">info</span>
-                      <div class="grid gap-1">
-                        @for (caveat of answer.caveats; track textTrackKey(caveat, $index)) { <p>{{ caveat }}</p> }
-                        @for (notice of message.evidence?.notices ?? []; track textTrackKey(notice, $index)) { <p>{{ notice }}</p> }
-                      </div>
-                    </aside>
-                  }
-
-                  @if (visibleDirective(message); as directive) {
-                    @if (visiblePresentation(message, directive); as presentation) {
-                      @if (message.questionFocus; as questionFocus) {
-                        <div class="mt-6 min-w-0" aria-label="Selected supporting facility view">
-                          @defer (on viewport) {
-                            <app-ocu-guide-report [presentation]="presentation"
-                              [displayDirective]="directive" [questionFocus]="questionFocus"
-                              [evidence]="message.evidence" [turnId]="message.id" />
-                          } @placeholder {
-                            <div class="evidence-placeholder h-32 rounded-xl bg-slate-100" aria-hidden="true"></div>
-                          } @loading (after 120ms; minimum 240ms) {
-                            <div class="evidence-placeholder h-32 rounded-xl bg-slate-100" role="status"
-                              aria-label="Loading selected facility view"></div>
-                          }
-                        </div>
-                      }
-                    }
-                  }
-
-                  @if (message.evidence && hasFacilityData(message.questionFocus, message.presentations)) {
-                    <p class="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
-                      <span class="material-symbols-outlined text-sm" aria-hidden="true">schedule</span>
-                      Facility data as of {{ formatDateTime(message.evidence.asOf) }} PHT
-                      @if (message.evidence.partial) {
-                        <span class="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">Partial data</span>
-                      }
-                    </p>
-                  }
-
-                  @if (message.presentations.length > 0) {
-                    <div class="mt-4 border-t border-slate-200 pt-3">
-                      <button type="button"
-                        class="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-                        (click)="toggleToolDisclosure(message.id)"
-                        [attr.aria-expanded]="isToolDisclosureOpen(message.id)"
-                        [attr.aria-controls]="toolDisclosureId(message.id)"
-                        [title]="isToolDisclosureOpen(message.id) ? 'Hide the tools used for this answer' : 'Show the tools used for this answer'">
-                        <span class="material-symbols-outlined text-base" aria-hidden="true">build</span>
-                        {{ isToolDisclosureOpen(message.id) ? 'Hide tools used' : 'Show tools used' }}
-                        <span class="material-symbols-outlined text-base transition-transform"
-                          [class.rotate-180]="isToolDisclosureOpen(message.id)" aria-hidden="true">expand_more</span>
-                      </button>
-
-                      @if (isToolDisclosureOpen(message.id)) {
-                        <section class="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4"
-                          [id]="toolDisclosureId(message.id)" aria-label="Tools used for this answer">
-                          <div class="flex flex-wrap items-center justify-between gap-2">
-                            <h3 class="text-sm font-semibold text-slate-900">Read-only tools used</h3>
-                            <span class="text-xs text-slate-500">
-                              {{ message.presentations.length }} {{ message.presentations.length === 1 ? 'tool' : 'tools' }}
-                            </span>
-                          </div>
-                          <ul class="mt-3 grid list-none gap-2">
-                            @for (presentation of message.presentations; track presentation.id) {
-                              <li class="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                                <code class="break-all text-xs font-semibold text-blue-700">{{ toolName(presentation) }}</code>
-                                <p class="mt-1 text-xs leading-5 text-slate-600">{{ toolResultSummary(presentation) }}</p>
-                              </li>
-                            }
-                          </ul>
-                          <details class="mt-3 rounded-lg border border-slate-200 bg-white"
-                            (toggle)="onToolResultToggle(message.id, $event)">
-                            <summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
-                              <span class="material-symbols-outlined text-base" aria-hidden="true">data_object</span>
-                              Inspect safe result data
-                            </summary>
-                            @if (isToolResultOpen(message.id)) {
-                              <div class="border-t border-slate-200 p-2">
-                                <p class="mb-2 px-1 text-xs leading-5 text-slate-500">
-                                  Sanitized presentation data returned to this chat. Internal database records are never shown here.
-                                </p>
-                                <pre class="max-h-72 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-100" tabindex="0"><code>{{ safePresentationJson(message.presentations) }}</code></pre>
-                              </div>
-                            }
-                          </details>
-                        </section>
-                      }
-                    </div>
-                  }
-                } @else {
-                  <p class="max-w-3xl whitespace-pre-wrap break-words text-[.9375rem] leading-7 text-slate-700">{{ message.text }}</p>
-                }
-
-                @if (message.errorCode) {
-                  <div class="mt-3 flex items-center gap-2 text-xs font-semibold text-red-700">
-                    <span class="material-symbols-outlined text-base" aria-hidden="true">error</span>
-                    Request not completed
-                  </div>
-                  @if (canRetry(message)) {
-                    <button type="button"
-                      class="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 px-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      (click)="retry()" [disabled]="loading()">
-                      <span class="material-symbols-outlined text-lg" aria-hidden="true">refresh</span>
-                      Retry request
-                    </button>
-                  }
-                }
-              </article>
+              }
+              }
+              @if (part.caveats.length > 0) {
+              <ul class="mt-3 grid list-none gap-1.5 p-0 text-xs leading-5 text-slate-500"
+                aria-label="Answer limitations">
+                @for (caveat of part.caveats; track textTrackKey(caveat, $index)) { <li><span
+                    class="font-bold text-slate-600">Note:</span> {{ caveat }}</li> }
+              </ul>
+              }
+            </section>
             }
-          </li>
-        }
-
-        @if (loading()) {
-          <li class="message-turn flex items-center gap-3" aria-label="OcuGuide is preparing a response">
-            <span class="grid size-7 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600" aria-hidden="true">
-              <span class="material-symbols-outlined text-base">mode_cool</span>
-            </span>
-            <div class="flex min-h-11 items-center gap-3 text-sm font-medium text-slate-500">
-              <span>OcuGuide is thinking</span>
-              <span class="thinking-dots inline-flex items-center gap-1" aria-hidden="true">
-                <i class="size-1.5 rounded-full bg-blue-500"></i>
-                <i class="size-1.5 rounded-full bg-blue-500"></i>
-                <i class="size-1.5 rounded-full bg-blue-500"></i>
-              </span>
-            </div>
-          </li>
-        }
-        </ol>
-      }
-      </div>
-    </div>
-
-    @if (showJumpToLatest()) {
-      <button type="button"
-        class="absolute bottom-3 left-1/2 inline-flex min-h-11 -translate-x-1/2 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-        (click)="jumpToLatest()">
-        <span class="material-symbols-outlined text-base" aria-hidden="true">arrow_downward</span>
-        Jump to latest
-      </button>
-    }
-  </div>
-
-  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
-    {{ loading() ? loadingAnnouncement() : responseAnnouncement() }}
-  </div>
-
-  <footer class="shrink-0 border-t border-slate-200/80 bg-white/95 px-3 pb-2 pt-2 backdrop-blur sm:px-5 sm:pb-3">
-    <div class="mx-auto w-full max-w-3xl">
-      @if (messages().length > 0 && !loading()) {
-        <div class="mb-2 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Suggested follow-up questions">
-          @for (suggestion of followUpSuggestions(); track suggestion.prompt) {
-            <button type="button"
-              class="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
-              (click)="send(suggestion.prompt)">
-              <span class="material-symbols-outlined text-base" aria-hidden="true">{{ suggestion.icon }}</span>
-              {{ suggestion.label }}
-            </button>
+            @if (message.evidence && message.evidence.source !== 'none') {
+            <footer class="mt-4 text-[0.7rem] tabular-nums text-slate-500">
+              {{ evidenceLabel(message) }}
+            </footer>
+            }
+            @if (message.presentations.length > 0) {
+            <section class="mt-2" aria-label="Tools and projected results">
+              <button type="button"
+                class="inline-flex min-h-10 items-center rounded-lg px-1 text-xs font-semibold text-slate-500 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                [attr.aria-expanded]="isToolDisclosureOpen(message.id)"
+                [attr.aria-controls]="toolDisclosureId(message.id)" (click)="toggleToolDisclosure(message.id)">
+                {{ isToolDisclosureOpen(message.id) ? 'Hide tools used' : 'Show tools used' }}
+              </button>
+              @if (isToolDisclosureOpen(message.id)) {
+              <div class="mt-1 max-w-4xl border-l border-slate-300 py-2 pl-3" [id]="toolDisclosureId(message.id)">
+                <ul class="grid list-none gap-2.5 p-0">
+                  @for (presentation of message.presentations; track presentation.id) {
+                  <li class="grid gap-0.5 text-xs leading-5 text-slate-500"><strong
+                      class="text-[0.8rem] text-slate-700">{{ toolLabel(presentation) }}</strong><span>{{
+                      toolResultSummary(presentation) }}</span></li>
+                  }
+                </ul>
+                <button type="button"
+                  class="mt-3 inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-600 hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  [attr.aria-expanded]="isToolResultOpen(message.id)" [attr.aria-controls]="toolResultId(message.id)"
+                  (click)="toggleToolResults(message.id)">{{ isToolResultOpen(message.id) ? 'Hide projected results' :
+                  'Show projected results' }}</button>
+                @if (isToolResultOpen(message.id)) {
+                <pre
+                  class="mt-3 max-h-88 overflow-auto rounded-xl bg-slate-950 p-3.5 font-mono text-[0.7rem] leading-5 whitespace-pre text-blue-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  [id]="toolResultId(message.id)"
+                  tabindex="0"><code>{{ safePresentationJson(message.presentations) }}</code></pre>
+                }
+              </div>
+              }
+            </section>
+            }
+            }
+          </article>
           }
-        </div>
-      }
-
-      <label for="ocu-guide-composer" class="sr-only">Ask OcuGuide about the facility</label>
-      <div class="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm transition-shadow focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
-        <textarea #composer id="ocu-guide-composer" rows="1" [value]="draft()"
-          class="min-h-11 max-h-40 min-w-0 flex-1 resize-none overflow-y-hidden border-0 bg-transparent px-2 py-2.5 text-base leading-6 text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm"
-          (input)="updateDraft($event)" (keydown)="onComposerKeydown($event)" [disabled]="loading()"
-          aria-describedby="ocu-guide-composer-help ocu-guide-composer-count"
-          placeholder="Ask OcuGuide..."></textarea>
+        </li>
+        }
+        @if (loading()) {
+        <li class="min-w-0">
+          <div class="relative flex min-h-13 items-center gap-3 pl-4 sm:pl-5" role="status"
+            aria-label="OcuGuide is thinking">
+            <span class="absolute inset-y-2 left-0 w-0.5 rounded-full bg-blue-600" aria-hidden="true"></span>
+            <app-thinking-orb />
+            <span
+              class="animate-pulse text-sm font-semibold tracking-[-0.01em] text-slate-700 motion-reduce:animate-none">Thinking</span>
+          </div>
+        </li>
+        }
+      </ol>
+      @if (!loading() && latestFollowUps().length > 0) {
+      <nav class="mt-5 ml-4 flex flex-wrap gap-2 sm:ml-5" aria-label="Follow-up questions">
+        @for (suggestion of latestFollowUps(); track suggestion.prompt) {
         <button type="button"
-          class="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-600 text-white transition-colors hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-          (click)="send()" [disabled]="loading() || !draft().trim()" aria-label="Send question to OcuGuide">
-          <span class="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
-        </button>
-      </div>
-
-      <div class="mt-1.5 flex items-start justify-between gap-3 px-1 text-[.6875rem] leading-4 text-slate-500">
-        <span id="ocu-guide-composer-help">
-          <span class="max-sm:hidden">Enter to send &middot; Shift + Enter for a new line. </span>
-          Read-only: OcuGuide can review approved data but cannot make changes.
-        </span>
-        <span id="ocu-guide-composer-count" class="shrink-0" [class.font-semibold]="charactersRemaining() <= 50"
-          [class.text-amber-700]="charactersRemaining() <= 50">{{ charactersRemaining() }}</span>
-      </div>
+          class="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
+          (click)="send(suggestion.prompt)">{{ suggestion.label }}<span class="material-symbols-outlined text-[0.95rem]"
+            aria-hidden="true">{{ suggestion.icon }}</span></button>
+        }
+      </nav>
+      }
+      }
+    </div>
+  </section>
+  @if (showJumpToLatest()) {
+  <button type="button"
+    class="absolute bottom-28 left-1/2 z-10 inline-flex min-h-11 -translate-x-1/2 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-lg shadow-slate-900/10 hover:border-blue-300 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+    (click)="jumpToLatest()"><span class="material-symbols-outlined text-[0.95rem]"
+      aria-hidden="true">arrow_downward</span>Latest</button>
+  }
+  <footer
+    class="border-t border-slate-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-7 lg:px-[max(2.5rem,calc((100%_-_72rem)/2))]">
+    <div
+      class="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 rounded-xl border border-slate-300 bg-white py-2 pr-2 pl-4 transition-[border-color,box-shadow] focus-within:border-blue-500 focus-within:shadow-[0_0_0_3px_rgb(37_99_235/0.1)] motion-reduce:transition-none">
+      <label class="sr-only" for="ocu-guide-composer">Ask OcuGuide about the OcuTemp system</label>
+      <textarea #composer id="ocu-guide-composer"
+        class="max-h-44 w-full resize-none border-0 bg-transparent py-2 text-[0.9375rem] leading-6 text-slate-950 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+        rows="1" [value]="draft()" [attr.maxlength]="maxMessageLength" [disabled]="loading()"
+        placeholder="Ask about rooms, schedules, overrides, energy, or OcuTemp…" (input)="updateDraft($event)"
+        (keydown)="onComposerKeydown($event)"></textarea>
+      <button type="button"
+        class="grid size-11 place-items-center rounded-xl bg-blue-700 text-white transition-colors hover:bg-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300 motion-reduce:transition-none"
+        [disabled]="loading() || !draft().trim()" aria-label="Send message" (click)="send()"><span
+          class="material-symbols-outlined text-lg" aria-hidden="true">arrow_upward</span></button>
+    </div>
+    <div class="flex justify-between gap-4 px-1 pt-2 text-[0.68rem] text-slate-500">
+      <p>OcuTemp data · Access follows your role</p><span class="tabular-nums"
+        [class.font-bold]="charactersRemaining() < 50" [class.text-amber-700]="charactersRemaining() < 50">{{
+        charactersRemaining() }}</span>
     </div>
   </footer>
+  <p class="sr-only" aria-live="polite" aria-atomic="true">{{ loadingAnnouncement() }}</p>
+  <p class="sr-only" aria-live="polite" aria-atomic="true">{{ responseAnnouncement() }}</p>
 </div>

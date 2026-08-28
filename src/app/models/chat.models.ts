@@ -3,29 +3,131 @@ export interface ChatTurnRequest {
   readonly stateToken?: string;
 }
 
-export type ChatQuestionFocus =
-  | 'room_existence'
-  | 'current_temperature'
-  | 'last_known_temperature'
-  | 'current_humidity'
-  | 'current_condition'
-  | 'device_status'
-  | 'ac_power_status'
-  | 'ai_auto_apply_status'
-  | 'schedule_count'
-  | 'schedule_list'
-  | 'energy_total'
-  | 'energy_rank_winner'
-  | 'energy_ranking'
-  | 'energy_trend'
-  | 'energy_report'
-  | 'facility_efficiency_analysis'
-  | 'climate_suggestion'
-  | 'recent_events'
-  | 'system_help'
-  | 'greeting'
-  | 'control_request'
+export type ChatPartId = 'part-1' | 'part-2' | 'part-3';
+
+export type ChatToolName =
+  | 'get_facility_summary'
+  | 'get_room_telemetry'
+  | 'get_energy_report'
+  | 'get_climate_prediction_logs'
+  | 'get_recent_room_events'
+  | 'get_system_help'
+  | 'get_admin_user_aggregates';
+
+export type SystemDomain =
+  | 'rooms'
+  | 'devices'
+  | 'measurements'
+  | 'occupancy'
+  | 'ac_control'
+  | 'overrides'
+  | 'ai_auto_apply'
+  | 'schedules'
+  | 'energy'
+  | 'climate_suggestions'
+  | 'decision_events'
+  | 'floor_plan'
+  | 'own_account'
+  | 'admin_user_aggregates'
+  | 'app_help'
+  | 'assistant_capabilities'
+  | 'system_concepts'
+  | 'conversation'
   | 'unsupported';
+
+export type SystemOperation =
+  | 'greet'
+  | 'count'
+  | 'list'
+  | 'status'
+  | 'detail'
+  | 'compare'
+  | 'report'
+  | 'summarize'
+  | 'explain'
+  | 'how_to'
+  | 'clarify'
+  | 'deny';
+
+export type SystemField =
+  | 'room_name'
+  | 'room_status'
+  | 'room_count'
+  | 'device_assignment'
+  | 'device_identifier'
+  | 'device_status'
+  | 'device_count'
+  | 'assigned_device_count'
+  | 'online_device_count'
+  | 'stale_device_count'
+  | 'offline_device_count'
+  | 'unknown_device_status_count'
+  | 'last_seen'
+  | 'temperature'
+  | 'last_known_temperature'
+  | 'humidity'
+  | 'last_known_humidity'
+  | 'condition'
+  | 'occupancy'
+  | 'last_known_occupancy'
+  | 'ac_power'
+  | 'last_known_ac_power'
+  | 'override_active'
+  | 'override_target_temperature'
+  | 'override_until'
+  | 'ai_auto_apply'
+  | 'schedule_count'
+  | 'schedules'
+  | 'estimated_kwh'
+  | 'runtime_seconds'
+  | 'session_count'
+  | 'energy_rank'
+  | 'energy_trend'
+  | 'climate_suggestion'
+  | 'decision_event'
+  | 'floor_plan_assignment'
+  | 'floor_plan_layout'
+  | 'account_name'
+  | 'account_email'
+  | 'account_role'
+  | 'account_approval'
+  | 'user_total'
+  | 'approved_staff_count'
+  | 'pending_staff_count'
+  | 'admin_count'
+  | 'help_topic'
+  | 'capabilities';
+
+export type SystemScopeKind =
+  | 'facility'
+  | 'named_rooms'
+  | 'own_account'
+  | 'previous_request'
+  | 'previous_result'
+  | 'prior_part';
+
+export type ChatAnswerabilityOutcome =
+  | 'answerable'
+  | 'partial'
+  | 'room_not_found'
+  | 'room_inactive'
+  | 'room_ambiguous'
+  | 'no_online_reading'
+  | 'no_energy_records'
+  | 'permission_denied'
+  | 'source_unavailable'
+  | 'insufficient_evidence'
+  | 'clarification_required'
+  | 'not_applicable';
+
+export interface ChatResponseContext {
+  readonly partId: ChatPartId;
+  readonly domain: SystemDomain;
+  readonly operation: SystemOperation;
+  readonly fields: SystemField[];
+  readonly scope: SystemScopeKind;
+  readonly answerability: ChatAnswerabilityOutcome;
+}
 
 export type ChatDisplayMode =
   | 'compact_metrics'
@@ -37,6 +139,7 @@ export type ChatDisplayMode =
   | 'full_report';
 
 export interface ChatDisplayDirective {
+  readonly partId: ChatPartId;
   readonly presentationId: string;
   readonly mode: ChatDisplayMode;
 }
@@ -59,11 +162,7 @@ export interface ChatAnswerKeyValue {
   readonly value: string;
 }
 
-/**
- * A bounded, plain-text answer block. Every field is present so both AI
- * providers can use one strict JSON schema; renderers use only the fields
- * relevant to `kind` and never interpret the text as HTML.
- */
+/** Plain text only. The client never interprets answer text as HTML. */
 export interface ChatAnswerBlock {
   readonly kind: ChatAnswerBlockKind;
   readonly text: string;
@@ -72,9 +171,9 @@ export interface ChatAnswerBlock {
   readonly tone: ChatAnswerBlockTone;
 }
 
-export interface ChatAnswer {
-  readonly headline: string;
-  readonly summary: string;
+export interface ChatAnswerPart {
+  readonly partId: ChatPartId;
+  readonly text: string;
   readonly blocks: ChatAnswerBlock[];
   readonly highlights: ChatAnswerHighlight[];
   readonly caveats: string[];
@@ -83,8 +182,78 @@ export interface ChatAnswer {
 export interface ChatEvidenceMetadata {
   readonly asOf: string;
   readonly timeZone: 'Asia/Manila';
+  readonly source: 'facility' | 'application' | 'none';
   readonly partial: boolean;
   readonly notices: string[];
+}
+
+export interface ChatFollowUp {
+  readonly label: string;
+  readonly prompt: string;
+}
+
+export type ChatValueState =
+  | 'current'
+  | 'historical'
+  | 'configured'
+  | 'expired'
+  | 'unknown'
+  | 'unavailable'
+  | 'not_applicable';
+
+export type ChatValueUnit =
+  | 'none'
+  | 'celsius'
+  | 'percent'
+  | 'kwh'
+  | 'seconds'
+  | 'count'
+  | 'datetime';
+
+export interface ProjectedValue {
+  readonly field: SystemField;
+  readonly label: string;
+  readonly value: string | number | boolean | null;
+  readonly state: ChatValueState;
+  readonly unit: ChatValueUnit;
+  readonly asOf: string | null;
+}
+
+export interface ChatPresentationBase {
+  readonly availability: 'available' | 'unavailable';
+  readonly id: string;
+  readonly title: string;
+  readonly partId: ChatPartId;
+  readonly toolName: ChatToolName;
+}
+
+export interface MetricSummaryPresentation extends ChatPresentationBase {
+  readonly kind: 'metric-summary';
+  readonly metrics: ProjectedValue[];
+}
+
+export interface RoomDataRow {
+  readonly roomName: string;
+  readonly values: ProjectedValue[];
+}
+
+export interface RoomDataPresentation extends ChatPresentationBase {
+  readonly kind: 'room-data';
+  readonly rooms: RoomDataRow[];
+}
+
+export interface ScheduleDataRow {
+  readonly roomName: string;
+  readonly day: string;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly subject: string;
+  readonly state: Extract<ChatValueState, 'configured' | 'unknown' | 'unavailable'>;
+}
+
+export interface ScheduleDataPresentation extends ChatPresentationBase {
+  readonly kind: 'schedule-data';
+  readonly schedules: ScheduleDataRow[];
 }
 
 export interface EnergyRange {
@@ -120,11 +289,8 @@ export interface EnergyTrendPoint {
   readonly expectedDays: number;
 }
 
-export interface EnergyReportPresentation {
+export interface EnergyReportPresentation extends ChatPresentationBase {
   readonly kind: 'energy-report';
-  readonly availability: 'available' | 'unavailable';
-  readonly id: string;
-  readonly title: string;
   readonly estimated: true;
   readonly range: EnergyRange;
   readonly metrics: {
@@ -167,11 +333,9 @@ export interface RoomTelemetryRow {
   readonly lastSeen: string | null;
 }
 
-export interface RoomTelemetryPresentation {
+/** Compatibility shape for existing specialized server tools. */
+export interface RoomTelemetryPresentation extends ChatPresentationBase {
   readonly kind: 'room-telemetry';
-  readonly availability: 'available' | 'unavailable';
-  readonly id: string;
-  readonly title: string;
   readonly rooms: RoomTelemetryRow[];
 }
 
@@ -187,11 +351,8 @@ export interface ClimateSuggestionRow {
   readonly updatedAt: string | null;
 }
 
-export interface ClimateSuggestionsPresentation {
+export interface ClimateSuggestionsPresentation extends ChatPresentationBase {
   readonly kind: 'climate-suggestions';
-  readonly availability: 'available' | 'unavailable';
-  readonly id: string;
-  readonly title: string;
   readonly rooms: ClimateSuggestionRow[];
 }
 
@@ -204,19 +365,13 @@ export interface RecentEventRow {
   readonly updatedAt: string;
 }
 
-export interface RecentEventsPresentation {
+export interface RecentEventsPresentation extends ChatPresentationBase {
   readonly kind: 'recent-events';
-  readonly availability: 'available' | 'unavailable';
-  readonly id: string;
-  readonly title: string;
   readonly events: RecentEventRow[];
 }
 
-export interface SystemHelpPresentation {
+export interface SystemHelpPresentation extends ChatPresentationBase {
   readonly kind: 'system-help';
-  readonly availability: 'available' | 'unavailable';
-  readonly id: string;
-  readonly title: string;
   readonly topic: string;
   readonly steps: string[];
   readonly route: string | null;
@@ -224,6 +379,9 @@ export interface SystemHelpPresentation {
 }
 
 export type ChatPresentation =
+  | MetricSummaryPresentation
+  | RoomDataPresentation
+  | ScheduleDataPresentation
   | EnergyReportPresentation
   | RoomTelemetryPresentation
   | ClimateSuggestionsPresentation
@@ -232,11 +390,12 @@ export type ChatPresentation =
 
 export interface ChatTurnResponse {
   readonly turnId: string;
-  readonly questionFocus: ChatQuestionFocus;
-  readonly answer: ChatAnswer;
+  readonly responseContexts: ChatResponseContext[];
+  readonly answerParts: ChatAnswerPart[];
   readonly presentations: ChatPresentation[];
   readonly displayPlan: ChatDisplayDirective[];
   readonly evidence: ChatEvidenceMetadata;
+  readonly followUps: ChatFollowUp[];
   readonly stateToken: string;
   readonly contextReset: boolean;
 }
@@ -267,10 +426,11 @@ export interface RenderableChatMessage {
   readonly id: string;
   readonly role: 'user' | 'assistant';
   readonly text: string;
-  readonly answer?: ChatAnswer;
-  readonly questionFocus?: ChatQuestionFocus;
+  readonly responseContexts: ChatResponseContext[];
+  readonly answerParts: ChatAnswerPart[];
   readonly presentations: ChatPresentation[];
   readonly displayPlan: ChatDisplayDirective[];
+  readonly followUps: ChatFollowUp[];
   readonly evidence?: ChatEvidenceMetadata;
   readonly errorCode?: string;
   readonly retryAfterSeconds?: number;

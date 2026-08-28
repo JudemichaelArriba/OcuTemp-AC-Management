@@ -324,9 +324,11 @@
                     </div>
                     <div
                         class="bg-slate-50/50 rounded-2xl p-4 sm:p-5 border border-slate-100 flex items-center justify-between">
-                        <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Commanded By</p>
-                        <p class="text-xs font-black text-blue-600 uppercase tracking-tight truncate max-w-[100px]">{{
-                            deviceData?.control?.requestedBy || '--' }}</p>
+                        <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">Requested By</p>
+                        <p class="max-w-[140px] truncate text-right text-xs font-black tracking-tight text-blue-600"
+                            [attr.title]="overrideActorName || null">
+                            {{ overrideActorDisplayName }}
+                        </p>
                     </div>
                 </div>
 

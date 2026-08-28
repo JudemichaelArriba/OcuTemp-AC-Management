@@ -8,12 +8,14 @@ import { RateLimiter } from '../../helpers/rate-limiter';
 @Component({
   selector: 'app-login',
   templateUrl: './login.html',
+  styleUrl: './login.css',
   standalone: true,
   imports: [RouterModule],
 })
 export class LoginComponent implements OnInit {
 
   isLoggingIn = false;
+  showPassword = false;
 
   private readonly rateLimiter = new RateLimiter('login_attempts', 8, 60_000);
 
@@ -25,6 +27,10 @@ export class LoginComponent implements OnInit {
   ) { }
 
   ngOnInit(): void { }
+
+  togglePasswordVisibility(): void {
+    this.showPassword = !this.showPassword;
+  }
 
   async login(event: Event): Promise<void> {
     event.preventDefault();

@@ -1,5 +1,5 @@
 <div
-  class="relative w-full h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 overflow-hidden">
+  class="relative flex min-h-dvh w-full items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6">
 
   <div class="absolute inset-0 overflow-hidden pointer-events-none">
     <div
@@ -101,7 +101,7 @@
         <p class="text-gray-500 text-[10px] mt-1 font-bold tracking-[0.15em] uppercase">Create Account</p>
       </div>
 
-      <form (submit)="signup($event)" class="w-full">
+      <form (submit)="signup($event)" (input)="onSignupInput($event)" class="w-full">
 
         <div class="relative mb-4">
           <input id="firstName" type="text" placeholder=" " required minlength="2"
@@ -124,7 +124,7 @@
         </div>
 
         <div class="relative mb-4">
-          <input id="email" type="email" placeholder=" " required
+          <input id="email" type="email" placeholder=" " required autocomplete="email"
             class="w-full py-2.5 border-b-2 border-gray-200 text-gray-800 focus:border-[#0099FF] focus:outline-none placeholder-transparent bg-transparent text-sm peer" />
           <label for="email" class="absolute left-0 top-2.5 text-gray-400 text-sm transition-all duration-300 pointer-events-none
                   peer-focus:-top-4 peer-focus:text-xs peer-focus:text-[#0099FF]
@@ -133,27 +133,78 @@
           </label>
         </div>
 
-        <div class="relative mb-4">
-          <input id="password" type="password" placeholder=" " required minlength="8"
-            class="w-full py-2.5 border-b-2 border-gray-200 text-gray-800 focus:border-[#0099FF] focus:outline-none placeholder-transparent bg-transparent text-sm peer" />
+        <div class="group relative mb-2">
+          <input id="password" [type]="showPassword ? 'text' : 'password'" placeholder=" " required minlength="8"
+            autocomplete="new-password" aria-describedby="password-requirements"
+            class="peer w-full border-b-2 border-gray-200 bg-transparent py-2.5 pr-11 text-sm text-gray-800 placeholder-transparent focus:border-[#0099FF] focus:outline-none" />
           <label for="password" class="absolute left-0 top-2.5 text-gray-400 text-sm transition-all duration-300 pointer-events-none
                   peer-focus:-top-4 peer-focus:text-xs peer-focus:text-[#0099FF]
                   peer-[:not(:placeholder-shown)]:-top-4 peer-[:not(:placeholder-shown)]:text-xs">
             Password
           </label>
+          <button type="button" (click)="togglePasswordVisibility()"
+            [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
+            [attr.aria-pressed]="showPassword"
+            class="pointer-events-none absolute right-0 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 opacity-0 transition-colors hover:text-[#0056D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0099FF] group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <span class="material-symbols-outlined text-[20px]" aria-hidden="true">
+              {{ showPassword ? 'visibility_off' : 'visibility' }}
+            </span>
+          </button>
         </div>
 
-        <div class="relative mb-5">
-          <input id="confirmPassword" type="password" placeholder=" " required
-            class="w-full py-2.5 border-b-2 border-gray-200 text-gray-800 focus:border-[#0099FF] focus:outline-none placeholder-transparent bg-transparent text-sm peer" />
+        @if (passwordFeedbackVisible) {
+        <div id="password-requirements" class="mb-4 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] font-medium"
+          aria-live="polite">
+          <span [class.text-[#0056D2]]="passwordCriteria.minLength" [class.text-gray-400]="!passwordCriteria.minLength">
+            {{ passwordCriteria.minLength ? '✓' : '○' }} 8+ characters
+          </span>
+          <span [class.text-[#0056D2]]="passwordCriteria.uppercase" [class.text-gray-400]="!passwordCriteria.uppercase">
+            {{ passwordCriteria.uppercase ? '✓' : '○' }} Uppercase
+          </span>
+          <span [class.text-[#0056D2]]="passwordCriteria.lowercase" [class.text-gray-400]="!passwordCriteria.lowercase">
+            {{ passwordCriteria.lowercase ? '✓' : '○' }} Lowercase
+          </span>
+          <span [class.text-[#0056D2]]="passwordCriteria.number" [class.text-gray-400]="!passwordCriteria.number">
+            {{ passwordCriteria.number ? '✓' : '○' }} Number
+          </span>
+          <span [class.text-[#0056D2]]="passwordCriteria.specialCharacter"
+            [class.text-gray-400]="!passwordCriteria.specialCharacter">
+            {{ passwordCriteria.specialCharacter ? '✓' : '○' }} Special character (@$!%*?&)
+          </span>
+          <span [class.text-[#0056D2]]="passwordCriteria.allowedCharacters"
+            [class.text-gray-400]="!passwordCriteria.allowedCharacters">
+            {{ passwordCriteria.allowedCharacters ? '✓' : '○' }} Allowed characters only
+          </span>
+        </div>
+        }
+
+        <div class="group relative" [class.mb-2]="confirmPasswordTouched" [class.mb-5]="!confirmPasswordTouched">
+          <input id="confirmPassword" [type]="showConfirmPassword ? 'text' : 'password'" placeholder=" " required
+            autocomplete="new-password" aria-describedby="password-match-status"
+            class="peer w-full border-b-2 border-gray-200 bg-transparent py-2.5 pr-11 text-sm text-gray-800 placeholder-transparent focus:border-[#0099FF] focus:outline-none" />
           <label for="confirmPassword" class="absolute left-0 top-2.5 text-gray-400 text-sm transition-all duration-300 pointer-events-none
                   peer-focus:-top-4 peer-focus:text-xs peer-focus:text-[#0099FF]
                   peer-[:not(:placeholder-shown)]:-top-4 peer-[:not(:placeholder-shown)]:text-xs">
             Confirm Password
           </label>
+          <button type="button" (click)="toggleConfirmPasswordVisibility()"
+            [attr.aria-label]="showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'"
+            [attr.aria-pressed]="showConfirmPassword"
+            class="pointer-events-none absolute right-0 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 opacity-0 transition-colors hover:text-[#0056D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0099FF] group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <span class="material-symbols-outlined text-[20px]" aria-hidden="true">
+              {{ showConfirmPassword ? 'visibility_off' : 'visibility' }}
+            </span>
+          </button>
         </div>
 
-        <button type="submit" [disabled]="isSigningUp" class="relative w-full py-3.5 bg-gradient-to-r from-[#0056D2] to-[#0099FF] text-white font-bold rounded-xl
+        @if (confirmPasswordTouched) {
+        <p id="password-match-status" class="mb-4 text-[10px] font-medium" aria-live="polite"
+          [class.text-emerald-600]="passwordsMatch" [class.text-red-500]="!passwordsMatch">
+          {{ passwordsMatch ? '✓ Passwords match' : 'Passwords do not match yet' }}
+        </p>
+        }
+
+        <button type="submit" [disabled]="!canCreateAccount" class="relative w-full py-3.5 bg-gradient-to-r from-[#0056D2] to-[#0099FF] text-white font-bold rounded-xl
                 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 uppercase tracking-widest text-xs transition-all duration-300
                 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 overflow-hidden">
           @if (isSigningUp) {

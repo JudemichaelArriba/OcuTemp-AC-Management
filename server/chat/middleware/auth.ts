@@ -87,11 +87,16 @@ export async function authenticateChatRequest(
         );
     }
 
+    const fullName = boundedProfileText(profile['fullName'], 100);
+    const email = boundedProfileEmail(profile['email']) ?? boundedProfileEmail(claims['email']);
+
     return {
         uid,
         role,
         approved: true,
         emailVerified,
+        fullName,
+        email,
         idToken,
     };
 }
@@ -226,6 +231,27 @@ function assertRequiredFirebaseClaims(
 
 function isChatUserRole(value: unknown): value is ChatUserRole {
     return value === 'staff' || value === 'admin';
+}
+
+function boundedProfileText(value: unknown, maximumCharacters: number): string | null {
+    if (typeof value !== 'string') return null;
+    const normalized = value.normalize('NFKC').trim();
+    if (
+        normalized.length === 0 ||
+        Array.from(normalized).length > maximumCharacters ||
+        /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/u.test(normalized)
+    ) {
+        return null;
+    }
+    return normalized;
+}
+
+function boundedProfileEmail(value: unknown): string | null {
+    const normalized = boundedProfileText(value, 254);
+    if (!normalized || /\s/u.test(normalized)) return null;
+    const separator = normalized.lastIndexOf('@');
+    if (separator <= 0 || separator === normalized.length - 1) return null;
+    return normalized;
 }
 
 function authenticationRequired(): ChatApiError {

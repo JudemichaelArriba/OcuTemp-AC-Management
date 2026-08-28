@@ -38,7 +38,7 @@
       <form (submit)="login($event)" class="w-full">
 
         <div class="relative mb-6">
-          <input id="email" type="email" placeholder=" " required
+          <input id="email" type="email" placeholder=" " required autocomplete="email"
             class="w-full py-2.5 border-b-2 border-gray-200 text-gray-800 focus:border-[#0099FF] focus:outline-none placeholder-transparent bg-transparent text-sm peer" />
           <label for="email" class="absolute left-0 top-2.5 text-gray-400 text-sm transition-all duration-300 pointer-events-none
                   peer-focus:-top-4 peer-focus:text-xs peer-focus:text-[#0099FF]
@@ -47,14 +47,23 @@
           </label>
         </div>
 
-        <div class="relative mb-6">
-          <input id="password" type="password" placeholder=" " required
-            class="w-full py-2.5 border-b-2 border-gray-200 text-gray-800 focus:border-[#0099FF] focus:outline-none placeholder-transparent bg-transparent text-sm peer" />
+        <div class="group relative mb-6">
+          <input id="password" [type]="showPassword ? 'text' : 'password'" placeholder=" " required
+            autocomplete="current-password"
+            class="peer w-full border-b-2 border-gray-200 bg-transparent py-2.5 pr-11 text-sm text-gray-800 placeholder-transparent focus:border-[#0099FF] focus:outline-none" />
           <label for="password" class="absolute left-0 top-2.5 text-gray-400 text-sm transition-all duration-300 pointer-events-none
                   peer-focus:-top-4 peer-focus:text-xs peer-focus:text-[#0099FF]
                   peer-[:not(:placeholder-shown)]:-top-4 peer-[:not(:placeholder-shown)]:text-xs">
             Password
           </label>
+          <button type="button" (click)="togglePasswordVisibility()"
+            [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
+            [attr.aria-pressed]="showPassword"
+            class="pointer-events-none absolute right-0 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 opacity-0 transition-colors hover:text-[#0056D2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0099FF] group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <span class="material-symbols-outlined text-[20px]" aria-hidden="true">
+              {{ showPassword ? 'visibility_off' : 'visibility' }}
+            </span>
+          </button>
         </div>
 
         <button type="submit" [disabled]="isLoggingIn" class="relative w-full py-3.5 bg-gradient-to-r from-[#0056D2] to-[#0099FF] text-white font-bold rounded-xl

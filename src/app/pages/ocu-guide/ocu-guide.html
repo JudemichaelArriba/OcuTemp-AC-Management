@@ -1,21 +1,24 @@
-<main class="mx-auto flex h-[calc(100dvh-6.5rem)] min-h-0 w-full max-w-6xl flex-col overflow-hidden text-slate-900 md:h-[calc(100dvh-3rem)]"
+<main
+  class="flex h-[calc(100dvh-6.5rem)] min-h-0 w-full flex-col overflow-hidden bg-slate-50 text-slate-900 md:h-[calc(100dvh-3rem)]"
   aria-labelledby="ocu-guide-page-title">
-  <header class="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-slate-200/80 px-3 sm:px-5">
+  <header
+    class="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-10">
     <div class="flex min-w-0 items-center gap-3">
-      <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white" aria-hidden="true">
-        <span class="material-symbols-outlined text-xl">mode_cool</span>
+      <span class="grid size-10 shrink-0 place-items-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700"
+        aria-hidden="true">
+        <span class="material-symbols-outlined text-[1.3rem]">mode_cool</span>
       </span>
       <div class="min-w-0">
-        <h1 id="ocu-guide-page-title" class="truncate text-base font-bold tracking-tight text-slate-950">OcuGuide</h1>
-        <p class="flex items-center gap-1.5 text-xs text-slate-500">
-          <span class="size-1.5 rounded-full bg-blue-500" aria-hidden="true"></span>
-          Read-only assistant
-        </p>
+        <div class="flex items-center gap-2">
+          <h1 id="ocu-guide-page-title" class="truncate text-base font-bold tracking-[-0.02em] text-slate-950">OcuGuide
+          </h1>
+        </div>
+        <p class="text-xs text-slate-500">Your read-only OcuTemp assistant</p>
       </div>
     </div>
 
     <button type="button"
-      class="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+      class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-transparent px-3 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 motion-reduce:transition-none"
       (click)="startNewConversation()" aria-label="Clear this conversation and start a new chat">
       <span class="material-symbols-outlined text-lg" aria-hidden="true">edit_square</span>
       <span class="max-sm:hidden">New chat</span>
@@ -23,6 +26,6 @@
   </header>
 
   <section class="min-h-0 flex-1" aria-label="OcuGuide chat workspace">
-    <app-ocu-guide-conversation />
+    <app-ocu-guide-conversation class="block h-full" />
   </section>
 </main>
