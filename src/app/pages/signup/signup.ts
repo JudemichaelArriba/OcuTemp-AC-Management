@@ -3,7 +3,12 @@ import { Router } from '@angular/router';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.services';
 import { DialogService } from '../../services/dialog.service';
-import { PASSWORD_PATTERN } from '../../helpers/auth-validation';
+import {
+  evaluatePasswordCriteria,
+  PASSWORD_HELP_TEXT,
+  PASSWORD_PATTERN,
+  type PasswordCriteria,
+} from '../../helpers/auth-validation';
 import { RateLimiter } from '../../helpers/rate-limiter';
 
 type SignupPhase = 'idle' | 'creating' | 'awaitingVerification' | 'resending' | 'checkingVerification' | 'finalizing';
@@ -11,6 +16,7 @@ type SignupPhase = 'idle' | 'creating' | 'awaitingVerification' | 'resending' | 
 @Component({
   selector: 'app-signup',
   templateUrl: './signup.html',
+  styleUrl: './signup.css',
   standalone: true,
   imports: [RouterModule],
 })
@@ -19,6 +25,14 @@ export class SignupComponent implements OnDestroy {
   phase: SignupPhase = 'idle';
   resendCooldown = 0;
   verificationEmailSent = false;
+  showPassword = false;
+  showConfirmPassword = false;
+  passwordFeedbackVisible = false;
+  confirmPasswordTouched = false;
+  passwordValidationPending = false;
+  passwordCriteria: PasswordCriteria = evaluatePasswordCriteria('');
+  passwordsMatch = false;
+  formFieldsValid = false;
 
   pendingEmail = '';
   private pendingFirstName = '';
@@ -26,6 +40,7 @@ export class SignupComponent implements OnDestroy {
 
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private resendTimer: ReturnType<typeof setInterval> | null = null;
+  private passwordValidationTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly rateLimiter = new RateLimiter('signup_attempts', 5, 300_000);
 
@@ -59,9 +74,50 @@ export class SignupComponent implements OnDestroy {
     return this.phase === 'checkingVerification';
   }
 
+  get canCreateAccount(): boolean {
+    return this.formFieldsValid
+      && this.passwordCriteria.valid
+      && this.passwordsMatch
+      && !this.passwordValidationPending
+      && !this.isSigningUp;
+  }
+
+  togglePasswordVisibility(): void {
+    this.showPassword = !this.showPassword;
+  }
+
+  toggleConfirmPasswordVisibility(): void {
+    this.showConfirmPassword = !this.showConfirmPassword;
+  }
+
+  onSignupInput(event: Event): void {
+    const form = event.currentTarget as HTMLFormElement;
+    const changedInput = event.target as HTMLInputElement;
+
+    this.formFieldsValid = form.checkValidity();
+    if (changedInput.id !== 'password' && changedInput.id !== 'confirmPassword') return;
+
+    const password = (form.querySelector('#password') as HTMLInputElement).value;
+    const confirmPassword = (form.querySelector('#confirmPassword') as HTMLInputElement).value;
+
+    this.passwordFeedbackVisible = password.length > 0;
+    this.confirmPasswordTouched = confirmPassword.length > 0;
+    this.passwordValidationPending = true;
+
+    if (this.passwordValidationTimer) clearTimeout(this.passwordValidationTimer);
+    this.passwordValidationTimer = setTimeout(() => {
+      this.passwordCriteria = evaluatePasswordCriteria(password);
+      this.passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
+      this.passwordValidationPending = false;
+      this.passwordValidationTimer = null;
+      this.cdr.detectChanges();
+    }, 200);
+  }
+
   ngOnDestroy(): void {
     this.clearPolling();
     this.clearResendTimer();
+    if (this.passwordValidationTimer) clearTimeout(this.passwordValidationTimer);
   }
 
   async signup(event: Event): Promise<void> {
@@ -96,7 +152,7 @@ export class SignupComponent implements OnDestroy {
     if (!PASSWORD_PATTERN.test(password)) {
       this.dialog.alert(
         'Weak Password',
-        'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.',
+        PASSWORD_HELP_TEXT,
       );
       return;
     }

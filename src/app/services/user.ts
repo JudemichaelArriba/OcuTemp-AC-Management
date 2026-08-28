@@ -26,6 +26,29 @@ export class UserService {
     }
   }
 
+  async getUserFullName(uid: string): Promise<string | null> {
+    const normalizedUid = uid.trim();
+    if (!normalizedUid || normalizedUid.length > 128 || /[.#$/\[\]]/.test(normalizedUid)) {
+      return null;
+    }
+
+    try {
+      const fullNameRef = ref(this.db, `users/${normalizedUid}/fullName`);
+      const snapshot = await get(fullNameRef);
+      const value: unknown = snapshot.val();
+      if (typeof value !== 'string') return null;
+
+      const fullName = value.trim().replace(/\s+/g, ' ');
+      return fullName ? fullName.slice(0, 100) : null;
+    } catch (err) {
+      this.logger.error('Failed to fetch user display name', err, {
+        service: 'UserService',
+        action: 'getUserFullName',
+      });
+      throw err;
+    }
+  }
+
   async createUser(user: User): Promise<void> {
     try {
       const userRef = ref(this.db, `users/${user.uid}`);

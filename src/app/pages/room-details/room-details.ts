@@ -10,6 +10,7 @@ import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal'
 import { DialogService } from '../../services/dialog.service';
 import { AuthStateService } from '../../services/auth-state.service';
 import { LoggerService } from '../../services/logger.service';
+import { UserService } from '../../services/user';
 
 interface TempTick {
   temp: number;
@@ -47,6 +48,10 @@ export class RoomDetails implements OnInit, OnDestroy {
   isSavingAiAutoApply = false;
   private overrideInitialized = false;
   private currentUserId: string | null = null;
+  private overrideActorUid: string | null = null;
+  private overrideActorLookupVersion = 0;
+  overrideActorName: string | null = null;
+  isOverrideActorLoading = false;
 
   readonly overrideMinTemp = 16;
   readonly overrideMaxTemp = 30;
@@ -83,7 +88,8 @@ export class RoomDetails implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private dialogService: DialogService,
     private authState: AuthStateService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private userService: UserService
   ) { }
 
   ngOnInit() {
@@ -125,6 +131,7 @@ export class RoomDetails implements OnInit, OnDestroy {
           this.currentDeviceId = nextDeviceId;
           this.deviceData = null;
           this.overrideInitialized = false;
+          void this.resolveOverrideActor(null);
           this.overrideTemp = 24;
           this.overrideDurationMinutes = 60;
           this.updateSvgCalculations();
@@ -167,6 +174,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   private streamDeviceData(deviceId: string) {
     this.unsubscribeDevices = this.deviceService.streamDevice(deviceId, (device) => {
       this.deviceData = device;
+      void this.resolveOverrideActor(device?.control?.requestedBy);
 
       if (!this.overrideInitialized) {
         const suggestedTemp = device?.control?.targetTemp ?? device?.acState?.currentTemp;
@@ -185,6 +193,39 @@ export class RoomDetails implements OnInit, OnDestroy {
 
       this.refreshView();
     });
+  }
+
+  private async resolveOverrideActor(requestedBy: string | undefined | null): Promise<void> {
+    const uid = requestedBy?.trim() || null;
+    if (uid === this.overrideActorUid) return;
+
+    this.overrideActorUid = uid;
+    const lookupVersion = ++this.overrideActorLookupVersion;
+    this.overrideActorName = null;
+    this.isOverrideActorLoading = uid !== null;
+    this.refreshView();
+
+    if (!uid) return;
+
+    try {
+      const fullName = await this.userService.getUserFullName(uid);
+      if (this.destroyed || lookupVersion !== this.overrideActorLookupVersion) return;
+      this.overrideActorName = fullName;
+    } catch {
+      if (this.destroyed || lookupVersion !== this.overrideActorLookupVersion) return;
+      this.overrideActorName = null;
+    } finally {
+      if (!this.destroyed && lookupVersion === this.overrideActorLookupVersion) {
+        this.isOverrideActorLoading = false;
+        this.refreshView();
+      }
+    }
+  }
+
+  get overrideActorDisplayName(): string {
+    if (!this.overrideActorUid) return '--';
+    if (this.isOverrideActorLoading) return 'Loading name';
+    return this.overrideActorName ?? 'Unknown user';
   }
 
   get deviceOnlineState(): DeviceOnlineState {
