@@ -2,14 +2,13 @@ export const environment = {
   production: false,
 
   firebase: {
-    apiKey: 'AIzaSyBf94Xs0iZTAG-kbNvNSGUKO-pTyIXPcpw',
-    authDomain: 'ocutemp.firebaseapp.com',
-    databaseURL: 'https://ocutemp-default-rtdb.firebaseio.com/',
-    projectId: 'ocutemp',
-    storageBucket: 'ocutemp.firebasestorage.app',
-    messagingSenderId: '700435856134',
-    appId: '1:700435856134:web:f4e893c1d80cab9bc4bc87'
+    apiKey: 'AIzaSyDZXj-w--LzhJIuFvmcLLKJjVyLgzevHe8',
+    authDomain: 'ocutemp-testing.firebaseapp.com',
+    databaseURL: 'https://ocutemp-testing-default-rtdb.firebaseio.com',
+    projectId: 'ocutemp-testing',
+    storageBucket: 'ocutemp-testing.firebasestorage.app',
+    messagingSenderId: '859041473500',
+    appId: '1:859041473500:web:15d6dd247fcd45545d2519'
   },
-
   sentryDsn: ''
 };

@@ -15,12 +15,21 @@ import {
   formatMode,
   formatReason,
   formatSource,
+  getEventColor,
+  getEventIcon,
 } from '../../helpers/log-display.helper';
 
-interface LogDetailItem {
+interface DetailRow {
   readonly label: string;
   readonly value: string;
+  /** Prior value, when this field represents a change. Rendered as "from → value". */
+  readonly from?: string;
+}
+
+interface DetailGroup {
+  readonly title: string;
   readonly icon: string;
+  readonly rows: readonly DetailRow[];
 }
 
 @Component({
@@ -38,11 +47,17 @@ export class LogsDetailsModal implements OnChanges {
   @Input() isLoading = false;
 
   readonly formatEventType = formatEventType;
+  readonly getEventIcon = getEventIcon;
+  readonly getEventColor = getEventColor;
 
   visible = false;
   animating = false;
 
-  readonly skeletonItems = Array(8).fill(null);
+  readonly skeletonGroups: readonly (readonly null[])[] = [
+    Array(3).fill(null),
+    Array(4).fill(null),
+    Array(4).fill(null),
+  ];
 
   constructor(private cdr: ChangeDetectorRef) { }
 
@@ -84,46 +99,6 @@ export class LogsDetailsModal implements OnChanges {
     }
   }
 
-  getEventIcon(eventType: string): string {
-    const map: Record<string, string> = {
-      mode_change: 'swap_horiz',
-      ac_state_changed: 'ac_unit',
-      firebase_ready: 'cloud_done',
-      boot: 'restart_alt',
-      manual_override: 'back_hand',
-      ml_failure: 'error_outline',
-      ml_suggestion: 'psychology',
-      ml_auto_applied: 'auto_awesome',
-      ai_toggle_changed: 'toggle_on',
-    };
-    return map[eventType] ?? 'info';
-  }
-
-
-  getIconColor(icon: string): [string, string] {
-    const map: Record<string, [string, string]> = {
-      tag: ['bg-indigo-100', 'text-indigo-500'],
-      router: ['bg-blue-100', 'text-blue-600'],
-      meeting_room: ['bg-cyan-100', 'text-cyan-600'],
-      input: ['bg-violet-100', 'text-violet-600'],
-      rule: ['bg-amber-100', 'text-amber-600'],
-      settings_suggest: ['bg-sky-100', 'text-sky-600'],
-      power_settings_new: ['bg-emerald-100', 'text-emerald-600'],
-      device_thermostat: ['bg-orange-100', 'text-orange-600'],
-      history: ['bg-slate-100', 'text-slate-500'],
-      psychology: ['bg-purple-100', 'text-purple-600'],
-      check_circle: ['bg-emerald-100', 'text-emerald-600'],
-      auto_awesome: ['bg-fuchsia-100', 'text-fuchsia-600'],
-      settings_remote: ['bg-blue-100', 'text-blue-500'],
-      restart_alt: ['bg-amber-100', 'text-amber-500'],
-      compare_arrows: ['bg-teal-100', 'text-teal-600'],
-      timer: ['bg-sky-100', 'text-sky-500'],
-      schedule: ['bg-indigo-100', 'text-indigo-500'],
-      mark_email_read: ['bg-emerald-100', 'text-emerald-600'],
-    };
-    return map[icon] ?? ['bg-slate-100', 'text-slate-500'];
-  }
-
   formatDateTime(iso: string): string {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return 'Not recorded';
@@ -138,29 +113,62 @@ export class LogsDetailsModal implements OnChanges {
     });
   }
 
-  get detailItems(): LogDetailItem[] {
+  /**
+   * Field groups for the open log. Fields already shown in the header
+   * (event type, timestamp, read state) are intentionally omitted, and
+   * optional fields appear only when the device actually recorded them.
+   */
+  get detailGroups(): DetailGroup[] {
     const log = this.log;
     if (!log) return [];
-    return [
-      { label: 'Log ID', value: log.id, icon: 'tag' },
-      { label: 'Device', value: this.formatText(log.deviceId), icon: 'router' },
-      { label: 'Room UID', value: this.formatText(log.roomUid, 'No room'), icon: 'meeting_room' },
-      { label: 'Source', value: formatSource(log.source), icon: 'input' },
-      { label: 'Reason', value: formatReason(log.reason), icon: 'rule' },
-      { label: 'Mode', value: formatMode(log.mode), icon: 'settings_suggest' },
-      { label: 'Power', value: log.power ? 'On' : 'Off', icon: 'power_settings_new' },
-      { label: 'Target Temp', value: this.formatTemperature(log.targetTemp), icon: 'device_thermostat' },
-      { label: 'Previous Temp', value: this.formatTemperature(log.previousTemp), icon: 'history' },
-      { label: 'Suggested Temp', value: this.formatTemperature(log.suggestedTemp), icon: 'psychology' },
-      { label: 'Applied', value: this.formatBoolean(log.applied), icon: 'check_circle' },
-      { label: 'AI Auto Apply', value: this.formatBoolean(log.aiAutoApply), icon: 'auto_awesome' },
-      { label: 'IR Sent', value: this.formatBoolean(log.irSent), icon: 'settings_remote' },
-      { label: 'Previous Power', value: this.formatBoolean(log.previousPower), icon: 'restart_alt' },
-      { label: 'Previous Source', value: log.previousSource ? formatSource(log.previousSource) : 'Not recorded', icon: 'compare_arrows' },
-      { label: 'Uptime', value: this.formatUptime(log.uptimeMs), icon: 'timer' },
-      { label: 'Updated', value: this.formatDateTime(log.updatedAt), icon: 'schedule' },
-      { label: 'Read State', value: log.read === true ? 'Read' : 'Unread', icon: 'mark_email_read' },
+
+    const outcome: DetailRow[] = [
+      {
+        label: 'Power',
+        value: this.formatPower(log.power),
+        from: typeof log.previousPower === 'boolean' ? this.formatPower(log.previousPower) : undefined,
+      },
+      {
+        label: 'Target temperature',
+        value: this.formatTemperature(log.targetTemp),
+        from: typeof log.previousTemp === 'number' ? this.formatTemperature(log.previousTemp) : undefined,
+      },
+      { label: 'Mode', value: formatMode(log.mode) },
+      { label: 'Applied to device', value: this.formatBoolean(log.applied) },
     ];
+    if (typeof log.irSent === 'boolean') {
+      outcome.push({ label: 'IR signal sent', value: this.formatBoolean(log.irSent) });
+    }
+
+    const cause: DetailRow[] = [
+      {
+        label: 'Control source',
+        value: formatSource(log.source),
+        from: log.previousSource ? formatSource(log.previousSource) : undefined,
+      },
+      { label: 'Reason', value: formatReason(log.reason) },
+    ];
+    if (typeof log.suggestedTemp === 'number') {
+      cause.push({ label: 'AI suggested temperature', value: this.formatTemperature(log.suggestedTemp) });
+    }
+    cause.push({ label: 'AI auto-apply', value: log.aiAutoApply ? 'On' : 'Off' });
+
+    const device: DetailRow[] = [
+      { label: 'Device', value: this.formatText(log.deviceId) },
+      { label: 'Room', value: this.formatText(log.roomUid, 'No room assigned') },
+      { label: 'Uptime at event', value: this.formatUptime(log.uptimeMs) },
+      { label: 'Log ID', value: log.id },
+    ];
+
+    return [
+      { title: 'Outcome', icon: 'bolt', rows: outcome },
+      { title: 'Why it happened', icon: 'help', rows: cause },
+      { title: 'Device', icon: 'router', rows: device },
+    ];
+  }
+
+  private formatPower(value: boolean): string {
+    return value ? 'On' : 'Off';
   }
 
   private formatBoolean(value: boolean | undefined): string {
