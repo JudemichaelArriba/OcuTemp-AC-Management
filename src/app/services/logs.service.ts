@@ -1,16 +1,17 @@
 import { Injectable } from '@angular/core';
 import {
-  Database, ref, query,
-  orderByChild, limitToLast,
-  endBefore, onValue, get, update
+  Database, ref, query, QueryConstraint,
+  orderByKey, limitToLast,
+  startAt, endBefore, onValue, get, update
 } from '@angular/fire/database';
 import { DecisionLog } from '../models/logs.model';
+import { LogDateRange, keyRangeForDateRange } from '../helpers/log-date-filter.helper';
 import { LoggerService } from './logger.service';
 
 const PAGE_SIZE = 25;
 
 export interface LogCursor {
-  updatedAt: string;
+  /** RTDB push key of the oldest row already shown. */
   key: string;
 }
 
@@ -32,7 +33,7 @@ export class LogService {
   ): () => void {
     const q = query(
       ref(this.db, 'decisionLogs'),
-      orderByChild('updatedAt'),
+      orderByKey(),
       limitToLast(limit)
     );
     return onValue(q, (snapshot) => {
@@ -51,24 +52,29 @@ export class LogService {
     });
   }
 
-
-  async fetchPage(cursor: LogCursor | null): Promise<LogPage> {
+  /**
+   * Pages `decisionLogs` newest-first by push key. Push-ID order is chronological,
+   * unique (no tie ambiguity), and needs no `.indexOn` — unlike `orderByChild('updatedAt')`,
+   * whose values are coarse (minute-precision, many ties) and index-dependent.
+   * A `range` is applied as push-key prefix bounds (see {@link keyRangeForDateRange}).
+   */
+  async fetchPage(cursor: LogCursor | null, range?: LogDateRange): Promise<LogPage> {
     try {
-      const logsRef = ref(this.db, 'decisionLogs');
-      const q = cursor
-        ? query(
-          logsRef,
-          orderByChild('updatedAt'),
-          endBefore(cursor.updatedAt, cursor.key),
-          limitToLast(PAGE_SIZE + 1),
-        )
-        : query(
-          logsRef,
-          orderByChild('updatedAt'),
-          limitToLast(PAGE_SIZE + 1),
-        );
+      const { startKey, endKey } = range ? keyRangeForDateRange(range) : {};
+      const constraints: QueryConstraint[] = [orderByKey()];
 
-      const snapshot = await get(q);
+      if (startKey) constraints.push(startAt(startKey));
+
+      if (cursor) {
+        constraints.push(endBefore(cursor.key));
+      } else if (endKey) {
+        constraints.push(endBefore(endKey));
+      }
+
+      constraints.push(limitToLast(PAGE_SIZE + 1));
+
+      const snapshot = await get(query(ref(this.db, 'decisionLogs'), ...constraints));
+
       const logs: DecisionLog[] = [];
       snapshot.forEach((child) => {
         if (child.key) logs.push({ id: child.key, ...child.val() } as DecisionLog);
@@ -78,9 +84,7 @@ export class LogService {
       const hasMore = logs.length > PAGE_SIZE;
       const pageLogs = hasMore ? logs.slice(0, PAGE_SIZE) : logs;
       const oldest = pageLogs.at(-1);
-      const nextCursor: LogCursor | null = oldest
-        ? { updatedAt: oldest.updatedAt, key: oldest.id }
-        : null;
+      const nextCursor: LogCursor | null = oldest ? { key: oldest.id } : null;
 
       return { logs: pageLogs, hasMore, nextCursor };
     } catch (err) {
@@ -88,6 +92,7 @@ export class LogService {
         service: 'LogService',
         action: 'fetchPage',
         hasCursor: cursor !== null,
+        hasRange: !!(range?.start || range?.end),
       });
       throw err;
     }

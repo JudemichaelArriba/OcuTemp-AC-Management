@@ -11,6 +11,12 @@ import { DialogService } from '../../services/dialog.service';
 import { AuthStateService } from '../../services/auth-state.service';
 import { LoggerService } from '../../services/logger.service';
 import { UserService } from '../../services/user';
+import {
+  ScheduleDayGroup,
+  formatScheduleDuration,
+  formatTimeRange12h,
+  groupSchedulesByDay,
+} from '../../helpers/schedule-display.helper';
 
 interface TempTick {
   temp: number;
@@ -316,18 +322,27 @@ export class RoomDetails implements OnInit, OnDestroy {
   onEditModalClosed(): void { this.isEditModalOpen = false; this.refreshView(); }
   onRoomUpdated(updated: Room): void { this.room = updated; this.isEditModalOpen = false; this.refreshView(); }
 
-  get statusBadgeClass(): string {
-    return this.room?.power === true
-      ? 'bg-emerald-100 text-emerald-700'
-      : 'bg-slate-100 text-slate-600';
+  /**
+   * AC power reported by the device when one is linked, falling back to the room
+   * record otherwise, so the page states power once from a single source.
+   */
+  get acPowerIsOn(): boolean | null {
+    const devicePower = this.deviceData?.acState?.power;
+    if (this.room?.device && typeof devicePower === 'boolean') return devicePower;
+    if (typeof this.room?.power === 'boolean') return this.room.power;
+    return null;
   }
 
-  get statusText(): string { return this.room?.power === true ? 'ON' : 'OFF'; }
-
   get acPowerText(): string {
-    if (!this.deviceData?.acState?.power)
-      return this.deviceData?.acState?.power === false ? 'OFF' : '--';
-    return 'ON';
+    const power = this.acPowerIsOn;
+    if (power === null) return '--';
+    return power ? 'ON' : 'OFF';
+  }
+
+  get acPowerBadgeClass(): string {
+    const power = this.acPowerIsOn;
+    if (power === null) return 'bg-slate-100 text-slate-500';
+    return power ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600';
   }
 
   get overrideIsActive(): boolean {
@@ -346,6 +361,10 @@ export class RoomDetails implements OnInit, OnDestroy {
     const until = this.parseOverrideUntil();
     if (!until) return false;
     return until.getTime() < Date.now();
+  }
+
+  get overrideIsRunning(): boolean {
+    return this.overrideIsActive && !this.overrideIsExpired;
   }
 
   get overrideStatusText(): string {
@@ -410,6 +429,18 @@ export class RoomDetails implements OnInit, OnDestroy {
 
   get aiSuggestionUpdatedAt(): string | undefined {
     return this.deviceData?.mlSuggestion?.updatedAt;
+  }
+
+  get hasAiSuggestion(): boolean {
+    const suggestion = this.deviceData?.mlSuggestion;
+    return typeof suggestion?.suggestedTemp === 'number' || !!suggestion?.updatedAt;
+  }
+
+  get aiSuggestionAppliedBadgeClass(): string {
+    const applied = this.deviceData?.mlSuggestion?.applied;
+    if (applied === true) return 'bg-emerald-100 text-emerald-700';
+    if (applied === false) return 'bg-amber-100 text-amber-700';
+    return 'bg-slate-100 text-slate-500';
   }
 
   onTempPointerDown(event: PointerEvent): void {
@@ -573,5 +604,17 @@ export class RoomDetails implements OnInit, OnDestroy {
   get environmentalOccupancy(): boolean | null {
     if (this.room?.device && this.deviceData?.occupancy !== undefined) return this.deviceData.occupancy;
     return this.room?.occupancy ?? null;
+  }
+
+  readonly formatTimeRange12h = formatTimeRange12h;
+  readonly formatScheduleDuration = formatScheduleDuration;
+
+  get scheduleCount(): number {
+    return this.room?.schedules?.length ?? 0;
+  }
+
+  /** Schedules grouped by weekday so each day is named once instead of per entry. */
+  get scheduleGroups(): ScheduleDayGroup[] {
+    return groupSchedulesByDay(this.room?.schedules ?? []);
   }
 }

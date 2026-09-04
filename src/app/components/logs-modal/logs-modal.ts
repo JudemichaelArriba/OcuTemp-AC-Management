@@ -6,14 +6,23 @@ import {
 import { CommonModule } from '@angular/common';
 import { DecisionLog } from '../../models/logs.model';
 import { LogService, LogCursor } from '../../services/logs.service';
+import {
+  LOG_DATE_PRESETS,
+  LogDatePreset,
+  LogDateRange,
+  manilaDayKey,
+  parseLogTimestamp,
+  resolvePresetRange,
+} from '../../helpers/log-date-filter.helper';
 import { LogsCard } from '../logs-card/logs-card';
 import { LogsDetailsModal } from '../logs-details-modal/logs-details-modal';
+import { DropDown } from '../shared/drop-down/drop-down';
 import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-logs-modal',
   standalone: true,
-  imports: [CommonModule, LogsCard, LogsDetailsModal],
+  imports: [CommonModule, LogsCard, LogsDetailsModal, DropDown],
   templateUrl: './logs-modal.html',
   styleUrl: './logs-modal.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,7 +43,12 @@ export class LogsModal implements OnChanges {
   isLoading = false;
   isLoadingMore = false;
   hasMore = false;
+  loadError = false;
   private cursor: LogCursor | null = null;
+
+  readonly datePresetOptions = LOG_DATE_PRESETS;
+  datePreset: LogDatePreset = 'all';
+  private activeRange: LogDateRange | null = null;
 
   constructor(
     private logService: LogService,
@@ -46,6 +60,7 @@ export class LogsModal implements OnChanges {
     if (changes['isOpen']) {
       if (this.isOpen) {
         this.openModal();
+        this.resetFilter();
         await this.loadFirstPage();
 
         if (this.initialLog) {
@@ -66,17 +81,49 @@ export class LogsModal implements OnChanges {
   async loadMore(): Promise<void> {
     if (!this.hasMore || this.isLoadingMore || !this.cursor) return;
     this.isLoadingMore = true;
+    this.loadError = false;
     this.cdr.markForCheck();
 
     try {
-      const page = await this.logService.fetchPage(this.cursor);
+      const page = await this.logService.fetchPage(this.cursor, this.activeRange ?? undefined);
       this.logs = [...this.logs, ...page.logs];
       this.hasMore = page.hasMore;
       this.cursor = page.nextCursor;
+    } catch {
+      this.loadError = true;
     } finally {
       this.isLoadingMore = false;
       this.cdr.markForCheck();
     }
+  }
+
+  onPresetChange(preset: string): void {
+    this.datePreset = preset as LogDatePreset;
+    const range = resolvePresetRange(this.datePreset);
+    this.activeRange = range.start || range.end ? range : null;
+    void this.reload();
+  }
+
+  retry(): void {
+    this.loadError = false;
+    this.cdr.markForCheck();
+    if (this.logs.length === 0) void this.loadFirstPage();
+    else void this.loadMore();
+  }
+
+  get isFiltered(): boolean {
+    return this.activeRange !== null;
+  }
+
+  private async reload(): Promise<void> {
+    this.cursor = null;
+    this.hasMore = false;
+    await this.loadFirstPage();
+  }
+
+  private resetFilter(): void {
+    this.datePreset = 'all';
+    this.activeRange = null;
   }
 
   async openDetails(log: DecisionLog): Promise<void> {
@@ -121,7 +168,7 @@ export class LogsModal implements OnChanges {
   get groupedLogs(): { dateKey: string; logs: DecisionLog[] }[] {
     const map = new Map<string, DecisionLog[]>();
     for (const log of this.logs) {
-      const key = log.updatedAt.slice(0, 10);
+      const key = manilaDayKey(parseLogTimestamp(log.updatedAt));
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(log);
     }
@@ -129,8 +176,8 @@ export class LogsModal implements OnChanges {
   }
 
   formatDateLabel(dateKey: string): string {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const yesterdayKey = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const todayKey = manilaDayKey(new Date());
+    const yesterdayKey = manilaDayKey(new Date(Date.now() - 86_400_000));
     if (dateKey === todayKey) return 'Today';
     if (dateKey === yesterdayKey) return 'Yesterday';
     return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
@@ -167,13 +214,16 @@ export class LogsModal implements OnChanges {
     this.logs = [];
     this.cursor = null;
     this.hasMore = false;
+    this.loadError = false;
     this.cdr.markForCheck();
 
     try {
-      const page = await this.logService.fetchPage(null);
+      const page = await this.logService.fetchPage(null, this.activeRange ?? undefined);
       this.logs = page.logs;
       this.hasMore = page.hasMore;
       this.cursor = page.nextCursor;
+    } catch {
+      this.loadError = true;
     } finally {
       this.isLoading = false;
       this.cdr.markForCheck();
