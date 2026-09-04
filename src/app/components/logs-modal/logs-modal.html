@@ -33,6 +33,14 @@
       </button>
     </div>
 
+    <div class="flex items-center gap-3 px-8 py-4 border-b border-slate-100 bg-white shrink-0">
+      <span class="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] shrink-0">Date</span>
+      <div class="w-full sm:w-48 shrink-0">
+        <app-drop-down variant="device" [options]="datePresetOptions" [value]="datePreset" placeholder="All time"
+          (valueChange)="onPresetChange($event)" />
+      </div>
+    </div>
+
     <div class="px-8 py-6 overflow-y-auto flex-1
                 [&::-webkit-scrollbar]:w-[3px]
                 [&::-webkit-scrollbar-track]:bg-transparent
@@ -77,10 +85,24 @@
       </div>
       }
 
-      @if (!isLoading && logs.length === 0) {
+      @if (!isLoading && !loadError && logs.length === 0) {
       <div class="flex flex-col items-center justify-center py-20">
         <span class="material-symbols-outlined text-slate-200 text-5xl mb-3">search_off</span>
-        <p class="text-slate-400 text-sm font-black uppercase tracking-widest">No logs found</p>
+        <p class="text-slate-400 text-sm font-black uppercase tracking-widest">
+          {{ isFiltered ? 'No logs in this range' : 'No logs found' }}
+        </p>
+      </div>
+      }
+
+      @if (loadError && !isLoading && logs.length === 0) {
+      <div class="flex flex-col items-center justify-center py-20 text-center">
+        <span class="material-symbols-outlined text-rose-300 text-5xl mb-3">error_outline</span>
+        <p class="text-slate-500 text-sm font-black uppercase tracking-widest">Couldn't load logs</p>
+        <button type="button" (click)="retry()"
+          class="mt-4 flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] shadow-xl shadow-blue-600/20 active:scale-95 transition-all">
+          <span class="material-symbols-outlined text-lg">refresh</span>
+          <span>Try again</span>
+        </button>
       </div>
       }
 
@@ -109,8 +131,8 @@
         }
       </div>
 
-      @if (hasMore) {
-      <div class="flex justify-center pt-6 pb-2">
+      @if (hasMore && logs.length > 0) {
+      <div class="flex flex-col items-center gap-2 pt-6 pb-2">
         <button type="button" (click)="loadMore()" [disabled]="isLoadingMore" class="group flex items-center gap-2 px-8 py-3.5
                            bg-blue-600 hover:bg-blue-700 text-white
                            rounded-2xl font-black text-[10px] uppercase tracking-[0.15em]
@@ -120,11 +142,17 @@
           @if (isLoadingMore) {
           <span class="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
           <span>Loading older logs...</span>
+          } @else if (loadError) {
+          <span class="material-symbols-outlined text-lg">refresh</span>
+          <span>Try again</span>
           } @else {
           <span class="material-symbols-outlined text-lg">expand_more</span>
           <span>Load older logs</span>
           }
         </button>
+        @if (loadError) {
+        <span class="text-[9px] font-black text-rose-400 uppercase tracking-widest">Couldn't load older logs</span>
+        }
       </div>
       }
       }
