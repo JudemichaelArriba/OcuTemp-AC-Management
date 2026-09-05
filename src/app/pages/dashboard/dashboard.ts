@@ -113,10 +113,7 @@ export class Dashboard implements OnInit, OnDestroy {
       });
     });
 
-    this.stopLogsStream = this.logService.streamLatest(2, (logs) => {
-      this.recentLogs = logs;
-      this.cdr.markForCheck();
-    });
+    this.startLogsPreview();
   }
 
   ngOnDestroy(): void {
@@ -126,13 +123,27 @@ export class Dashboard implements OnInit, OnDestroy {
     this.stopLogsStream?.();
   }
 
+  private startLogsPreview(): void {
+    this.stopLogsStream = this.logService.streamLatest(2, (logs) => {
+      this.recentLogs = logs;
+      this.cdr.markForCheck();
+    });
+  }
+
   openLogsModal(): void {
+    // Detach the "recent logs" preview listener so it doesn't run concurrently with the
+    // modal's paginated get() calls on the same decisionLogs path (overlapping queries
+    // with different limitToLast/range on one RTDB location can serve incomplete cached
+    // reads).
+    this.stopLogsStream?.();
+    this.stopLogsStream = undefined;
     this.isLogsModalOpen = true;
     this.cdr.markForCheck();
   }
 
   closeLogsModal(): void {
     this.isLogsModalOpen = false;
+    this.startLogsPreview();
     this.cdr.markForCheck();
   }
 

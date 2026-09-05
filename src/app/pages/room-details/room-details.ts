@@ -7,6 +7,7 @@ import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../se
 import { Device } from '../../models/esp.model';
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
+import { DropDown } from '../../components/shared/drop-down/drop-down';
 import { DialogService } from '../../services/dialog.service';
 import { AuthStateService } from '../../services/auth-state.service';
 import { LoggerService } from '../../services/logger.service';
@@ -29,7 +30,7 @@ interface TempTick {
 @Component({
   selector: 'app-room-details',
   standalone: true,
-  imports: [CommonModule, FormsModule, RoomEditModal],
+  imports: [CommonModule, FormsModule, RoomEditModal, DropDown],
   templateUrl: './room-details.html',
   styleUrl: './room-details.css',
 })
@@ -50,6 +51,9 @@ export class RoomDetails implements OnInit, OnDestroy {
   canManualOverride = false;
   overrideTemp = 24;
   overrideDurationMinutes = 60;
+  overrideMode: 'duration' | 'time' = 'duration';
+  overrideEndTime = '';
+  overrideEndTimeError: string | null = null;
   isSavingOverride = false;
   isSavingAiAutoApply = false;
   private overrideInitialized = false;
@@ -140,6 +144,9 @@ export class RoomDetails implements OnInit, OnDestroy {
           void this.resolveOverrideActor(null);
           this.overrideTemp = 24;
           this.overrideDurationMinutes = 60;
+          this.overrideMode = 'duration';
+          this.overrideEndTime = '';
+          this.overrideEndTimeError = null;
           this.updateSvgCalculations();
 
           this.unsubscribeDevices?.();
@@ -497,6 +504,53 @@ export class RoomDetails implements OnInit, OnDestroy {
     this.refreshView();
   }
 
+  useDurationMode(): void {
+    this.overrideMode = 'duration';
+    this.overrideEndTimeError = null;
+    this.previewBaseTime = Date.now();
+    this.updateTimePreview();
+    this.refreshView();
+  }
+
+  useEndTimeMode(): void {
+    this.overrideMode = 'time';
+    if (!this.overrideEndTime) {
+      const seed = new Date(Date.now() + this.overrideDurationMinutes * 60_000);
+      this.overrideEndTime = `${seed.getHours().toString().padStart(2, '0')}:${seed.getMinutes().toString().padStart(2, '0')}`;
+    }
+    this.onEndTimeChange(this.overrideEndTime);
+  }
+
+  onEndTimeChange(value: string): void {
+    this.overrideEndTime = value;
+    const target = this.resolveEndTimeToday(value);
+
+    if (!target) {
+      this.overrideEndTimeError = 'Pick a valid time.';
+      this.overrideUntilPreview = null;
+      this.refreshView();
+      return;
+    }
+
+    if (target.getTime() <= Date.now()) {
+      this.overrideEndTimeError = 'That time has already passed today. Pick a later time.';
+      this.overrideUntilPreview = null;
+    } else {
+      this.overrideEndTimeError = null;
+      this.overrideUntilPreview = target.toISOString();
+    }
+    this.refreshView();
+  }
+
+  /** Resolves a `HH:mm` (24h) value to today's date at that clock time, local time. */
+  private resolveEndTimeToday(value: string): Date | null {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value ?? '');
+    if (!match) return null;
+    const target = new Date();
+    target.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    return target;
+  }
+
   applyManualOverride(): void {
     if (this.isSavingOverride) return;
     if (!this.room?.device) {
@@ -509,22 +563,38 @@ export class RoomDetails implements OnInit, OnDestroy {
     }
 
     const targetTemp = Number(this.overrideTemp);
-    const duration = Math.round(Number(this.overrideDurationMinutes));
 
     if (!Number.isFinite(targetTemp) || targetTemp < this.overrideMinTemp || targetTemp > this.overrideMaxTemp) {
       this.dialogService.error('Invalid Temperature', `Set a temperature between ${this.overrideMinTemp} and ${this.overrideMaxTemp}.`);
       return;
     }
-    if (!Number.isFinite(duration) || duration < this.overrideMinMinutes || duration > this.overrideMaxMinutes) {
-      this.dialogService.error('Invalid Duration', `Set a duration between ${this.overrideMinMinutes} and ${this.overrideMaxMinutes} minutes.`);
-      return;
+
+    let overrideUntilDate: Date;
+    let confirmLabel: string;
+
+    if (this.overrideMode === 'time') {
+      const target = this.resolveEndTimeToday(this.overrideEndTime);
+      if (!target || target.getTime() <= Date.now()) {
+        this.dialogService.error('Invalid End Time', 'That time has already passed today. Pick a later time.');
+        return;
+      }
+      overrideUntilDate = target;
+      confirmLabel = `Set AC to ${targetTemp}°C until ${target.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}?`;
+    } else {
+      const duration = Math.round(Number(this.overrideDurationMinutes));
+      if (!Number.isFinite(duration) || duration < this.overrideMinMinutes || duration > this.overrideMaxMinutes) {
+        this.dialogService.error('Invalid Duration', `Set a duration between ${this.overrideMinMinutes} and ${this.overrideMaxMinutes} minutes.`);
+        return;
+      }
+      overrideUntilDate = new Date(Date.now() + duration * 60_000);
+      confirmLabel = `Set AC to ${targetTemp}°C for ${duration} minutes?`;
     }
 
-    const overrideUntil = new Date(Date.now() + duration * 60_000).toISOString();
+    const overrideUntil = overrideUntilDate.toISOString();
 
     this.dialogService.confirm(
       'Enable Manual Override',
-      `Set AC to ${targetTemp}°C for ${duration} minutes?`,
+      confirmLabel,
       async () => {
         this.isSavingOverride = true;
         this.refreshView();
