@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import {
   Database, ref, query, QueryConstraint,
   orderByKey, limitToLast,
-  startAt, endBefore, onValue, get, update
+  startAt, endAt, onValue, get, update
 } from '@angular/fire/database';
 import { DecisionLog } from '../models/logs.model';
 import { LogDateRange, keyRangeForDateRange } from '../helpers/log-date-filter.helper';
@@ -57,6 +57,11 @@ export class LogService {
    * unique (no tie ambiguity), and needs no `.indexOn` — unlike `orderByChild('updatedAt')`,
    * whose values are coarse (minute-precision, many ties) and index-dependent.
    * A `range` is applied as push-key prefix bounds (see {@link keyRangeForDateRange}).
+   *
+   * RTDB's `endBefore(key) + limitToLast(N)` combo is confirmed (live, against real data)
+   * to under-count by one — it returns N-1 results instead of N. `endAt(key) + limitToLast`
+   * does not have this bug, so the cursor is anchored with `endAt` and the cursor row
+   * itself (already shown on the previous page) is dropped from the result below.
    */
   async fetchPage(cursor: LogCursor | null, range?: LogDateRange): Promise<LogPage> {
     try {
@@ -65,19 +70,20 @@ export class LogService {
 
       if (startKey) constraints.push(startAt(startKey));
 
-      if (cursor) {
-        constraints.push(endBefore(cursor.key));
+      const excludeKey = cursor?.key;
+      if (excludeKey) {
+        constraints.push(endAt(excludeKey));
       } else if (endKey) {
-        constraints.push(endBefore(endKey));
+        constraints.push(endAt(endKey));
       }
 
-      constraints.push(limitToLast(PAGE_SIZE + 1));
+      constraints.push(limitToLast(excludeKey ? PAGE_SIZE + 2 : PAGE_SIZE + 1));
 
       const snapshot = await get(query(ref(this.db, 'decisionLogs'), ...constraints));
 
       const logs: DecisionLog[] = [];
       snapshot.forEach((child) => {
-        if (child.key) logs.push({ id: child.key, ...child.val() } as DecisionLog);
+        if (child.key && child.key !== excludeKey) logs.push({ id: child.key, ...child.val() } as DecisionLog);
       });
       logs.reverse();
 
