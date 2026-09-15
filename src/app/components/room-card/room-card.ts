@@ -3,7 +3,7 @@ import { Component, Input, Output, EventEmitter, signal, OnInit, OnDestroy, Chan
 import { Room } from '../../models/room.model';
 import { Router } from '@angular/router';
 import { Device } from '../../models/esp.model';
-import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
+import { DeviceService, DeviceOnlineState, OverrideActor, getDeviceOnlineState } from '../../services/device.service';
 import { AuthStateService } from '../../services/auth-state.service';
 import { DialogService } from '../../services/dialog.service';
 import { Subscription } from 'rxjs';
@@ -28,6 +28,8 @@ export class RoomCard implements OnInit, OnDestroy {
   canToggleAiAutoApply = signal(false);
 
   private _device: Device | null = null;
+  private currentUserId: string | null = null;
+  private currentActor: OverrideActor | null = null;
   private unsubscribeDevice?: () => void;
   private authSubscription?: Subscription;
   private statusInterval?: ReturnType<typeof setInterval>;
@@ -43,6 +45,8 @@ export class RoomCard implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.authSubscription = this.authState.currentUser$.subscribe((user) => {
+      this.currentUserId = user?.uid ?? null;
+      this.currentActor = user ? { fullName: user.fullName, role: user.role } : null;
       this.canToggleAiAutoApply.set(
         user?.approved === true && (user?.role === 'admin' || user?.role === 'staff')
       );
@@ -132,7 +136,12 @@ export class RoomCard implements OnInit, OnDestroy {
     this.closeDropdown();
     this.isForcingOff.set(true);
     try {
-      await this.deviceService.sendForcedOff(this.room.device);
+      await this.deviceService.sendForcedOff(
+        this.room.device,
+        this.currentUserId ?? undefined,
+        this.room.uid,
+        this.currentActor ?? undefined
+      );
     } catch (err) {
     } finally {
       this.isForcingOff.set(false);

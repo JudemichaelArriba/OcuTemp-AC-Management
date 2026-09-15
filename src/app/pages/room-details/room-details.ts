@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RoomService } from '../../services/room.service';
-import { DeviceService, DeviceOnlineState, getDeviceOnlineState } from '../../services/device.service';
+import { DeviceService, DeviceOnlineState, OverrideActor, getDeviceOnlineState } from '../../services/device.service';
 import { Device } from '../../models/esp.model';
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
@@ -58,6 +58,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   isSavingAiAutoApply = false;
   private overrideInitialized = false;
   private currentUserId: string | null = null;
+  private currentActor: OverrideActor | null = null;
   private overrideActorUid: string | null = null;
   private overrideActorLookupVersion = 0;
   overrideActorName: string | null = null;
@@ -176,6 +177,7 @@ export class RoomDetails implements OnInit, OnDestroy {
     try {
       const user = await this.authState.getCurrentUserOnce();
       this.currentUserId = user?.uid ?? null;
+      this.currentActor = user ? { fullName: user.fullName, role: user.role } : null;
       this.canManualOverride =
         user?.approved === true && (user?.role === 'admin' || user?.role === 'staff');
       this.refreshView();
@@ -604,6 +606,7 @@ export class RoomDetails implements OnInit, OnDestroy {
             overrideUntil,
             requestedBy: this.currentUserId ?? undefined,
             roomUid: this.room!.uid,
+            actor: this.currentActor ?? undefined,
           });
           this.dialogService.success('Override Enabled', 'Manual override has been activated.');
         } catch (err) {
@@ -631,7 +634,12 @@ export class RoomDetails implements OnInit, OnDestroy {
         this.isSavingOverride = true;
         this.refreshView();
         try {
-          await this.deviceService.clearManualOverride(this.room!.device!, this.currentUserId ?? undefined);
+          await this.deviceService.clearManualOverride(
+            this.room!.device!,
+            this.currentUserId ?? undefined,
+            this.room!.uid,
+            this.currentActor ?? undefined
+          );
           this.dialogService.success('Override Disabled', 'Manual override has been turned off.');
         } catch (err) {
           this.dialogService.error('Disable Failed', 'Unable to clear manual override. Please try again.');

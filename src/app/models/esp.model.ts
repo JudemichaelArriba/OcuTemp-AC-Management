@@ -41,3 +41,17 @@ export interface DeviceStatus {
   ip?: string;
   lastSeen?: string;
 }
+
+export type OverrideHistoryAction = 'override' | 'clear' | 'forcedOff';
+
+/** Append-only audit entry at `overrideHistory/{deviceId}/{pushId}`. */
+export interface OverrideHistoryEntry {
+  action: OverrideHistoryAction;
+  requestedBy: string;
+  requestedByName?: string;
+  requestedByRole?: string;
+  requestedAt: string;
+  roomUid: string;
+  targetTemp?: number;
+  overrideUntil?: string;
+}

@@ -1,11 +1,27 @@
 import { Injectable } from '@angular/core';
-import { Database, get, onValue, ref, set, update } from '@angular/fire/database';
-import { Device } from '../models/esp.model';
+import { Database, get, onValue, push, ref, set, update } from '@angular/fire/database';
+import { Device, OverrideHistoryEntry } from '../models/esp.model';
 import { LoggerService } from './logger.service';
 
 
 
 export type DeviceOnlineState = 'online' | 'stale' | 'offline' | 'unknown';
+
+/** Snapshot of who performed an override action, recorded as-of that moment. */
+export interface OverrideActor {
+  fullName?: string | null;
+  role?: string | null;
+}
+
+/** Only emits keys that have a real value — RTDB rejects payloads containing `undefined`. */
+function actorFields(actor?: OverrideActor): Pick<OverrideHistoryEntry, 'requestedByName' | 'requestedByRole'> {
+  const name = actor?.fullName?.trim();
+  const role = actor?.role?.trim();
+  return {
+    ...(name ? { requestedByName: name } : {}),
+    ...(role ? { requestedByRole: role } : {}),
+  };
+}
 
 export function getDeviceOnlineState(lastSeen?: string): DeviceOnlineState {
   if (!lastSeen) return 'offline';
@@ -190,17 +206,26 @@ export class DeviceService {
 
   async applyManualOverride(
     deviceId: string,
-    payload: { targetTemp: number; overrideUntil: string; requestedBy?: string; roomUid?: string }
+    payload: {
+      targetTemp: number;
+      overrideUntil: string;
+      requestedBy?: string;
+      roomUid?: string;
+      actor?: OverrideActor;
+    }
   ): Promise<void> {
+    const now = new Date().toISOString();
+    const requestedBy = payload.requestedBy ?? 'unknown';
+    const roomUid = payload.roomUid ?? '';
     try {
       const controlRef = ref(this.db, `devices/${deviceId}/control`);
       await update(controlRef, {
         overrideActive: true,
         targetTemp: payload.targetTemp,
         overrideUntil: payload.overrideUntil,
-        requestedAt: new Date().toISOString(),
-        requestedBy: payload.requestedBy ?? 'unknown',
-        roomUid: payload.roomUid ?? ''
+        requestedAt: now,
+        requestedBy,
+        roomUid
       });
     } catch (err) {
       this.logger.error('Failed to apply manual override', err, {
@@ -211,15 +236,31 @@ export class DeviceService {
       });
       throw err;
     }
+    await this.recordOverrideHistory(deviceId, {
+      action: 'override',
+      requestedBy,
+      ...actorFields(payload.actor),
+      requestedAt: now,
+      roomUid,
+      targetTemp: payload.targetTemp,
+      overrideUntil: payload.overrideUntil,
+    });
   }
 
-  async clearManualOverride(deviceId: string, requestedBy?: string): Promise<void> {
+  async clearManualOverride(
+    deviceId: string,
+    requestedBy?: string,
+    roomUid?: string,
+    actor?: OverrideActor
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const uid = requestedBy ?? 'unknown';
     try {
       const controlRef = ref(this.db, `devices/${deviceId}/control`);
       await update(controlRef, {
         overrideActive: false,
-        requestedAt: new Date().toISOString(),
-        requestedBy: requestedBy ?? 'unknown'
+        requestedAt: now,
+        requestedBy: uid
       });
     } catch (err) {
       this.logger.error('Failed to clear manual override', err, {
@@ -229,16 +270,30 @@ export class DeviceService {
       });
       throw err;
     }
+    await this.recordOverrideHistory(deviceId, {
+      action: 'clear',
+      requestedBy: uid,
+      ...actorFields(actor),
+      requestedAt: now,
+      roomUid: roomUid ?? '',
+    });
   }
 
-  async sendForcedOff(deviceId: string, requestedBy?: string): Promise<void> {
+  async sendForcedOff(
+    deviceId: string,
+    requestedBy?: string,
+    roomUid?: string,
+    actor?: OverrideActor
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const uid = requestedBy ?? 'unknown';
     try {
       const controlRef = ref(this.db, `devices/${deviceId}/control`);
       await update(controlRef, {
         forcedOff: true,
         overrideActive: false,
-        requestedAt: new Date().toISOString(),
-        requestedBy: requestedBy ?? 'unknown',
+        requestedAt: now,
+        requestedBy: uid,
       });
     } catch (err) {
       this.logger.error('Failed to send forced off command', err, {
@@ -247,6 +302,31 @@ export class DeviceService {
         deviceId,
       });
       throw err;
+    }
+    await this.recordOverrideHistory(deviceId, {
+      action: 'forcedOff',
+      requestedBy: uid,
+      ...actorFields(actor),
+      requestedAt: now,
+      roomUid: roomUid ?? '',
+    });
+  }
+
+  /**
+   * Best-effort audit write to `overrideHistory/{deviceId}`. Deliberately not atomic with
+   * the `control` write and never throws: a missing security rule or transient failure on
+   * the audit path must not block AC control.
+   */
+  private async recordOverrideHistory(deviceId: string, entry: OverrideHistoryEntry): Promise<void> {
+    try {
+      await push(ref(this.db, `overrideHistory/${deviceId}`), entry);
+    } catch (err) {
+      this.logger.error('Failed to record override history', err, {
+        service: 'DeviceService',
+        action: 'recordOverrideHistory',
+        deviceId,
+        historyAction: entry.action,
+      });
     }
   }
 
