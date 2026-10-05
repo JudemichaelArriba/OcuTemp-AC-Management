@@ -7,6 +7,7 @@ import { DeviceService, DeviceOnlineState, OverrideActor, getDeviceOnlineState }
 import { Device } from '../../models/esp.model';
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
+import { isRoomDeleted } from '../../helpers/room-validation';
 import { DropDown } from '../../components/shared/drop-down/drop-down';
 import { DialogService } from '../../services/dialog.service';
 import { AuthStateService } from '../../services/auth-state.service';
@@ -134,6 +135,7 @@ export class RoomDetails implements OnInit, OnDestroy {
         this.error = null;
         this.room = foundRoom;
         this.loading = false;
+        if (isRoomDeleted(foundRoom)) this.isEditModalOpen = false;
         this.clearLoadingTimeout();
         this.refreshView();
 
@@ -327,7 +329,26 @@ export class RoomDetails implements OnInit, OnDestroy {
   }
 
   goBack() { this.router.navigate(['/app/room-management']); }
-  editRoom() { if (!this.room || this.loading) return; this.isEditModalOpen = true; this.refreshView(); }
+  get isDeleted(): boolean { return isRoomDeleted(this.room); }
+
+  editRoom() { if (!this.room || this.loading || this.isDeleted) return; this.isEditModalOpen = true; this.refreshView(); }
+
+  /**
+   * Confirm dialogs capture the room/device when opened. If the room was deleted or its device
+   * changed before the admin confirmed, the action must not run: a deleted room has
+   * `device: ''`, which would build an invalid `devices//control` path, and acting on the old
+   * device would drive an AC that no longer belongs to this room.
+   */
+  private isSameLiveTarget(roomUid: string, deviceId: string): boolean {
+    return !!this.room && !this.isDeleted && this.room.uid === roomUid && this.room.device === deviceId;
+  }
+
+  private rejectStaleAction(): void {
+    this.dialogService.error(
+      'Action Cancelled',
+      this.isDeleted ? 'This room was deleted.' : 'This room\'s device changed. Please review and try again.'
+    );
+  }
   onEditModalClosed(): void { this.isEditModalOpen = false; this.refreshView(); }
   onRoomUpdated(updated: Room): void { this.room = updated; this.isEditModalOpen = false; this.refreshView(); }
 
@@ -594,18 +615,25 @@ export class RoomDetails implements OnInit, OnDestroy {
 
     const overrideUntil = overrideUntilDate.toISOString();
 
+    const targetRoomUid = this.room.uid;
+    const targetDevice = this.room.device;
+
     this.dialogService.confirm(
       'Enable Manual Override',
       confirmLabel,
       async () => {
+        if (!this.isSameLiveTarget(targetRoomUid, targetDevice)) {
+          this.rejectStaleAction();
+          return;
+        }
         this.isSavingOverride = true;
         this.refreshView();
         try {
-          await this.deviceService.applyManualOverride(this.room!.device!, {
+          await this.deviceService.applyManualOverride(targetDevice, {
             targetTemp,
             overrideUntil,
             requestedBy: this.currentUserId ?? undefined,
-            roomUid: this.room!.uid,
+            roomUid: targetRoomUid,
             actor: this.currentActor ?? undefined,
           });
           this.dialogService.success('Override Enabled', 'Manual override has been activated.');
@@ -624,20 +652,26 @@ export class RoomDetails implements OnInit, OnDestroy {
 
   clearManualOverride(): void {
     if (this.isSavingOverride) return;
-    if (!this.room?.device) return;
+    if (!this.room?.device || this.isDeleted) return;
     if (!this.canManualOverride) return;
+    const targetRoomUid = this.room.uid;
+    const targetDevice = this.room.device;
 
     this.dialogService.confirm(
       'Disable Manual Override',
       'This will return control to schedules.',
       async () => {
+        if (!this.isSameLiveTarget(targetRoomUid, targetDevice)) {
+          this.rejectStaleAction();
+          return;
+        }
         this.isSavingOverride = true;
         this.refreshView();
         try {
           await this.deviceService.clearManualOverride(
-            this.room!.device!,
+            targetDevice,
             this.currentUserId ?? undefined,
-            this.room!.uid,
+            targetRoomUid,
             this.currentActor ?? undefined
           );
           this.dialogService.success('Override Disabled', 'Manual override has been turned off.');
@@ -655,7 +689,7 @@ export class RoomDetails implements OnInit, OnDestroy {
   }
 
   async toggleAiAutoApply(): Promise<void> {
-    if (this.aiAutoApplySwitchDisabled || !this.room?.device) return;
+    if (this.aiAutoApplySwitchDisabled || !this.room?.device || this.isDeleted) return;
 
     this.isSavingAiAutoApply = true;
     this.refreshView();

@@ -22,4 +22,13 @@ export interface Room {
   updatedAt?: string;
   schedules?: Schedule[];
   pendingMlSuggestion?: MlSuggestion;
+  /** Soft-delete marker. A deleted room keeps its record (and energy history) but has no device or schedules. */
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  deletedByName?: string;
+  deletedDevice?: string;
+  deletedFloorPlanCellId?: string;
+  archivedSchedules?: Schedule[];
+  restoredAt?: string;
 }

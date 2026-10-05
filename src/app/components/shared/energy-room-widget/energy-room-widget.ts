@@ -31,6 +31,7 @@ import {
   sumKwhByMonthForDevice,
   sumKwhByYearForDevice,
 } from '../../../services/energy-report.service';
+import { buildEnergyRoomEntries, groupEnergyByRoom } from '../../../helpers/room-energy.helper';
 
 Chart.register(BarController, BarElement, LinearScale, CategoryScale, Tooltip, Legend);
 
@@ -70,6 +71,11 @@ const BAR_PALETTE_HOVER = [
 export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
   @Input() energyData: Record<string, Record<string, EnergyDaily>> = {};
   @Input() rooms: Room[] = [];
+  /**
+   * `'active'` (dashboard): one bar per active room. `'all'` (Energy Reports): also inactive,
+   * deleted and unassigned rows that used energy. Energy is attributed by each entry's roomUid.
+   */
+  @Input() mode: 'active' | 'all' = 'active';
 
   @ViewChild('roomChartCanvas') roomChartCanvas!: ElementRef<HTMLCanvasElement>;
 
@@ -92,7 +98,7 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.isViewInit && (changes['energyData'] || changes['rooms'])) {
+    if (this.isViewInit && (changes['energyData'] || changes['rooms'] || changes['mode'])) {
       this.tryRender();
     }
   }
@@ -174,7 +180,7 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
             x: {
               border: { display: false },
               grid: { display: false },
-              ticks: { font: { size: 10 }, color: '#64748b' },
+              ticks: { font: { size: 10 }, color: '#64748b', autoSkip: false, maxRotation: 45 },
             },
           },
         },
@@ -190,41 +196,31 @@ export class EnergyRoomWidget implements AfterViewInit, OnChanges, OnDestroy {
   private refreshChart(): void {
     if (!this.roomChart) return;
 
-    const labels: string[] = [];
-    const values: number[] = [];
+    // Built here (not in a getter or template) so change detection never re-triggers chart updates.
+    const index = groupEnergyByRoom(this.energyData, this.rooms);
+    const entries = buildEnergyRoomEntries(this.rooms, index, this.mode);
+    const energy = index.energy;
+    const labels = entries.map((entry) => entry.label);
+    let values: number[];
 
     if (this.filterMode === 'daily') {
       const today = getTodayKey();
-      for (const room of this.rooms) {
-        labels.push(room.roomName);
-        values.push(parseFloat(sumKwhByDateForDevice(this.energyData, room.device, today).toFixed(4)));
-      }
+      values = entries.map((entry) => sumKwhByDateForDevice(energy, entry.key, today));
     } else if (this.filterMode === 'weekly') {
       const days = getLast7DayKeys();
       const start = days[0];
       const end = days[days.length - 1];
-      for (const room of this.rooms) {
-        labels.push(room.roomName);
-        values.push(parseFloat(sumKwhByWeekForDevice(this.energyData, room.device, start, end).toFixed(4)));
-      }
+      values = entries.map((entry) => sumKwhByWeekForDevice(energy, entry.key, start, end));
     } else if (this.filterMode === 'monthly') {
       const monthKey = getTodayKey().slice(0, 7);
-      for (const room of this.rooms) {
-        labels.push(room.roomName);
-        values.push(parseFloat(sumKwhByMonthForDevice(this.energyData, room.device, monthKey).toFixed(4)));
-      }
+      values = entries.map((entry) => sumKwhByMonthForDevice(energy, entry.key, monthKey));
     } else {
-
       const years = getLast5YearKeys();
-      for (const room of this.rooms) {
-        labels.push(room.roomName);
-        const total = years.reduce(
-          (sum, y) => sum + sumKwhByYearForDevice(this.energyData, room.device, y),
-          0
-        );
-        values.push(parseFloat(total.toFixed(4)));
-      }
+      values = entries.map((entry) =>
+        years.reduce((sum, y) => sum + sumKwhByYearForDevice(energy, entry.key, y), 0)
+      );
     }
+    values = values.map((value) => parseFloat(value.toFixed(4)));
 
     const colors = labels.map((_, i) => BAR_PALETTE[i % BAR_PALETTE.length]);
     const hoverColors = labels.map((_, i) => BAR_PALETTE_HOVER[i % BAR_PALETTE_HOVER.length]);

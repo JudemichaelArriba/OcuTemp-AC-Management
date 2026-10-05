@@ -5,6 +5,7 @@ import autoTable, { UserOptions } from 'jspdf-autotable';
 import { ReportSummary } from '../models/report-summary.model';
 import { Room } from '../models/room.model';
 import { EnergyDaily } from '../models/energy.model';
+import { buildEnergyRoomEntries, groupEnergyByRoom } from '../helpers/room-energy.helper';
 import {
     getTodayKey,
     getLast7DayKeys,
@@ -299,10 +300,15 @@ export class PdfExportService {
 
         let y = 38;
 
-        if (rooms.length === 0) {
+        // Attribute energy by each entry's roomUid so inactive and deleted rooms keep their history.
+        const index   = groupEnergyByRoom(energyData, rooms);
+        const energy  = index.energy;
+        const entries = buildEnergyRoomEntries(rooms, index, 'all');
+
+        if (entries.length === 0) {
             doc.setFontSize(9);
             doc.setTextColor(100, 116, 139);
-            doc.text('No active rooms found.', this.M, y + 6);
+            doc.text('No room energy data found.', this.M, y + 6);
             return;
         }
 
@@ -315,14 +321,14 @@ export class PdfExportService {
         const monthKey = today.slice(0, 7);
         const years5   = getLast5YearKeys();
 
-        const compBody = rooms.map((room) => {
-            const daily   = sumKwhByDateForDevice(energyData, room.device, today).toFixed(3);
-            const weekly  = sumKwhByWeekForDevice(energyData, room.device, start7, end7).toFixed(3);
-            const monthly = sumKwhByMonthForDevice(energyData, room.device, monthKey).toFixed(3);
+        const compBody = entries.map((entry) => {
+            const daily   = sumKwhByDateForDevice(energy, entry.key, today).toFixed(3);
+            const weekly  = sumKwhByWeekForDevice(energy, entry.key, start7, end7).toFixed(3);
+            const monthly = sumKwhByMonthForDevice(energy, entry.key, monthKey).toFixed(3);
             const yearly  = years5
-                .reduce((s, yr) => s + sumKwhByYearForDevice(energyData, room.device, yr), 0)
+                .reduce((s, yr) => s + sumKwhByYearForDevice(energy, entry.key, yr), 0)
                 .toFixed(3);
-            return [room.roomName, room.device, `${daily} kWh`, `${weekly} kWh`, `${monthly} kWh`, `${yearly} kWh`];
+            return [entry.label, entry.deviceLabel, `${daily} kWh`, `${weekly} kWh`, `${monthly} kWh`, `${yearly} kWh`];
         });
 
         autoTable(doc, {
@@ -344,7 +350,7 @@ export class PdfExportService {
         } as UserOptions);
         y = ((doc as any).lastAutoTable?.finalY ?? y) + 12;
 
-        for (const room of rooms) {
+        for (const entry of entries) {
             y = this.checkBreak(doc, y, 85);
 
             doc.setFillColor(37, 99, 235);
@@ -352,18 +358,18 @@ export class PdfExportService {
             doc.setTextColor(255, 255, 255);
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(10);
-            doc.text(room.roomName, this.M + 4, y + 7);
+            doc.text(entry.label, this.M + 4, y + 7);
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(8);
-            doc.text(`Device: ${room.device}`, this.W - this.M - 4, y + 7, { align: 'right' });
+            doc.text(`Device: ${entry.deviceLabel}`, this.W - this.M - 4, y + 7, { align: 'right' });
             y += 14;
 
             const dailyData      = getLast7DayKeys().map((d) => [
                 this.formatDate(d),
-                `${sumKwhByDateForDevice(energyData, room.device, d).toFixed(4)} kWh`,
+                `${sumKwhByDateForDevice(energy, entry.key, d).toFixed(4)} kWh`,
             ]);
             const dailyRoomTotal = getLast7DayKeys()
-                .reduce((s, d) => s + sumKwhByDateForDevice(energyData, room.device, d), 0);
+                .reduce((s, d) => s + sumKwhByDateForDevice(energy, entry.key, d), 0);
             autoTable(doc, {
                 startY: y,
                 head: [['Daily — Last 7 Days', 'Consumption']],
@@ -378,10 +384,10 @@ export class PdfExportService {
             const weekRanges      = getLast8WeekRanges();
             const weeklyData      = weekRanges.map((w) => [
                 `${this.formatDate(w.start)} – ${this.formatDate(w.end)}`,
-                `${sumKwhByWeekForDevice(energyData, room.device, w.start, w.end).toFixed(4)} kWh`,
+                `${sumKwhByWeekForDevice(energy, entry.key, w.start, w.end).toFixed(4)} kWh`,
             ]);
             const weeklyRoomTotal = weekRanges
-                .reduce((s, w) => s + sumKwhByWeekForDevice(energyData, room.device, w.start, w.end), 0);
+                .reduce((s, w) => s + sumKwhByWeekForDevice(energy, entry.key, w.start, w.end), 0);
             autoTable(doc, {
                 startY: y,
                 head: [['Weekly — Last 8 Weeks', 'Consumption']],
@@ -397,11 +403,11 @@ export class PdfExportService {
                 const [yr, mo] = m.split('-');
                 return [
                     new Date(+yr, +mo - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }),
-                    `${sumKwhByMonthForDevice(energyData, room.device, m).toFixed(4)} kWh`,
+                    `${sumKwhByMonthForDevice(energy, entry.key, m).toFixed(4)} kWh`,
                 ];
             });
             const monthlyRoomTotal = getLast12MonthKeys()
-                .reduce((s, m) => s + sumKwhByMonthForDevice(energyData, room.device, m), 0);
+                .reduce((s, m) => s + sumKwhByMonthForDevice(energy, entry.key, m), 0);
             autoTable(doc, {
                 startY: y,
                 head: [['Monthly — Last 12 Months', 'Consumption']],
@@ -415,10 +421,10 @@ export class PdfExportService {
             y = this.checkBreak(doc, y, 45);
             const yearlyData      = getLast5YearKeys().map((yr) => [
                 yr,
-                `${sumKwhByYearForDevice(energyData, room.device, yr).toFixed(4)} kWh`,
+                `${sumKwhByYearForDevice(energy, entry.key, yr).toFixed(4)} kWh`,
             ]);
             const yearlyRoomTotal = getLast5YearKeys()
-                .reduce((s, yr) => s + sumKwhByYearForDevice(energyData, room.device, yr), 0);
+                .reduce((s, yr) => s + sumKwhByYearForDevice(energy, entry.key, yr), 0);
             autoTable(doc, {
                 startY: y,
                 head: [['Yearly — Last 5 Years', 'Consumption']],

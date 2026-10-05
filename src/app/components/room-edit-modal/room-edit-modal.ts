@@ -11,7 +11,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { Room, Schedule } from '../../models/room.model';
-import { RoomService } from '../../services/room.service';
+import { RoomService, isRoomActionError } from '../../services/room.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
@@ -265,7 +265,7 @@ export class RoomEditModal implements OnChanges {
           } catch (err) {
             this.isSaving = false;
             this.cdr.markForCheck();
-            this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');
+            this.dialogService.error('Update Failed', isRoomActionError(err) ? err.message : 'Something went wrong. Please try again.');
           }
         },
         () => {
@@ -278,7 +278,7 @@ export class RoomEditModal implements OnChanges {
     } catch (err) {
       this.isSaving = false;
       this.cdr.markForCheck();
-      this.dialogService.error('Update Failed', 'Something went wrong. Please try again.');
+      this.dialogService.error('Update Failed', isRoomActionError(err) ? err.message : 'Something went wrong. Please try again.');
     }
   }
 }

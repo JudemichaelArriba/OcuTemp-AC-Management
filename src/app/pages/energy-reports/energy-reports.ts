@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
+import { isRoomDeleted } from '../../helpers/room-validation';
 import { RoomService } from '../../services/room.service';
 import {
   EnergyReportService,
@@ -55,11 +56,12 @@ export class EnergyReports implements OnInit, OnDestroy {
       timeZone: 'Asia/Manila',
     });
 
+    // All rooms, including inactive and soft-deleted ones, so their energy history stays visible.
     this.unsubRooms = this.roomService.streamRooms((rooms) => {
-      this.rooms = rooms.filter((r) => r.status === 'active');
-      this.activeRoomsCount = this.rooms.length;
+      this.rooms = rooms;
+      this.activeRoomsCount = rooms.filter((r) => r.status === 'active' && !isRoomDeleted(r)).length;
       this.cdr.markForCheck();
-    });
+    }, undefined, { includeDeleted: true });
 
     this.unsubEnergy = this.energyService.AllEnergyDaily((data) => {
       this.energyData = data;
