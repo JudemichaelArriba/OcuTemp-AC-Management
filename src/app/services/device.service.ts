@@ -113,6 +113,15 @@ export class DeviceService {
     }
   }
 
+  /** True when the AC reports power on or a manual override is running. */
+  async isAcActive(deviceId: string): Promise<boolean> {
+    const [powerSnap, overrideSnap] = await Promise.all([
+      get(ref(this.db, `devices/${deviceId}/acState/power`)),
+      get(ref(this.db, `devices/${deviceId}/control/overrideActive`)),
+    ]);
+    return powerSnap.val() === true || overrideSnap.val() === true;
+  }
+
   streamDevices(
     callback: (devices: Record<string, Device>) => void,
     onError?: (error: Error) => void

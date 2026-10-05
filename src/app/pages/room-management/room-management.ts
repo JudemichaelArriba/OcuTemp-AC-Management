@@ -1,9 +1,11 @@
 import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, NgZone } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { AddRoomModal } from '../../components/add-room-modal/add-room-modal'; 
 import { Room } from '../../models/room.model'; 
 import { FormsModule } from '@angular/forms';
 import { RoomCard } from '../../components/room-card/room-card';
-import { RoomService } from '../../services/room.service';
+import { RoomActor, RoomService, isRoomActionError } from '../../services/room.service';
+import { isRoomDeleted } from '../../helpers/room-validation';
 import { DeviceService,getDeviceOnlineState } from '../../services/device.service';
 import { Device } from '../../models/esp.model';
 import { DialogService } from '../../services/dialog.service';
@@ -18,12 +20,16 @@ import { MlSuggestionService } from '../../services/ml-suggestion.service';
 @Component({
   selector: 'app-room-management',
   standalone: true,
-  imports: [FormsModule, AddRoomModal, RoomCard, FloorPlanComponent, FloorPlanRoomModal],
+  imports: [FormsModule, DatePipe, AddRoomModal, RoomCard, FloorPlanComponent, FloorPlanRoomModal],
   templateUrl: './room-management.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RoomManagement implements OnInit, OnDestroy {
   showAddModal = false;
+  /** Deleted room being restored through the add-room modal; null for a normal create. */
+  restoreFrom: Room | null = null;
+  deletedRooms: Room[] = [];
+  showDeletedRooms = false;
   isLoading = true; 
   useAnimations = false; 
   searchQuery = '';
@@ -50,6 +56,7 @@ export class RoomManagement implements OnInit, OnDestroy {
   private stopRoomsStream?: () => void;
   private stopDevicesStream?: () => void;
   private authSub?: Subscription;
+  private currentActor: RoomActor = {};
 
   constructor(
     private roomService: RoomService,
@@ -69,6 +76,7 @@ export class RoomManagement implements OnInit, OnDestroy {
 
     this.authSub = this.authState.currentUser$.subscribe((user) => {
       this.isAdmin = user?.role === 'admin';
+      this.currentActor = user ? { uid: user.uid, fullName: user.fullName, role: user.role } : {};
       if (!this.isAdmin) {
         this.floorPlanEditMode = false;
         this.selectedFloorPlanCell = null;
@@ -77,10 +85,14 @@ export class RoomManagement implements OnInit, OnDestroy {
     });
 
     this.stopRoomsStream = this.roomService.streamRooms((rooms) => {
-      this.baseRooms = rooms;
+      this.baseRooms = rooms.filter((room) => !isRoomDeleted(room));
+      this.deletedRooms = rooms
+        .filter((room) => isRoomDeleted(room))
+        .sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
+      if (this.deletedRooms.length === 0) this.showDeletedRooms = false;
       this.isRoomsLoaded = true;
       this.mergeRoomTelemetryAndFilter();
-    });
+    }, undefined, { includeDeleted: true });
 
     this.stopDevicesStream = this.deviceService.streamDevices((devices) => {
       this.deviceMap = devices;
@@ -219,19 +231,53 @@ get roomsWithoutDevice(): number {
   onDeleteRoom(room: Room): void {
     this.dialogService.confirm(
       'Delete Room',
-      `Are you sure you want to delete "${room.roomName}"? This action cannot be undone.`,
+      `Delete "${room.roomName}"? It will be removed from the dashboard and floor plan, and its AC will be turned off if it is running. Its energy history is kept, and an admin can restore it from Deleted Rooms.`,
       async () => {
         try {
-          await this.roomService.deleteRoom(room.uid);
-          this.dialogService.success('Room Deleted', `The room "${room.roomName}" has been successfully removed.`);
+          const { acOffFailed } = await this.roomService.softDeleteRoom(room.uid, this.currentActor);
+          if (acOffFailed) {
+            this.dialogService.alert(
+              'Room Deleted',
+              `"${room.roomName}" was deleted, but the off command could not be sent to ${room.device}. Please check the AC unit.`
+            );
+          } else {
+            this.dialogService.success('Room Deleted', `"${room.roomName}" was deleted. You can restore it from Deleted Rooms.`);
+          }
         } catch (error) {
-          this.dialogService.error('Error', 'An error occurred while deleting the room. Please try again.');
+          this.dialogService.error(
+            'Delete Failed',
+            isRoomActionError(error) ? error.message : 'An error occurred while deleting the room. Please try again.'
+          );
         }
       },
       undefined,
       'Delete',
       'Cancel'
     );
+  }
+
+  openAddRoom(): void {
+    this.restoreFrom = null;
+    this.showAddModal = true;
+    this.cdr.markForCheck();
+  }
+
+  openRestoreRoom(room: Room): void {
+    if (!this.isAdmin) return;
+    this.restoreFrom = room;
+    this.showAddModal = true;
+    this.cdr.markForCheck();
+  }
+
+  closeAddModal(): void {
+    this.showAddModal = false;
+    this.restoreFrom = null;
+    this.cdr.markForCheck();
+  }
+
+  toggleDeletedRooms(): void {
+    this.showDeletedRooms = !this.showDeletedRooms;
+    this.cdr.markForCheck();
   }
 
   onMapRoomSelected(room: Room | undefined): void {

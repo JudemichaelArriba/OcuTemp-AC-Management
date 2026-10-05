@@ -11,6 +11,14 @@ export interface DialogConfig {
   cancelLabel?: string;
   onConfirm?: () => void;
   onCancel?: () => void;
+  /** Optional third button, shown between cancel and confirm on `confirm` dialogs. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+}
+
+export interface DialogChoice {
+  label: string;
+  action: () => void;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -46,6 +54,28 @@ export class DialogService {
     cancelLabel  = 'Cancel'
   ): void {
     this.open({ type: 'confirm', title, message, confirmLabel, cancelLabel, onConfirm, onCancel });
+  }
+
+  /** Confirm dialog with two distinct actions plus cancel. Keep labels short (3 buttons share one row). */
+  choose(
+    title: string,
+    message: string,
+    primary: DialogChoice,
+    secondary: DialogChoice,
+    cancelLabel = 'Cancel',
+    onCancel?: () => void
+  ): void {
+    this.open({
+      type: 'confirm',
+      title,
+      message,
+      confirmLabel: primary.label,
+      onConfirm: primary.action,
+      secondaryLabel: secondary.label,
+      onSecondary: secondary.action,
+      cancelLabel,
+      onCancel,
+    });
   }
 
 

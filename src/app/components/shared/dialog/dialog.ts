@@ -105,6 +105,11 @@ export class DialogComponent implements OnInit, OnDestroy {
     this.dismiss(() => cb?.());
   }
 
+  onSecondary(): void {
+    const cb = this.config?.onSecondary;
+    this.dismiss(() => cb?.());
+  }
+
   get iconConfig(): IconConfig {
     return ICON_MAP[this.config?.type ?? 'alert'];
   }

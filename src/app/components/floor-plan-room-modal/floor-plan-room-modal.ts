@@ -12,7 +12,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FloorPlanCellSelection } from '../floor-plan/floor-plan';
 import { Room, Schedule } from '../../models/room.model';
-import { RoomService } from '../../services/room.service';
+import { RoomService, isRoomActionError } from '../../services/room.service';
+import { AuthStateService } from '../../services/auth-state.service';
 import { DeviceService } from '../../services/device.service';
 import { DialogService } from '../../services/dialog.service';
 import { DropDown, DropDownOption } from '../shared/drop-down/drop-down';
@@ -64,6 +65,7 @@ export class FloorPlanRoomModal implements OnChanges {
     private roomService: RoomService,
     private deviceService: DeviceService,
     private dialogService: DialogService,
+    private authState: AuthStateService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -206,19 +208,79 @@ export class FloorPlanRoomModal implements OnChanges {
       return;
     }
 
+    const trimmedName = this.roomName.trim();
     this.isSaving = true;
     this.cdr.markForCheck();
 
     try {
-      const trimmedName = this.roomName.trim();
-      const exists = await this.roomService.checkRoomNameExists(trimmedName);
-      if (exists) {
+      const conflict = await this.roomService.findRoomNameConflict(trimmedName);
+      if (conflict.activeConflict) {
         this.dialogService.error('Duplicate Room', 'A room with this name already exists.');
         this.isSaving = false;
         this.cdr.markForCheck();
         return;
       }
 
+      const deletedMatch = conflict.deletedMatches[0];
+      if (deletedMatch) {
+        this.isSaving = false;
+        this.cdr.markForCheck();
+        this.promptRestoreOrCreate(deletedMatch, trimmedName);
+        return;
+      }
+    } catch (err) {
+      this.isSaving = false;
+      this.cdr.markForCheck();
+      this.dialogService.error('Create Failed', this.toUserMessage(err));
+      return;
+    }
+
+    await this.createNewRoom(trimmedName);
+  }
+
+  private promptRestoreOrCreate(match: Room, trimmedName: string): void {
+    const deletedOn = match.deletedAt
+      ? ` (deleted ${new Date(match.deletedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`
+      : '';
+    this.dialogService.choose(
+      'Deleted Room Found',
+      `A deleted room named "${match.roomName}"${deletedOn} exists. Restore it with the device and schedules from this form to keep its energy history, or create a new room with no history.`,
+      { label: 'Restore', action: () => void this.restoreDeletedRoom(match, trimmedName) },
+      { label: 'Create new', action: () => void this.createNewRoom(trimmedName) },
+    );
+  }
+
+  private async restoreDeletedRoom(match: Room, trimmedName: string): Promise<void> {
+    if (!this.selection || this.isSaving) return;
+    this.isSaving = true;
+    this.cdr.markForCheck();
+
+    try {
+      const { room } = await this.roomService.restoreRoom(match.uid, {
+        roomName: trimmedName,
+        device: this.selectedDevice,
+        schedules: this.cloneSchedules(this.schedules),
+        floorPlanCellId: this.selection.cellId,
+      });
+      this.animateOut(() => {
+        this.closed.emit();
+        setTimeout(() => {
+          this.dialogService.success('Room Restored', `${room.roomName} has been restored and linked to the floorplan. Its energy history is kept.`);
+        }, 50);
+      });
+    } catch (err) {
+      this.isSaving = false;
+      this.cdr.markForCheck();
+      this.dialogService.error('Restore Failed', this.toUserMessage(err));
+    }
+  }
+
+  private async createNewRoom(trimmedName: string): Promise<void> {
+    if (!this.selection) return;
+    this.isSaving = true;
+    this.cdr.markForCheck();
+
+    try {
       const availableDevices = await this.deviceService.getAvailableDevices();
       if (!availableDevices.includes(this.selectedDevice)) {
         this.dialogService.error('Device Unavailable', 'The selected device is no longer available.');
@@ -350,18 +412,31 @@ export class FloorPlanRoomModal implements OnChanges {
 
   deleteRoom(): void {
     if (!this.sourceRoom || this.isSaving) return;
+    const room = this.sourceRoom;
     this.dialogService.confirm(
       'Delete Room',
-      `Delete ${this.sourceRoom.roomName}? This cannot be undone.`,
+      `Delete ${room.roomName}? It will be removed from the dashboard and floor plan, and its AC will be turned off if it is running. Its energy history is kept, and an admin can restore it from Deleted Rooms.`,
       async () => {
         this.isSaving = true;
         this.cdr.markForCheck();
         try {
-          await this.roomService.deleteRoom(this.sourceRoom!.uid);
+          const user = await this.authState.getCurrentUserOnce();
+          const { acOffFailed } = await this.roomService.softDeleteRoom(room.uid, {
+            uid: user?.uid,
+            fullName: user?.fullName,
+            role: user?.role,
+          });
           this.animateOut(() => {
             this.closed.emit();
             setTimeout(() => {
-              this.dialogService.success('Room Deleted', 'The assigned room has been removed.');
+              if (acOffFailed) {
+                this.dialogService.alert(
+                  'Room Deleted',
+                  `${room.roomName} was deleted, but the off command could not be sent to ${room.device}. Please check the AC unit.`
+                );
+              } else {
+                this.dialogService.success('Room Deleted', `${room.roomName} was deleted. You can restore it from Deleted Rooms.`);
+              }
             }, 50);
           });
         } catch (err) {
@@ -475,6 +550,9 @@ export class FloorPlanRoomModal implements OnChanges {
   }
 
   private toUserMessage(err: unknown): string {
+    if (isRoomActionError(err)) {
+      return err.message;
+    }
     if (err instanceof Error && err.message === 'Floorplan cell is already assigned') {
       return 'This floorplan cell is already assigned to another room.';
     }

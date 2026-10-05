@@ -35,12 +35,14 @@
                 }
             </div>
 
+            @if (!isDeleted) {
             <button (click)="editRoom()" [disabled]="loading || !room"
                 class="group flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-2xl font-black text-xs sm:text-sm transition-all shadow-xl shadow-blue-600/20 whitespace-nowrap active:scale-95 disabled:opacity-50 w-full lg:w-auto">
                 <span
                     class="material-symbols-outlined text-[20px] sm:text-[22px] transition-transform group-hover:rotate-12">edit_square</span>
                 Edit Configuration
             </button>
+            }
         </div>
     </header>
 
@@ -70,7 +72,25 @@
         </div>
         }
 
-        @if (room && !loading) {
+        @if (room && !loading && isDeleted) {
+        <div class="bg-white/80 backdrop-blur-md border border-white rounded-[2.5rem] p-12 text-center shadow-xl shadow-slate-200/50">
+            <div class="bg-slate-100 size-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span class="material-symbols-outlined text-slate-500 text-4xl">delete_history</span>
+            </div>
+            <p class="text-slate-900 font-black text-lg tracking-tight">This room was deleted</p>
+            <p class="text-slate-500 text-sm font-medium mt-2 max-w-md mx-auto">
+                @if (room.deletedAt) { Deleted {{ room.deletedAt | date:'MMM d, y, h:mm a' }}@if (room.deletedByName) { by {{ room.deletedByName }}}. }
+                Its device was detached and it no longer controls an AC. Energy history is kept in Energy Reports, and an admin can restore it from Room Management.
+            </p>
+            <button (click)="goBack()"
+                class="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-widest transition-all active:scale-95">
+                <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+                Back to Room Management
+            </button>
+        </div>
+        }
+
+        @if (room && !loading && !isDeleted) {
         <div class="grid grid-cols-1 gap-6">
 
             <div
@@ -690,7 +710,7 @@
     </div>
 </div>
 
-@if (isEditModalOpen && room) {
+@if (isEditModalOpen && room && !isDeleted) {
 <div class="fixed inset-0 z-[60] flex items-center justify-center bg-blue-900/20 backdrop-blur-sm p-4">
     <app-room-edit-modal class="w-full max-w-2xl animate-in fade-in zoom-in duration-300" [room]="room"
         (closed)="onEditModalClosed()" (roomUpdated)="onRoomUpdated($event)" />

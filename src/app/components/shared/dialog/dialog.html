@@ -77,6 +77,18 @@
             </button>
           }
 
+          @if (config?.type === 'confirm' && config?.secondaryLabel) {
+            <button
+              type="button"
+              class="flex-1 py-3 rounded-xl text-sm font-semibold text-indigo-600 bg-white border border-indigo-200
+                     hover:bg-indigo-50 active:scale-95 transition-all duration-200
+                     focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
+              (click)="onSecondary()"
+            >
+              {{ config?.secondaryLabel }}
+            </button>
+          }
+
           <button
             type="button"
             class="flex-1 py-3 rounded-xl text-sm font-bold text-white

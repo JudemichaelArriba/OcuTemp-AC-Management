@@ -1,4 +1,4 @@
-import { Schedule } from '../models/room.model';
+import { Room, Schedule } from '../models/room.model';
 
 const ROOM_NAME_PATTERN = /^[a-zA-Z0-9\s\-]+$/;
 const SUBJECT_PATTERN = /^[a-zA-Z0-9\s\-]+$/;
@@ -111,4 +111,27 @@ export function validateSchedulesList(schedules: Schedule[]): string | null {
     if (error) return error;
   }
   return null;
+}
+
+export function isRoomDeleted(room: Pick<Room, 'deleted'> | null | undefined): boolean {
+  return room?.deleted === true;
+}
+
+/**
+ * RTDB returns arrays with gaps as plain objects, so stored schedule lists can come back
+ * as an object or a sparse array. Normalizes to a dense, trimmed `Schedule[]`.
+ */
+export function toScheduleArray(value: unknown): Schedule[] {
+  if (!value || typeof value !== 'object') return [];
+  const items = Array.isArray(value) ? value : Object.values(value);
+  return items
+    .filter((item): item is Schedule =>
+      !!item &&
+      typeof item === 'object' &&
+      typeof (item as Schedule).day === 'string' &&
+      typeof (item as Schedule).startTime === 'string' &&
+      typeof (item as Schedule).endTime === 'string' &&
+      typeof (item as Schedule).subject === 'string'
+    )
+    .map(normalizeSchedule);
 }
