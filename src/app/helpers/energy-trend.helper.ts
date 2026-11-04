@@ -16,6 +16,8 @@ export interface EnergyTrendPoint {
   readonly label: string;
   /** Unambiguous tooltip title; includes the year because scrolling can span several years. */
   readonly tooltipTitle: string;
+  /** Consecutive period number, which lets labels be derived for periods outside the series. */
+  readonly ordinal: number;
   readonly kwh: number;
 }
 
@@ -100,7 +102,11 @@ function toOrdinal(dayNumber: number, todayDay: number, mode: EnergyTrendMode): 
   return yearOf(dayNumber);
 }
 
-function describePeriod(ordinal: number, todayDay: number, mode: EnergyTrendMode): Omit<EnergyTrendPoint, 'kwh'> {
+function describePeriod(
+  ordinal: number,
+  todayDay: number,
+  mode: EnergyTrendMode
+): Omit<EnergyTrendPoint, 'kwh' | 'ordinal'> {
   if (mode === 'daily') {
     const key = dayToKey(ordinal);
     return { key, label: key.slice(5), tooltipTitle: FULL_DAY_FORMAT.format(dayToDate(ordinal)) };
@@ -175,6 +181,7 @@ export function buildEnergyTrendSeries(
   for (let ordinal = firstOrdinal; ordinal <= lastOrdinal; ordinal++) {
     series.push({
       ...describePeriod(ordinal, todayDay, mode),
+      ordinal,
       kwh: roundKwh(totals.get(ordinal) ?? 0),
     });
   }
@@ -190,8 +197,9 @@ export function getVisibleCount(mode: EnergyTrendMode, widthPx: number): number 
 
 /**
  * Maps scroll progress (0 oldest, 1 latest) to the visible axis range. The range is always exactly
- * `visibleCount` wide so point spacing never changes: series that fit sit centered as a group, and
- * longer ones scroll with half a slot of padding at each end.
+ * `visibleCount` wide so point spacing never changes: series that fit sit centered with the
+ * surrounding periods labeled but undrawn (indexes below 0 or past the end), and longer ones scroll
+ * with half a slot of padding at each end.
  */
 export function computeTrendViewport(
   pointCount: number,
@@ -211,6 +219,34 @@ export function computeTrendViewport(
     contentWidthPercent: scrollable ? (pointCount / visible) * 100 : 100,
     scrollable,
   };
+}
+
+/**
+ * Point indexes to label within an axis range. Indexes exactly on the bounds are left out because
+ * their labels would be cut off at the chart edge.
+ */
+export function getTrendTickIndexes(min: number, max: number): number[] {
+  const indexes: number[] = [];
+  for (let index = Math.floor(min) + 1; index < max; index++) indexes.push(index);
+  return indexes;
+}
+
+/**
+ * Axis label for a point index, including periods before and after the series. Empty when there is
+ * no series, because there is then no period to count from.
+ */
+export function getTrendSlotLabel(
+  series: readonly EnergyTrendPoint[],
+  index: number,
+  mode: EnergyTrendMode,
+  todayKey: string
+): string {
+  const point = series[index];
+  if (point) return point.label;
+
+  const todayDay = parseDayNumber(todayKey);
+  if (series.length === 0 || todayDay === null) return '';
+  return describePeriod(series[0].ordinal + index, todayDay, mode).label;
 }
 
 /** True when both series would draw identically, so a redraw can be skipped. */

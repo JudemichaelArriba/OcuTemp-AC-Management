@@ -8,6 +8,8 @@ import {
 import {
   buildEnergyTrendSeries,
   computeTrendViewport,
+  getTrendSlotLabel,
+  getTrendTickIndexes,
   getVisibleCount,
   isSameTrendSeries,
 } from './energy-trend.helper';
@@ -273,8 +275,78 @@ describe('computeTrendViewport', () => {
   });
 });
 
+describe('getTrendTickIndexes', () => {
+  it('labels one period per slot, including empty slots around the data', () => {
+    expect(getTrendTickIndexes(-2.5, 2.5)).toEqual([-2, -1, 0, 1, 2]);
+  });
+
+  it('leaves out indexes exactly on the bounds', () => {
+    expect(getTrendTickIndexes(-2, 3)).toEqual([-1, 0, 1, 2]);
+  });
+
+  it('only returns whole indexes at fractional scroll positions', () => {
+    expect(getTrendTickIndexes(3.2, 5.2)).toEqual([4, 5]);
+  });
+});
+
+describe('getTrendSlotLabel', () => {
+  const labelsFor = (mode: 'daily' | 'weekly' | 'monthly' | 'yearly', dateKey: string, indexes: number[]) => {
+    const series = buildEnergyTrendSeries({ a: { [dateKey]: day(1) } }, mode, TODAY);
+    return indexes.map((index) => getTrendSlotLabel(series, index, mode, TODAY));
+  };
+
+  it('labels the years around a lone year, including future ones', () => {
+    expect(labelsFor('yearly', TODAY, [-2, -1, 0, 1, 2])).toEqual(['2024', '2025', '2026', '2027', '2028']);
+  });
+
+  it('labels months across year boundaries in both directions', () => {
+    expect(labelsFor('monthly', '2026-01-15', [-2, -1, 0])).toEqual(['Nov 25', 'Dec 25', 'Jan 26']);
+    expect(labelsFor('monthly', TODAY, [0, 1, 2])).toEqual(['Nov 26', 'Dec 26', 'Jan 27']);
+  });
+
+  it('labels the rolling weeks before and after the series', () => {
+    expect(labelsFor('weekly', TODAY, [-1, 0, 1])).toEqual([
+      'Oct 22 - Oct 28',
+      'Oct 29 - Nov 4',
+      'Nov 5 - Nov 11',
+    ]);
+  });
+
+  it('labels the days before and after the series', () => {
+    expect(labelsFor('daily', TODAY, [-1, 0, 1])).toEqual(['11-03', '11-04', '11-05']);
+  });
+
+  it('is empty when there is no series to count from', () => {
+    expect(getTrendSlotLabel([], 0, 'yearly', TODAY)).toBe('');
+  });
+
+  it('matches the labels of periods that are in the series', () => {
+    const series = buildEnergyTrendSeries({ a: { '2024-06-01': day(1) } }, 'yearly', TODAY);
+    expect(series.map((_, index) => getTrendSlotLabel(series, index, 'yearly', TODAY))).toEqual(
+      series.map((point) => point.label)
+    );
+  });
+});
+
+describe('centered data with surrounding periods', () => {
+  it('keeps a lone year in the middle of the labeled axis', () => {
+    const { min, max } = computeTrendViewport(1, 5, 1);
+    const ticks = getTrendTickIndexes(min, max);
+    expect(ticks[Math.floor(ticks.length / 2)]).toBe(0);
+    expect(ticks).toHaveLength(5);
+  });
+
+  it('keeps labels symmetric around the data for every group size', () => {
+    for (let pointCount = 1; pointCount < 12; pointCount++) {
+      const { min, max } = computeTrendViewport(pointCount, 12, 1);
+      const ticks = getTrendTickIndexes(min, max);
+      expect(ticks[0] + ticks[ticks.length - 1]).toBe(pointCount - 1);
+    }
+  });
+});
+
 describe('isSameTrendSeries', () => {
-  const point = (key: string, kwh: number) => ({ key, label: key, tooltipTitle: key, kwh });
+  const point = (key: string, kwh: number) => ({ key, label: key, tooltipTitle: key, ordinal: 0, kwh });
 
   it('matches identical series', () => {
     expect(isSameTrendSeries([point('a', 1)], [point('a', 1)])).toBe(true);

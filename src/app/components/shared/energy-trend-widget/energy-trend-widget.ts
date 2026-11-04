@@ -32,6 +32,8 @@ import {
   EnergyTrendPoint,
   buildEnergyTrendSeries,
   computeTrendViewport,
+  getTrendSlotLabel,
+  getTrendTickIndexes,
   getVisibleCount,
   isSameTrendSeries,
 } from '../../../helpers/energy-trend.helper';
@@ -80,6 +82,7 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
 
   private overallChart: Chart<'line', TrendDatum[]> | null = null;
   private series: readonly EnergyTrendPoint[] = [];
+  private seriesTodayKey = '';
   private visibleCount = 0;
   private resizeObserver: ResizeObserver | null = null;
   private scrollFrame: number | null = null;
@@ -218,19 +221,20 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
             bounds: 'data',
             border: { display: false },
             grid: { display: false },
-            // One tick per period in view. The generator would offset them from a fractional min.
+            // One tick per period in view, including the empty periods around centered data. The
+            // generator would offset them from a fractional min.
             afterBuildTicks: (axis) => {
-              const first = Math.max(0, Math.ceil(axis.min));
-              const last = Math.min(this.series.length - 1, Math.floor(axis.max));
-              axis.ticks = [];
-              for (let value = first; value <= last; value++) axis.ticks.push({ value });
+              axis.ticks = this.series.length
+                ? getTrendTickIndexes(axis.min, axis.max).map((value) => ({ value }))
+                : [];
             },
             ticks: {
               font: { size: 10, family: 'Inter' },
               color: '#64748b',
               padding: 10,
               maxRotation: 0,
-              callback: (value) => this.series[Number(value)]?.label ?? '',
+              callback: (value) =>
+                getTrendSlotLabel(this.series, Number(value), this.filterMode, this.seriesTodayKey),
             },
           },
         },
@@ -242,12 +246,14 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
     const chart = this.overallChart;
     if (!chart) return;
 
-    const next = buildEnergyTrendSeries(this.energyData, this.filterMode, getTodayKey());
+    const todayKey = getTodayKey();
+    const next = buildEnergyTrendSeries(this.energyData, this.filterMode, todayKey);
     // Most stream emissions are telemetry changes that leave energy untouched.
     if (!jumpToLatest && isSameTrendSeries(this.series, next)) return;
 
     this.jumpToLatestPending ||= jumpToLatest || this.isAtLatest();
     this.series = next;
+    this.seriesTodayKey = todayKey;
 
     const dataset = chart.data.datasets[0];
     dataset.data = next.map((point, index) => ({ x: index, y: point.kwh }));
