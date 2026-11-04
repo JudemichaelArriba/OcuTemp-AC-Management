@@ -1,0 +1,22 @@
+.trend-scroller {
+  container-type: inline-size;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.trend-scroller::-webkit-scrollbar {
+  height: 6px;
+}
+
+.trend-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.trend-scroller::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.trend-scroller::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
