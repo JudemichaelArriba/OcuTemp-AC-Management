@@ -36,7 +36,7 @@
               <span class="hidden sm:inline">Weekly</span>
             </button>
             <button (click)="setFilter('monthly')"
-              [class]="filterMode === 'monthly' ? 'text-white' : 'text-slate-500 hover:text-slateateBlue-800'"
+              [class]="filterMode === 'monthly' ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
               class="relative z-10 px-2 py-2 sm:px-5 sm:py-2 rounded-xl text-center text-[10px] sm:text-[10px] font-black tracking-widest uppercase transition-colors duration-300 touch-manipulation">
               <span class="sm:hidden">M</span>
               <span class="hidden sm:inline">Monthly</span>
@@ -58,9 +58,34 @@
       </div>
     </div>
 
-    <div class="h-[220px] sm:h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
-      <canvas #overallChartCanvas></canvas>
+    <div class="relative h-[220px] sm:h-[350px] w-full rounded-2xl bg-slate-50/50 p-4 border border-slate-100">
+      <!-- The canvas stays one viewport wide and pinned in place. The spacer gives the scroller its
+           range, and the scroll position selects which periods the chart draws. -->
+      <div #chartScroller
+        class="trend-scroller h-full w-full overflow-x-auto overflow-y-hidden rounded-lg focus-visible:outline-1 focus-visible:outline-blue-200"
+        [attr.tabindex]="isScrollable ? 0 : null"
+        [attr.role]="isScrollable ? 'region' : null"
+        [attr.aria-label]="isScrollable ? 'Consumption history. Scroll horizontally to see earlier periods.' : null">
+        <div class="h-full" [style.width.%]="contentWidthPercent">
+          <div class="sticky left-0 h-full w-[100cqw]">
+            <canvas #overallChartCanvas role="img" aria-label="Line chart of facility energy consumption in kilowatt-hours over time"></canvas>
+          </div>
+        </div>
+      </div>
+
+      @if (!hasData && !loading) {
+      <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <p class="text-xs font-medium text-slate-400">No energy data recorded yet</p>
+      </div>
+      }
     </div>
+
+    <!-- Always in the layout so switching filters doesn't shift the page. -->
+    <p class="mt-2 text-center text-[10px] font-medium text-slate-400"
+      [class.invisible]="!isScrollable"
+      [attr.aria-hidden]="!isScrollable">
+      Scroll to see earlier periods
+    </p>
 
   </div>
 </div>

@@ -340,7 +340,7 @@
   } @else {
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
     <div class="max-w-[1800px] mx-auto w-full">
-      <app-energy-trend-widget [energyData]="rawEnergyData"></app-energy-trend-widget>
+      <app-energy-trend-widget [energyData]="rawEnergyData" [loading]="!isEnergyReady"></app-energy-trend-widget>
     </div>
   </div>
   <div [class.animate-fade-in]="useFadeIn" class="px-4 pb-4">
