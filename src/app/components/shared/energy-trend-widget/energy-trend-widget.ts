@@ -28,9 +28,11 @@ import {
 import { EnergyDaily } from '../../../models/energy.model';
 import { getTodayKey } from '../../../services/energy-report.service';
 import {
+  EnergyTrendChartPoint,
   EnergyTrendMode,
   EnergyTrendPoint,
   buildEnergyTrendSeries,
+  buildTrendChartPoints,
   computeTrendViewport,
   getTrendSlotLabel,
   getTrendTickIndexes,
@@ -43,16 +45,6 @@ Chart.register(
   LinearScale, Tooltip, Filler, Legend
 );
 
-interface TrendDatum {
-  x: number;
-  y: number;
-}
-
-const POINT_RADIUS = 3;
-const POINT_HOVER_RADIUS = 5;
-/** A lone point has no line to carry it, so it is drawn larger. */
-const SINGLE_POINT_RADIUS = 6;
-const SINGLE_POINT_HOVER_RADIUS = 8;
 /** Tolerance for sub-pixel scroll offsets at high zoom levels. */
 const SCROLL_END_TOLERANCE_PX = 1;
 
@@ -80,7 +72,7 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly injector = inject(Injector);
 
-  private overallChart: Chart<'line', TrendDatum[]> | null = null;
+  private overallChart: Chart<'line', EnergyTrendChartPoint[]> | null = null;
   private series: readonly EnergyTrendPoint[] = [];
   private seriesTodayKey = '';
   private visibleCount = 0;
@@ -150,10 +142,10 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
     this.refreshSeries(true);
   }
 
-  private createChart(ctx: CanvasRenderingContext2D): Chart<'line', TrendDatum[]> {
+  private createChart(ctx: CanvasRenderingContext2D): Chart<'line', EnergyTrendChartPoint[]> {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    return new Chart<'line', TrendDatum[]>(ctx, {
+    return new Chart<'line', EnergyTrendChartPoint[]>(ctx, {
       type: 'line',
       data: {
         datasets: [
@@ -176,8 +168,8 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
             pointBackgroundColor: '#FFFFFF',
             pointBorderColor: '#2563EB',
             pointBorderWidth: 2,
-            pointRadius: POINT_RADIUS,
-            pointHoverRadius: POINT_HOVER_RADIUS,
+            pointRadius: 3,
+            pointHoverRadius: 5,
             borderWidth: 2.5,
           },
         ],
@@ -196,8 +188,14 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
             cornerRadius: 8,
             displayColors: false,
             callbacks: {
-              title: (items) => this.series[items[0]?.parsed.x ?? -1]?.tooltipTitle ?? '',
-              label: (ctx) => `Consumption: ${Number(ctx.parsed.y).toFixed(3)} kWh`,
+              title: (items) => {
+                const index = items[0]?.parsed.x ?? 0;
+                return this.series[index]?.tooltipTitle ?? this.slotLabel(index);
+              },
+              // Surrounding periods are drawn at zero but were never measured.
+              label: (ctx) => this.series[ctx.parsed.x ?? -1]
+                ? `Consumption: ${Number(ctx.parsed.y).toFixed(3)} kWh`
+                : 'No data recorded',
             },
           },
         },
@@ -233,8 +231,7 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
               color: '#64748b',
               padding: 10,
               maxRotation: 0,
-              callback: (value) =>
-                getTrendSlotLabel(this.series, Number(value), this.filterMode, this.seriesTodayKey),
+              callback: (value) => this.slotLabel(Number(value)),
             },
           },
         },
@@ -255,11 +252,6 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
     this.series = next;
     this.seriesTodayKey = todayKey;
 
-    const dataset = chart.data.datasets[0];
-    dataset.data = next.map((point, index) => ({ x: index, y: point.kwh }));
-    dataset.pointRadius = next.length === 1 ? SINGLE_POINT_RADIUS : POINT_RADIUS;
-    dataset.pointHoverRadius = next.length === 1 ? SINGLE_POINT_HOVER_RADIUS : POINT_HOVER_RADIUS;
-
     // Fixed to the whole series because autoscaling only sees the visible window, which would make
     // the axis jump while scrolling.
     const yScale = chart.options.scales?.['y'];
@@ -279,12 +271,21 @@ export class EnergyTrendWidget implements OnChanges, OnDestroy {
     this.scheduleLayout('none');
   }
 
+  private slotLabel(index: number): string {
+    return getTrendSlotLabel(this.series, index, this.filterMode, this.seriesTodayKey);
+  }
+
   private measureVisibleCount(): number {
     return getVisibleCount(this.filterMode, this.chartScroller.nativeElement.clientWidth);
   }
 
   /** Resizes the scroll content, then positions and redraws the chart once that is laid out. */
   private scheduleLayout(updateMode: UpdateMode | undefined): void {
+    // Rebuilt here because the surrounding periods depend on how many fit on screen.
+    if (this.overallChart) {
+      this.overallChart.data.datasets[0].data = buildTrendChartPoints(this.series, this.visibleCount);
+    }
+
     const viewport = computeTrendViewport(this.series.length, this.visibleCount, 1);
     this.contentWidthPercent = viewport.contentWidthPercent;
     this.isScrollable = viewport.scrollable;

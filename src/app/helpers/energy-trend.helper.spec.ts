@@ -7,6 +7,7 @@ import {
 } from '../services/energy-report.service';
 import {
   buildEnergyTrendSeries,
+  buildTrendChartPoints,
   computeTrendViewport,
   getTrendSlotLabel,
   getTrendTickIndexes,
@@ -325,6 +326,41 @@ describe('getTrendSlotLabel', () => {
     expect(series.map((_, index) => getTrendSlotLabel(series, index, 'yearly', TODAY))).toEqual(
       series.map((point) => point.label)
     );
+  });
+});
+
+describe('buildTrendChartPoints', () => {
+  const series = (values: number[]) =>
+    values.map((kwh, index) => ({ key: String(index), label: String(index), tooltipTitle: '', ordinal: index, kwh }));
+
+  it('turns a lone year into a line with zeros on both sides', () => {
+    expect(buildTrendChartPoints(series([141]), 5)).toEqual([
+      { x: -2, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 141 },
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
+  it('gives every labeled period a point, in order, with real values untouched', () => {
+    const points = buildTrendChartPoints(series([30, 66, 44, 0]), 12);
+    const { min, max } = computeTrendViewport(4, 12, 1);
+    expect(points.map((point) => point.x)).toEqual(getTrendTickIndexes(min, max));
+    expect(points.filter((point) => point.y > 0)).toEqual([
+      { x: 0, y: 30 },
+      { x: 1, y: 66 },
+      { x: 2, y: 44 },
+    ]);
+  });
+
+  it('adds nothing when the series fills or overflows the screen', () => {
+    expect(buildTrendChartPoints(series([1, 2, 3]), 3)).toHaveLength(3);
+    expect(buildTrendChartPoints(series([1, 2, 3, 4, 5]), 3)).toHaveLength(5);
+  });
+
+  it('adds nothing for an empty series', () => {
+    expect(buildTrendChartPoints([], 5)).toEqual([]);
   });
 });
 

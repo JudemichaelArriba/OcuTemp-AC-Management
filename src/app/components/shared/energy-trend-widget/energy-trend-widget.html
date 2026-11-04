@@ -62,7 +62,7 @@
       <!-- The canvas stays one viewport wide and pinned in place. The spacer gives the scroller its
            range, and the scroll position selects which periods the chart draws. -->
       <div #chartScroller
-        class="trend-scroller h-full w-full overflow-x-auto overflow-y-hidden rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+        class="trend-scroller h-full w-full overflow-x-auto overflow-y-hidden rounded-lg focus-visible:outline-1 focus-visible:outline-blue-200"
         [attr.tabindex]="isScrollable ? 0 : null"
         [attr.role]="isScrollable ? 'region' : null"
         [attr.aria-label]="isScrollable ? 'Consumption history. Scroll horizontally to see earlier periods.' : null">

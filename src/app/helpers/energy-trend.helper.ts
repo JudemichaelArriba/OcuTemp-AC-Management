@@ -21,6 +21,12 @@ export interface EnergyTrendPoint {
   readonly kwh: number;
 }
 
+export interface EnergyTrendChartPoint {
+  /** Point index; below 0 or past the series end for the periods around centered data. */
+  x: number;
+  y: number;
+}
+
 export interface EnergyTrendViewport {
   /** Visible x-axis range, in fractional point indexes. */
   readonly min: number;
@@ -197,9 +203,9 @@ export function getVisibleCount(mode: EnergyTrendMode, widthPx: number): number 
 
 /**
  * Maps scroll progress (0 oldest, 1 latest) to the visible axis range. The range is always exactly
- * `visibleCount` wide so point spacing never changes: series that fit sit centered with the
- * surrounding periods labeled but undrawn (indexes below 0 or past the end), and longer ones scroll
- * with half a slot of padding at each end.
+ * `visibleCount` wide so point spacing never changes: series that fit sit centered among the
+ * surrounding periods (indexes below 0 or past the end), and longer ones scroll with half a slot of
+ * padding at each end.
  */
 export function computeTrendViewport(
   pointCount: number,
@@ -229,6 +235,26 @@ export function getTrendTickIndexes(min: number, max: number): number[] {
   const indexes: number[] = [];
   for (let index = Math.floor(min) + 1; index < max; index++) indexes.push(index);
   return indexes;
+}
+
+/**
+ * Chart points for a series. When the series fits on screen, every other labeled period around it
+ * gets a zero point, so the line runs across the whole axis with the data in the middle.
+ */
+export function buildTrendChartPoints(
+  series: readonly EnergyTrendPoint[],
+  visibleCount: number
+): EnergyTrendChartPoint[] {
+  const points = series.map((point, index) => ({ x: index, y: point.kwh }));
+  if (series.length === 0) return points;
+
+  const { min, max } = computeTrendViewport(series.length, visibleCount, 1);
+  const surrounding = getTrendTickIndexes(min, max).map((index) => ({ x: index, y: 0 }));
+  return [
+    ...surrounding.filter((point) => point.x < 0),
+    ...points,
+    ...surrounding.filter((point) => point.x >= series.length),
+  ];
 }
 
 /**
