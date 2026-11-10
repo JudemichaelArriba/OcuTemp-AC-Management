@@ -7,7 +7,6 @@ import { DeviceService, DeviceOnlineState, OverrideActor, getDeviceOnlineState }
 import { Device } from '../../models/esp.model';
 import { Room } from '../../models/room.model';
 import { RoomEditModal } from '../../components/room-edit-modal/room-edit-modal';
-import { RoomRecords } from '../../components/room-records/room-records';
 import { isRoomDeleted } from '../../helpers/room-validation';
 import { DropDown } from '../../components/shared/drop-down/drop-down';
 import { DialogService } from '../../services/dialog.service';
@@ -32,7 +31,7 @@ interface TempTick {
 @Component({
   selector: 'app-room-details',
   standalone: true,
-  imports: [CommonModule, FormsModule, RoomEditModal, RoomRecords, DropDown],
+  imports: [CommonModule, FormsModule, RoomEditModal, DropDown],
   templateUrl: './room-details.html',
   styleUrl: './room-details.css',
 })

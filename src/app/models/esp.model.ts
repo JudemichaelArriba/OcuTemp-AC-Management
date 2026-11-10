@@ -73,5 +73,5 @@ export interface OccupancyLogEntry {
   uptimeMs?: number;
 }
 
-/** A stored record together with its RTDB push key. */
-export type DeviceRecord<T> = T & { readonly id: string };
+/** A stored record together with its RTDB push key and the device it was stored under. */
+export type DeviceRecord<T> = T & { readonly id: string; readonly deviceId: string };

@@ -1,14 +1,24 @@
 import { DeviceRecord, OccupancyLogEntry, OverrideHistoryEntry } from '../models/esp.model';
 import {
+  buildOccupancyDetails,
+  buildOverrideDetails,
+  buildRecordRoomLookup,
+  buildRecordRoomOptions,
   buildRecordsFileName,
+  clampRecordPage,
+  classifyOccupancyDetection,
   describeOccupancyDetection,
   describeOverrideAction,
+  filterRecordRows,
   filterRecordsByDateRange,
   formatRecordDateRange,
   formatRecordDateTime,
   isRecordDateRangeValid,
   pageOfRecords,
+  recordDeviceIds,
   recordPageCount,
+  resolveRecordPresetRange,
+  resolveRecordRoom,
   sortRecordsNewestFirst,
   toOccupancyLogRows,
   toOverrideHistoryRows,
@@ -156,13 +166,20 @@ describe('describeOccupancyDetection', () => {
 
   it('says so when an entry names no sensor', () => {
     expect(describeOccupancyDetection(entry({}))).toBe('Not recorded');
+    expect(classifyOccupancyDetection(entry({}))).toBe('unknown');
   });
 });
 
 describe('row mapping', () => {
-  it('builds occupancy rows without exposing diagnostic fields', () => {
+  const LOOKUP = buildRecordRoomLookup([
+    { uid: 'room-1', roomName: 'Room 101', device: 'dev-1' },
+    { uid: 'room-2', roomName: 'Room 102', device: 'dev-2' },
+  ]);
+
+  it('builds occupancy rows with their room and device, without diagnostic fields', () => {
     const records: DeviceRecord<OccupancyLogEntry>[] = [{
       id: '-Oa1',
+      deviceId: 'dev-1',
       timestamp: '2026-08-27T15:05:00+08:00',
       pirEdge: true,
       mlxHit: true,
@@ -171,14 +188,26 @@ describe('row mapping', () => {
       mlxDeltaTemp: 3.3,
       uptimeMs: 123456,
     }];
-    expect(toOccupancyLogRows(records)).toEqual([
-      { id: '-Oa1', dateTime: 'Aug 27, 2026, 3:05 PM', detectedBy: 'Both sensors' },
-    ]);
+    expect(toOccupancyLogRows(records, LOOKUP)).toEqual([{
+      id: '-Oa1',
+      date: 'Aug 27, 2026',
+      time: '3:05 PM',
+      dateTime: 'Aug 27, 2026, 3:05 PM',
+      roomUid: 'room-1',
+      room: 'Room 101',
+      device: 'dev-1',
+      detection: 'both',
+      detectedBy: 'Both sensors',
+      pirEdge: true,
+      pirLevel: false,
+      mlxHit: true,
+    }]);
   });
 
   it('builds override rows in Manila time with readable labels', () => {
     const records: DeviceRecord<OverrideHistoryEntry>[] = [{
       id: '-Ob1',
+      deviceId: 'dev-1',
       action: 'override',
       requestedBy: 'uid-1',
       requestedByName: 'Ana Reyes',
@@ -188,26 +217,49 @@ describe('row mapping', () => {
       targetTemp: 24,
       overrideUntil: '2026-08-27T08:05:00.000Z',
     }];
-    expect(toOverrideHistoryRows(records)).toEqual([{
+    expect(toOverrideHistoryRows(records, LOOKUP)).toEqual([{
       id: '-Ob1',
+      date: 'Aug 27, 2026',
+      time: '3:05 PM',
       dateTime: 'Aug 27, 2026, 3:05 PM',
+      roomUid: 'room-1',
+      room: 'Room 101',
+      device: 'dev-1',
       user: 'Ana Reyes',
       role: 'Admin',
+      actionKind: 'override',
       action: 'Override set',
       targetTemp: '24°C',
       activeUntil: 'Aug 27, 2026, 4:05 PM',
     }]);
   });
 
+  it('names an override by the room it was made for, not the device\'s current room', () => {
+    const records: DeviceRecord<OverrideHistoryEntry>[] = [{
+      id: '-Ob4',
+      deviceId: 'dev-1',
+      action: 'clear',
+      requestedBy: 'uid-1',
+      requestedAt: '2026-08-27T07:05:00.000Z',
+      roomUid: 'room-2',
+    }];
+    expect(toOverrideHistoryRows(records, LOOKUP)[0]).toMatchObject({
+      roomUid: 'room-2',
+      room: 'Room 102',
+      device: 'dev-1',
+    });
+  });
+
   it('fills placeholders for fields an entry does not carry', () => {
     const records: DeviceRecord<OverrideHistoryEntry>[] = [{
       id: '-Ob2',
+      deviceId: 'dev-1',
       action: 'clear',
       requestedBy: 'uid-1',
       requestedAt: '2026-08-27T07:05:00.000Z',
       roomUid: 'room-1',
     }];
-    expect(toOverrideHistoryRows(records)[0]).toMatchObject({
+    expect(toOverrideHistoryRows(records, LOOKUP)[0]).toMatchObject({
       user: 'Unknown user',
       role: '—',
       action: 'Override cleared',
@@ -223,8 +275,128 @@ describe('row mapping', () => {
   });
 
   it('never emits the narrow no-break space the PDF fonts cannot draw', () => {
-    expect(formatRecordDateTime('2026-08-27T15:05:00+08:00')).not.toMatch(/[  ]/);
+    expect(formatRecordDateTime('2026-08-27T15:05:00+08:00')).not.toMatch(/[\u00a0\u202f]/);
     expect(formatRecordDateTime(undefined)).toBe('Unknown time');
+  });
+
+  it('gives an undated record a readable date cell and no time', () => {
+    const records: DeviceRecord<OccupancyLogEntry>[] = [
+      { id: '-Oa9', deviceId: 'dev-9', timestamp: 'nope' },
+    ];
+    expect(toOccupancyLogRows(records, LOOKUP)[0]).toMatchObject({
+      date: 'Unknown time',
+      time: '',
+      dateTime: 'Unknown time',
+      roomUid: '',
+      room: 'Unassigned',
+    });
+  });
+
+  it('marks an action it does not know as other', () => {
+    const records: DeviceRecord<OverrideHistoryEntry>[] = [{
+      id: '-Ob3',
+      deviceId: 'dev-1',
+      action: 'somethingNew' as OverrideHistoryEntry['action'],
+      requestedBy: 'uid-1',
+      requestedAt: '2026-08-27T07:05:00.000Z',
+      roomUid: 'room-1',
+    }];
+    expect(toOverrideHistoryRows(records, LOOKUP)[0]).toMatchObject({
+      actionKind: 'other',
+      action: 'somethingNew',
+    });
+  });
+});
+
+describe('rooms and devices', () => {
+  const ROOMS = [
+    { uid: 'room-2', roomName: 'Room 102', device: 'dev-2' },
+    { uid: 'room-1', roomName: 'Room 101', device: 'dev-1' },
+    { uid: 'room-3', roomName: 'Room 9', device: '' },
+    { uid: 'room-old', roomName: 'Old Lab', device: '', deleted: true, deletedDevice: 'dev-1' },
+    { uid: 'room-gone', roomName: 'Annex', device: '', deleted: true, deletedDevice: 'dev-7' },
+  ];
+
+  it('lists each device once, including those of deleted rooms', () => {
+    expect(recordDeviceIds(ROOMS)).toEqual(['dev-1', 'dev-2', 'dev-7']);
+  });
+
+  it('prefers the live room over a deleted room that used the same device', () => {
+    const lookup = buildRecordRoomLookup(ROOMS);
+    expect(resolveRecordRoom(lookup, 'dev-1')).toEqual({ roomUid: 'room-1', roomName: 'Room 101' });
+    expect(resolveRecordRoom(lookup, 'dev-7'))
+      .toEqual({ roomUid: 'room-gone', roomName: 'Annex (deleted)' });
+    expect(resolveRecordRoom(lookup, 'dev-x')).toEqual({ roomUid: '', roomName: 'Unassigned' });
+  });
+
+  it('falls back to the device room when the record names an unknown room', () => {
+    const lookup = buildRecordRoomLookup(ROOMS);
+    expect(resolveRecordRoom(lookup, 'dev-2', 'no-such-room').roomName).toBe('Room 102');
+  });
+
+  it('offers every room by name after All rooms', () => {
+    expect(buildRecordRoomOptions(ROOMS).map((option) => option.label))
+      .toEqual(['All rooms', 'Annex (deleted)', 'Old Lab (deleted)', 'Room 9', 'Room 101', 'Room 102']);
+  });
+
+  it('filters rows by room and by search text', () => {
+    const lookup = buildRecordRoomLookup(ROOMS);
+    const rows = toOccupancyLogRows([
+      { id: 'a', deviceId: 'dev-1', timestamp: '2026-09-01T08:00:00+08:00', pirEdge: true },
+      { id: 'b', deviceId: 'dev-2', timestamp: '2026-09-01T09:00:00+08:00', mlxHit: true },
+    ], lookup);
+    const text = (row: (typeof rows)[number]) => `${row.room} ${row.device} ${row.detectedBy}`;
+
+    expect(filterRecordRows(rows, 'all', '', text).map((row) => row.id)).toEqual(['a', 'b']);
+    expect(filterRecordRows(rows, 'room-2', '', text).map((row) => row.id)).toEqual(['b']);
+    expect(filterRecordRows(rows, 'all', '  INFRARED ', text).map((row) => row.id)).toEqual(['b']);
+    expect(filterRecordRows(rows, 'room-1', 'infrared', text)).toEqual([]);
+  });
+});
+
+describe('record details', () => {
+  const lookup = buildRecordRoomLookup([{ uid: 'room-1', roomName: 'Room 101', device: 'dev-1' }]);
+
+  it('describes an occupancy entry without raw sensor readings', () => {
+    const [row] = toOccupancyLogRows([{
+      id: 'a',
+      deviceId: 'dev-1',
+      timestamp: '2026-08-27T15:05:00+08:00',
+      pirEdge: true,
+      mlxObjectTemp: 31.2,
+      uptimeMs: 99,
+    }], lookup);
+    const details = buildOccupancyDetails(row);
+    const rows = details.groups.flatMap((group) => group.rows);
+
+    expect(details.subtitle).toBe('Aug 27, 2026, 3:05 PM');
+    expect(rows).toContainEqual({ label: 'Room', value: 'Room 101' });
+    expect(rows).toContainEqual({ label: 'Device', value: 'dev-1' });
+    expect(rows).toContainEqual({ label: 'Motion sensor, new movement', value: 'Yes' });
+    expect(rows).toContainEqual({ label: 'Infrared sensor', value: 'No' });
+    expect(JSON.stringify(details)).not.toMatch(/31\.2|99/);
+  });
+
+  it('describes an override entry', () => {
+    const [row] = toOverrideHistoryRows([{
+      id: 'b',
+      deviceId: 'dev-1',
+      action: 'override',
+      requestedBy: 'uid-1',
+      requestedByName: 'Ana Reyes',
+      requestedByRole: 'admin',
+      requestedAt: '2026-08-27T07:05:00.000Z',
+      roomUid: 'room-1',
+      targetTemp: 24,
+      overrideUntil: '2026-08-27T08:05:00.000Z',
+    }], lookup);
+    const details = buildOverrideDetails(row);
+    const rows = details.groups.flatMap((group) => group.rows);
+
+    expect(details.title).toBe('Override set');
+    expect(rows).toContainEqual({ label: 'Requested by', value: 'Ana Reyes' });
+    expect(rows).toContainEqual({ label: 'Target temperature', value: '24°C' });
+    expect(rows).toContainEqual({ label: 'Active until', value: 'Aug 27, 2026, 4:05 PM' });
   });
 });
 
@@ -242,6 +414,33 @@ describe('formatRecordDateRange', () => {
   });
 });
 
+describe('resolveRecordPresetRange', () => {
+  // 2026-11-10 01:30 in Manila, which is still 2026-11-09 in UTC.
+  const NOW = new Date('2026-11-09T17:30:00.000Z');
+
+  it('counts days in Manila time and ends today', () => {
+    expect(resolveRecordPresetRange('today', NOW))
+      .toEqual({ startDate: '2026-11-10', endDate: '2026-11-10' });
+    expect(resolveRecordPresetRange('last7', NOW))
+      .toEqual({ startDate: '2026-11-04', endDate: '2026-11-10' });
+    expect(resolveRecordPresetRange('last30', NOW))
+      .toEqual({ startDate: '2026-10-12', endDate: '2026-11-10' });
+    expect(resolveRecordPresetRange('thisMonth', NOW))
+      .toEqual({ startDate: '2026-11-01', endDate: '2026-11-10' });
+  });
+
+  it('leaves the range open for all time and custom', () => {
+    expect(resolveRecordPresetRange('all', NOW)).toEqual({ startDate: '', endDate: '' });
+    expect(resolveRecordPresetRange('custom', NOW)).toEqual({ startDate: '', endDate: '' });
+  });
+
+  it('crosses month boundaries correctly', () => {
+    const marchFirst = new Date('2026-03-01T04:00:00.000Z');
+    expect(resolveRecordPresetRange('last7', marchFirst))
+      .toEqual({ startDate: '2026-02-23', endDate: '2026-03-01' });
+  });
+});
+
 describe('pagination', () => {
   const rows = Array.from({ length: 57 }, (_, index) => index + 1);
 
@@ -254,6 +453,13 @@ describe('pagination', () => {
   it('reports a single page for an empty list', () => {
     expect(recordPageCount(0)).toBe(1);
     expect(pageOfRecords([], 1)).toEqual([]);
+  });
+
+  it('pulls an out-of-range page back onto the list', () => {
+    expect(clampRecordPage(3, 57)).toBe(3);
+    expect(clampRecordPage(3, 26)).toBe(2);
+    expect(clampRecordPage(3, 0)).toBe(1);
+    expect(clampRecordPage(0, 57)).toBe(1);
   });
 });
 

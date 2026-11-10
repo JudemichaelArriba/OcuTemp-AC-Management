@@ -32,8 +32,8 @@ interface KpiCard {
 export interface RecordsReportOptions {
     /** e.g. `Occupancy Log`. */
     recordType: string;
+    /** A room name, or a label such as `All rooms`. */
     roomName: string;
-    deviceId: string;
     /** Human label for the selected period, e.g. `Aug 27, 2026 – Oct 7, 2026`. */
     rangeLabel: string;
     head: string[];
@@ -169,11 +169,7 @@ export class PdfExportService {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
         doc.setTextColor(30, 41, 59);
-        doc.text(
-            `${count} ${count === 1 ? 'record' : 'records'}  ·  Device ${options.deviceId}`,
-            this.M,
-            summaryY
-        );
+        doc.text(`${count} ${count === 1 ? 'record' : 'records'}`, this.M, summaryY);
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
