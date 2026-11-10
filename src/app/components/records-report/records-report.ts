@@ -541,6 +541,9 @@ export class RecordsReport implements OnChanges, OnDestroy {
     set: RecordSet<TRecord, TRow>
   ): Promise<void> {
     const shownThrough = set.page * this.pageSize;
+    // A search can stop at its scan budget with this page only partly filled. Reading on
+    // then fills this page first; moving ahead would skip the rows that land on it.
+    const pageWasFull = set.pager.loaded.length >= shownThrough;
 
     if (set.pager.loaded.length <= shownThrough && set.pager.hasMore) {
       const token = set.loadToken;
@@ -558,7 +561,7 @@ export class RecordsReport implements OnChanges, OnDestroy {
       set.loadingMore = false;
     }
 
-    const hasNextPage = set.pager.loaded.length > shownThrough;
+    const hasNextPage = pageWasFull && set.pager.loaded.length > shownThrough;
     this.showPage(set, hasNextPage ? set.page + 1 : set.page);
     this.cdr.markForCheck();
   }

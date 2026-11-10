@@ -143,6 +143,36 @@ describe('RecordsReport', () => {
     expect(component.occupancy.page).toBe(2);
   });
 
+  it('fills a search page cut short by the scan budget before moving on', async () => {
+    // Three matches among the newest 500 records, twenty among the 500 before them.
+    const list: Occupancy[] = [];
+    for (let time = 1; time <= 1500; time++) {
+      const match = (time > 1200 && time % 100 === 0)
+        || (time > 500 && time <= 1000 && time % 25 === 0);
+      list.push(occupancy('dev-1', time, match));
+    }
+    records.occupancy['dev-1'] = list;
+    await showRooms();
+
+    component.searchQuery = 'infrared';
+    component.onSearch();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await settle();
+    expect(component.occupancy.pageRows).toHaveLength(3);
+    expect(component.canGoNext).toBe(true);
+
+    component.nextPage();
+    await settle();
+    expect(component.occupancy.page).toBe(1);
+    expect(component.occupancy.pageRows).toHaveLength(10);
+    expect(component.occupancy.loadedCount).toBe(13);
+
+    component.nextPage();
+    await settle();
+    expect(component.occupancy.page).toBe(2);
+    expect(component.occupancy.pageRows).toHaveLength(3);
+  });
+
   it('shows a retry state when the first page fails and recovers on retry', async () => {
     records.occupancy['dev-1'] = [1].map((time) => occupancy('dev-1', time));
     records.failNext = true;
