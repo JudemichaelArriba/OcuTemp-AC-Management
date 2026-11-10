@@ -142,6 +142,7 @@
       <div class="grid grid-cols-1 gap-6">
         <app-energy-trend-widget [energyData]="energyData" [loading]="isLoading" />
         <app-energy-room-widget [energyData]="energyData" [rooms]="rooms" mode="all" />
+        <app-records-report [rooms]="rooms" [roomsLoaded]="roomsLoaded" />
       </div>
 
     </div>

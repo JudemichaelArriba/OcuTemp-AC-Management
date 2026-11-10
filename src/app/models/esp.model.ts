@@ -55,3 +55,30 @@ export interface OverrideHistoryEntry {
   targetTemp?: number;
   overrideUntil?: string;
 }
+
+/**
+ * Entry at `devices/{deviceId}/occupancyDebugLog/{pushId}`, written by the ESP32 each time
+ * a room goes from empty to occupied. `timestamp` is device wall-clock time in GMT+8.
+ */
+export interface OccupancyLogEntry {
+  timestamp: string;
+  /** Triggers joined by `+`, built from `pir_edge`, `pir_level` and `mlx`. */
+  reason?: string;
+  pirEdge?: boolean;
+  pirLevel?: boolean;
+  mlxHit?: boolean;
+  mlxObjectTemp?: number;
+  mlxAmbientTemp?: number;
+  mlxDeltaTemp?: number;
+  uptimeMs?: number;
+}
+
+/**
+ * A stored record together with where it lives: `key` is its RTDB push key (time-ordered),
+ * `deviceId` the device it is stored under, and `id` the two joined, unique across devices.
+ */
+export type DeviceRecord<T> = T & {
+  readonly id: string;
+  readonly key: string;
+  readonly deviceId: string;
+};

@@ -257,6 +257,10 @@ Store Chart.js instance, destroy before creating new one, always destroy in `ngO
 - Keep service methods focused and single-purpose
 - Follow existing patterns before creating new ones
 
+**Styling:**
+- Style with Tailwind CSS utility classes only
+- Write plain CSS only when Tailwind cannot express it (for example a custom `@keyframes`), and keep it to the component's own stylesheet
+
 **User Experience:**
 - Show loading states and error messages (snack-bar)
 - Confirm destructive actions (delete room, force-off AC)

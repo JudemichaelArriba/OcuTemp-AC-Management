@@ -6,10 +6,17 @@
   }
 
   <div (click)="toggle()"
-       class="group relative w-full px-4 py-3 rounded-2xl text-sm cursor-pointer flex justify-between items-center transition-all duration-300 select-none overflow-hidden"
+       (keydown.enter)="onTriggerKey($event)"
+       (keydown.space)="onTriggerKey($event)"
+       role="button"
+       aria-haspopup="true"
+       [attr.tabindex]="disabled ? -1 : 0"
+       [attr.aria-expanded]="isOpen"
+       [attr.aria-disabled]="disabled"
+       class="group relative w-full px-4 py-3 rounded-2xl text-sm cursor-pointer flex justify-between items-center transition-all duration-300 select-none overflow-hidden bg-white border focus:outline-none focus-visible:border-blue-500/40 focus-visible:ring-2 focus-visible:ring-blue-500/20"
        [ngClass]="{
-          'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50': !isOpen,
-          'bg-white border border-blue-500/40 ring-2 ring-blue-500/10 shadow-lg shadow-blue-500/5': isOpen,
+          'border-slate-200 hover:border-slate-300 hover:bg-slate-50': !isOpen,
+          'border-blue-500/40 ring-2 ring-blue-500/10 shadow-lg shadow-blue-500/5': isOpen,
           'opacity-40 cursor-wait pointer-events-none': disabled
        }">
 
@@ -27,16 +34,17 @@
             'text-blue-600': value && isOpen,
             'text-slate-500': disabled
           }">
-      {{ disabled ? 'Loadingâ€¦' : selectedLabel }}
+      {{ disabled ? 'Loading…' : selectedLabel }}
     </span>
 
     <span class="relative ml-2 flex items-center justify-center w-6 h-6 rounded-lg transition-all duration-300"
           [ngClass]="{
             'bg-slate-50 border border-slate-100 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-600': !isOpen,
-            'bg-blue-500/15 border border-blue-500/30 text-blue-500 rotate-180': isOpen
+            'bg-blue-500/15 border border-blue-500/30 text-blue-500': isOpen,
+            'rotate-180': isOpen && variant !== 'date'
           }">
       <span class="material-symbols-outlined text-[16px] transition-transform duration-300">
-        {{ variant === 'time' ? 'schedule' : 'expand_more' }}
+        {{ variant === 'time' ? 'schedule' : variant === 'date' ? 'calendar_month' : 'expand_more' }}
       </span>
     </span>
   </div>
@@ -82,7 +90,58 @@
     </div>
   }
 
-  @if (isOpen && variant !== 'time') {
+  @if (isOpen && variant === 'date') {
+    <div class="absolute z-[110] w-72 max-w-[calc(100vw-2rem)] bg-white/98 backdrop-blur-3xl border border-slate-200 shadow-2xl shadow-black/5 rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+         [ngClass]="[isDropdownAbove ? 'bottom-full mb-3' : 'top-full mt-3', isAlignedRight ? 'right-0' : 'left-0']"
+         role="dialog" aria-label="Choose a date">
+
+      <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/20 to-transparent"></div>
+
+      <div class="flex items-center justify-between gap-2 px-3 pt-3">
+        <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month"
+                class="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30">
+          <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+        </button>
+        <span class="text-sm font-bold text-slate-700" aria-live="polite">{{ monthLabel }}</span>
+        <button type="button" (click)="shiftMonth(1)" aria-label="Next month"
+                class="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30">
+          <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-7 gap-0.5 px-3 pt-3">
+        @for (weekday of weekdays; track weekday) {
+          <span class="py-1 text-center text-[9px] uppercase tracking-[0.15em] font-mono text-slate-400">{{ weekday }}</span>
+        }
+        @for (day of calendarDays; track day.key) {
+          <button type="button" (click)="selectDate(day)" [disabled]="day.disabled"
+                  [attr.aria-label]="day.label" [attr.aria-pressed]="day.selected"
+                  class="h-9 rounded-xl text-sm font-bold tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:cursor-not-allowed disabled:text-slate-200 disabled:hover:bg-transparent"
+                  [ngClass]="{
+                    'bg-blue-600 text-white shadow-md shadow-blue-200': day.selected,
+                    'text-slate-600 hover:bg-blue-50 hover:text-blue-600': !day.selected && day.inMonth,
+                    'text-slate-300 hover:bg-blue-50 hover:text-blue-600': !day.selected && !day.inMonth,
+                    'ring-1 ring-inset ring-blue-500/40': day.today && !day.selected
+                  }">
+            {{ day.day }}
+          </button>
+        }
+      </div>
+
+      <div class="flex items-center justify-between gap-2 mt-3 px-3 py-2.5 border-t border-slate-100">
+        <button type="button" (click)="clearDate()" [disabled]="!value"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-40 disabled:pointer-events-none">
+          Clear
+        </button>
+        <button type="button" (click)="selectToday()" [disabled]="isTodayDisabled"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:opacity-40 disabled:pointer-events-none">
+          Today
+        </button>
+      </div>
+    </div>
+  }
+
+  @if (isOpen && variant !== 'time' && variant !== 'date') {
     <div class="absolute z-[110] w-full bg-white/98 backdrop-blur-3xl border border-slate-200 shadow-2xl shadow-black/5 rounded-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
          [ngClass]="isDropdownAbove ? 'bottom-full mb-3' : 'top-full mt-3'">
 
@@ -96,26 +155,26 @@
 
         @if (options.length === 0) {
           <div class="px-5 py-4 text-xs italic font-mono text-slate-400">
-            â€” no options available â€”
+            — no options available —
           </div>
         }
 
         @for (option of options; track option.value) {
-          <div (click)="select(option)"
-               class="group relative px-4 py-3 cursor-pointer flex flex-col transition-all duration-150 border-b border-slate-100 last:border-0 hover:bg-blue-50">
+          <button type="button" (click)="select(option)"
+               class="group relative w-full text-left px-4 py-3 cursor-pointer flex flex-col transition-all duration-150 border-b border-slate-100 last:border-0 hover:bg-blue-50 focus:outline-none focus-visible:bg-blue-50">
 
-            <span class="absolute left-0 inset-y-2 w-[2px] rounded-r-full bg-blue-500 scale-y-0 group-hover:scale-y-100 transition-transform duration-200 origin-center"></span>
+            <span class="absolute left-0 inset-y-2 w-[2px] rounded-r-full bg-blue-500 scale-y-0 group-hover:scale-y-100 group-focus-visible:scale-y-100 transition-transform duration-200 origin-center"></span>
 
-            <span class="text-sm font-medium transition-colors duration-150 pl-1 text-slate-600 group-hover:text-blue-700">
+            <span class="text-sm font-medium transition-colors duration-150 pl-1 text-slate-600 group-hover:text-blue-700 group-focus-visible:text-blue-700">
               {{ option.label }}
             </span>
 
             @if (option.hint) {
-              <span class="text-[9px] uppercase tracking-[0.15em] font-mono mt-0.5 pl-1 transition-colors duration-150 text-slate-400 group-hover:text-blue-400/70">
+              <span class="text-[9px] uppercase tracking-[0.15em] font-mono mt-0.5 pl-1 transition-colors duration-150 text-slate-400 group-hover:text-blue-400/70 group-focus-visible:text-blue-400/70">
                 {{ option.hint }}
               </span>
             }
-          </div>
+          </button>
         }
       </div>
 

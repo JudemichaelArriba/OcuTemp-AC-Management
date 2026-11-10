@@ -17,12 +17,13 @@ import { Room } from '../../models/room.model';
 import { EnergyDaily } from '../../models/energy.model';
 import { EnergyTrendWidget } from '../../components/shared/energy-trend-widget/energy-trend-widget';
 import { EnergyRoomWidget } from '../../components/shared/energy-room-widget/energy-room-widget';
+import { RecordsReport } from '../../components/records-report/records-report';
 import { PdfExportService } from '../../services/pdf-export.service';
 
 @Component({
   selector: 'app-energy-reports',
   standalone: true,
-  imports: [CommonModule, EnergyTrendWidget, EnergyRoomWidget],
+  imports: [CommonModule, EnergyTrendWidget, EnergyRoomWidget, RecordsReport],
   templateUrl: './energy-reports.html',
   styleUrl: './energy-reports.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -37,6 +38,7 @@ export class EnergyReports implements OnInit, OnDestroy {
   currentMonthLabel = '';
 
   rooms: Room[] = [];
+  roomsLoaded = false;
   energyData: Record<string, Record<string, EnergyDaily>> = {};
 
   private unsubEnergy: (() => void) | null = null;
@@ -59,6 +61,7 @@ export class EnergyReports implements OnInit, OnDestroy {
     // All rooms, including inactive and soft-deleted ones, so their energy history stays visible.
     this.unsubRooms = this.roomService.streamRooms((rooms) => {
       this.rooms = rooms;
+      this.roomsLoaded = true;
       this.activeRoomsCount = rooms.filter((r) => r.status === 'active' && !isRoomDeleted(r)).length;
       this.cdr.markForCheck();
     }, undefined, { includeDeleted: true });
