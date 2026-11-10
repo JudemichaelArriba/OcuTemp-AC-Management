@@ -1,0 +1,285 @@
+<section class="flex flex-col gap-4" aria-labelledby="records-report-title">
+
+  <div
+    class="relative z-10 bg-white/80 p-4 sm:p-5 rounded-[2rem] border border-white/60 shadow-lg shadow-blue-100/50 flex flex-col gap-4">
+
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+        <h2 id="records-report-title" class="text-lg font-black text-slate-900 uppercase tracking-tight">Records
+        </h2>
+        @if (!isLoading && !active.failed && hasDevices) {
+        <span class="flex items-center gap-1.5 ml-1" title="New records appear here on their own">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse motion-reduce:animate-none"></span>
+          <span class="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Live</span>
+        </span>
+        }
+      </div>
+
+      <div role="tablist" aria-label="Record type"
+        class="relative grid grid-cols-2 items-center w-full sm:w-fit bg-slate-100/50 p-1 rounded-xl border border-slate-200/50 shadow-inner">
+        <div
+          class="absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] bg-blue-600 rounded-lg shadow-lg shadow-blue-200 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+          [class.translate-x-0]="activeTab === 'occupancy'" [class.translate-x-full]="activeTab === 'overrides'">
+        </div>
+        @for (tab of tabs; track tab.id) {
+        <button type="button" role="tab" [id]="'records-report-tab-' + tab.id"
+          [attr.aria-selected]="activeTab === tab.id" aria-controls="records-report-panel" (click)="selectTab(tab.id)"
+          [class]="activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
+          class="relative z-10 flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg text-[9px] sm:text-[10px] font-black tracking-widest uppercase whitespace-nowrap transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+          <span>{{ tab.label }}</span>
+          @let count = tabCount(tab.id);
+          @if (count !== null) {
+          <span class="px-1.5 py-px rounded-full text-[9px] tabular-nums transition-colors duration-300"
+            [class]="activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-500'">{{ count
+            }}</span>
+          }
+        </button>
+        }
+      </div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row lg:flex-wrap lg:items-center gap-3">
+      <div class="relative w-full lg:w-auto lg:flex-1 lg:min-w-64 group">
+        <span
+          class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 group-focus-within:text-blue-600 transition-colors"
+          aria-hidden="true">search</span>
+        <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onSearch()" aria-label="Search records"
+          placeholder="Search by room, device, user or sensor..."
+          class="w-full pl-12 pr-11 py-3.5 bg-white border border-slate-100 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400 font-medium shadow-sm" />
+        @if (searchQuery) {
+        <button type="button" (click)="clearSearch()" aria-label="Clear search"
+          class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+          <span class="material-symbols-outlined text-[18px]!" aria-hidden="true">close</span>
+        </button>
+        }
+      </div>
+
+      <div class="w-full lg:w-52">
+        <app-drop-down variant="device" [options]="roomOptions" [value]="roomFilter" placeholder="All rooms"
+          (valueChange)="onRoomChange($event)" />
+      </div>
+
+      <div class="w-full lg:w-44">
+        <app-drop-down variant="device" [options]="presetOptions" [value]="preset" placeholder="All time"
+          (valueChange)="onPresetChange($event)" />
+      </div>
+
+      @if (preset === 'custom') {
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
+        <div class="lg:w-44">
+          <app-drop-down variant="date" [value]="startDate" [max]="endDate" placeholder="Start date"
+            (valueChange)="onStartDateChange($event)" />
+        </div>
+        <div class="lg:w-44">
+          <app-drop-down variant="date" [value]="endDate" [min]="startDate" placeholder="End date"
+            (valueChange)="onEndDateChange($event)" />
+        </div>
+      </div>
+      }
+
+      <button type="button" (click)="exportPdf()" [disabled]="!canExport"
+        class="lg:ml-auto flex items-center justify-center gap-3 px-6 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all duration-300 shadow-lg bg-blue-600 text-white shadow-blue-200 hover:bg-blue-700 hover:shadow-blue-300 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2">
+        @if (isExporting) {
+        <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+        <span>Exporting...</span>
+        } @else {
+        <span class="material-symbols-outlined text-lg" aria-hidden="true">picture_as_pdf</span>
+        <span>Export PDF</span>
+        }
+      </button>
+    </div>
+  </div>
+
+  <div id="records-report-panel" role="tabpanel" [attr.aria-labelledby]="'records-report-tab-' + activeTab"
+    class="bg-white rounded-[2.5rem] border border-white shadow-2xl shadow-blue-100/60 overflow-hidden flex flex-col">
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-slate-50/50 border-b border-slate-100">
+            <th scope="col" class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Date
+              and time</th>
+            <th scope="col" class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Room
+            </th>
+            <th scope="col"
+              class="hidden md:table-cell px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              Device</th>
+            @if (activeTab === 'occupancy') {
+            <th scope="col" class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              Detected by</th>
+            } @else {
+            <th scope="col" class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">User
+            </th>
+            <th scope="col" class="px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              Action</th>
+            <th scope="col"
+              class="hidden lg:table-cell px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              Target temperature</th>
+            <th scope="col"
+              class="hidden xl:table-cell px-8 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              Active until</th>
+            }
+            <th scope="col" class="px-8 py-5 text-right"><span class="sr-only">Details</span></th>
+          </tr>
+        </thead>
+
+        <tbody class="divide-y divide-slate-50">
+          @if (active.failed) {
+          <tr>
+            <td colspan="8" class="px-8 py-20 text-center" role="alert">
+              <div class="flex flex-col items-center gap-4">
+                <div class="p-4 bg-rose-50 rounded-full text-rose-300">
+                  <span class="material-symbols-outlined text-5xl" aria-hidden="true">cloud_off</span>
+                </div>
+                <p class="text-sm font-black text-rose-500 uppercase tracking-widest">Couldn't load records</p>
+                <p class="text-xs font-medium text-slate-500 max-w-sm">Check your connection and try again. If
+                  this keeps happening, your account may not have access to these records.</p>
+                <button type="button" (click)="retry()"
+                  class="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.15em] shadow-xl shadow-blue-600/20 active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 focus-visible:ring-offset-2">
+                  <span class="material-symbols-outlined text-lg" aria-hidden="true">refresh</span>
+                  <span>Try again</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+          } @else if (isLoading) {
+          @for (_ of skeletonRows; track $index) {
+          <tr class="animate-pulse">
+            <td class="px-8 py-5"><div class="h-4 bg-slate-100 rounded-lg w-36"></div></td>
+            <td class="px-8 py-5"><div class="h-4 bg-slate-100 rounded-lg w-24"></div></td>
+            <td class="hidden md:table-cell px-8 py-5"><div class="h-4 bg-slate-100 rounded-lg w-28"></div></td>
+            <td class="px-8 py-5" colspan="5"><div class="h-6 bg-slate-100 rounded-lg w-40"></div></td>
+          </tr>
+          }
+          } @else if (active.rowCount === 0) {
+          <tr>
+            <td colspan="8" class="px-8 py-20 text-center">
+              <div class="flex flex-col items-center gap-4">
+                <div class="p-4 bg-slate-50 rounded-full text-slate-300">
+                  <span class="material-symbols-outlined text-5xl" aria-hidden="true">event_busy</span>
+                </div>
+                <p class="text-sm font-black text-slate-400 uppercase tracking-widest">No records for this period
+                </p>
+                @if (!hasDevices) {
+                <p class="text-xs font-medium text-slate-400">No room has a device linked yet. Link one from Room
+                  Management to start collecting records.</p>
+                } @else if (active.storedCount === 0) {
+                <p class="text-xs font-medium text-slate-400">{{ active.emptyHint }}</p>
+                } @else if (isFiltered) {
+                <p class="text-xs font-medium text-slate-400">Nothing matches the current search and filters.</p>
+                <button type="button" (click)="clearFilters()"
+                  class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 active:scale-95 transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+                  Clear filters
+                </button>
+                }
+              </div>
+            </td>
+          </tr>
+          } @else if (activeTab === 'occupancy') {
+          @for (row of occupancy.pageRows; track row.id) {
+          <tr (click)="openOccupancy(row)" (keydown.enter)="openOccupancy(row)" tabindex="0"
+            [attr.aria-label]="'View details: ' + row.room + ', ' + row.dateTime"
+            class="cursor-pointer transition-colors duration-700 group focus:outline-none focus-visible:bg-blue-50"
+            [class]="freshIds.has(row.id) ? 'bg-emerald-50' : 'hover:bg-blue-50/50'">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="text-sm font-bold text-slate-900 tabular-nums">{{ row.date }}</span>
+              <span class="text-sm font-medium text-slate-400 tabular-nums ml-2">{{ row.time }}</span>
+            </td>
+            <td class="px-6 py-4 text-sm font-bold text-slate-900 break-words">{{ row.room }}</td>
+            <td class="hidden md:table-cell px-6 py-4 text-sm text-slate-600 font-medium whitespace-nowrap">{{ row.device }}
+            </td>
+            <td class="px-6 py-4">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap"
+                [class]="detectionChips[row.detection].classes">
+                <span class="material-symbols-outlined text-[16px]!" aria-hidden="true">{{
+                  detectionChips[row.detection].icon }}</span>
+                {{ row.detectedBy }}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-right">
+              <span
+                class="material-symbols-outlined text-[20px]! text-slate-300 group-hover:text-blue-600 transition-colors"
+                aria-hidden="true">chevron_right</span>
+            </td>
+          </tr>
+          }
+          } @else {
+          @for (row of overrides.pageRows; track row.id) {
+          <tr (click)="openOverride(row)" (keydown.enter)="openOverride(row)" tabindex="0"
+            [attr.aria-label]="'View details: ' + row.action + ', ' + row.room + ', ' + row.dateTime"
+            class="cursor-pointer transition-colors duration-700 group focus:outline-none focus-visible:bg-blue-50"
+            [class]="freshIds.has(row.id) ? 'bg-emerald-50' : 'hover:bg-blue-50/50'">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="text-sm font-bold text-slate-900 tabular-nums">{{ row.date }}</span>
+              <span class="text-sm font-medium text-slate-400 tabular-nums ml-2">{{ row.time }}</span>
+            </td>
+            <td class="px-6 py-4 text-sm font-bold text-slate-900 break-words">{{ row.room }}</td>
+            <td class="hidden md:table-cell px-6 py-4 text-sm text-slate-600 font-medium whitespace-nowrap">{{ row.device }}
+            </td>
+            <td class="px-6 py-4">
+              <span class="block text-sm font-bold text-slate-900 break-words">{{ row.user }}</span>
+              <span class="block text-[11px] font-bold text-slate-400 uppercase">{{ row.role }}</span>
+            </td>
+            <td class="px-6 py-4">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap"
+                [class]="actionChips[row.actionKind].classes">
+                <span class="material-symbols-outlined text-[16px]!" aria-hidden="true">{{
+                  actionChips[row.actionKind].icon }}</span>
+                {{ row.action }}
+              </span>
+            </td>
+            <td class="hidden lg:table-cell px-6 py-4 text-sm font-bold text-slate-900 tabular-nums">{{
+              row.targetTemp }}</td>
+            <td class="hidden xl:table-cell px-6 py-4 text-sm text-slate-600 font-medium tabular-nums whitespace-nowrap">
+              {{ row.activeUntil }}</td>
+            <td class="px-6 py-4 text-right">
+              <span
+                class="material-symbols-outlined text-[20px]! text-slate-300 group-hover:text-blue-600 transition-colors"
+                aria-hidden="true">chevron_right</span>
+            </td>
+          </tr>
+          }
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div
+      class="bg-slate-50/80 border-t border-slate-100 px-6 sm:px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3" aria-live="polite">
+        <span class="p-2 bg-blue-100 rounded-lg flex">
+          <span class="material-symbols-outlined text-blue-600 text-[18px]!" aria-hidden="true">receipt_long</span>
+        </span>
+        <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+          @if (isLoading || active.failed) {
+          Total records <span class="text-blue-600 ml-1 text-sm">--</span>
+          } @else {
+          <span class="text-blue-600 mr-1 text-sm tabular-nums">{{ countLabel }}</span>
+          @if (active.rowCount > 0) {
+          <span class="tabular-nums">showing {{ firstRowNumber }}&ndash;{{ lastRowNumber }}</span>
+          }
+          }
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button type="button" (click)="previousPage()" [disabled]="active.page <= 1" aria-label="Previous page"
+          class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 border border-slate-200 bg-white hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_left</span>
+        </button>
+        <div
+          class="px-5 h-10 flex items-center justify-center rounded-xl text-xs font-black bg-blue-600 text-white shadow-xl shadow-blue-200 tabular-nums whitespace-nowrap">
+          {{ active.page }} / {{ pageCount }}
+        </div>
+        <button type="button" (click)="nextPage()" [disabled]="active.page >= pageCount" aria-label="Next page"
+          class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 border border-slate-200 bg-white hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+          <span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<app-record-details-modal [details]="selected?.details ?? null" [icon]="selected?.chip?.icon ?? 'receipt_long'"
+  [iconClasses]="selected?.chip?.classes ?? 'bg-blue-50 text-blue-600'" (closed)="closeDetails()" />
