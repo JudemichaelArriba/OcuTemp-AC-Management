@@ -160,21 +160,21 @@
         }
 
         @for (option of options; track option.value) {
-          <div (click)="select(option)"
-               class="group relative px-4 py-3 cursor-pointer flex flex-col transition-all duration-150 border-b border-slate-100 last:border-0 hover:bg-blue-50">
+          <button type="button" (click)="select(option)"
+               class="group relative w-full text-left px-4 py-3 cursor-pointer flex flex-col transition-all duration-150 border-b border-slate-100 last:border-0 hover:bg-blue-50 focus:outline-none focus-visible:bg-blue-50">
 
-            <span class="absolute left-0 inset-y-2 w-[2px] rounded-r-full bg-blue-500 scale-y-0 group-hover:scale-y-100 transition-transform duration-200 origin-center"></span>
+            <span class="absolute left-0 inset-y-2 w-[2px] rounded-r-full bg-blue-500 scale-y-0 group-hover:scale-y-100 group-focus-visible:scale-y-100 transition-transform duration-200 origin-center"></span>
 
-            <span class="text-sm font-medium transition-colors duration-150 pl-1 text-slate-600 group-hover:text-blue-700">
+            <span class="text-sm font-medium transition-colors duration-150 pl-1 text-slate-600 group-hover:text-blue-700 group-focus-visible:text-blue-700">
               {{ option.label }}
             </span>
 
             @if (option.hint) {
-              <span class="text-[9px] uppercase tracking-[0.15em] font-mono mt-0.5 pl-1 transition-colors duration-150 text-slate-400 group-hover:text-blue-400/70">
+              <span class="text-[9px] uppercase tracking-[0.15em] font-mono mt-0.5 pl-1 transition-colors duration-150 text-slate-400 group-hover:text-blue-400/70 group-focus-visible:text-blue-400/70">
                 {{ option.hint }}
               </span>
             }
-          </div>
+          </button>
         }
       </div>
 
