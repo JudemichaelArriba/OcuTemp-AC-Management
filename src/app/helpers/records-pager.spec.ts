@@ -198,6 +198,36 @@ describe('RecordsPager', () => {
     expect(times(pager.loaded)).toEqual([3, 2]);
   });
 
+  it('lets every read of a failed page settle before a retry can start', async () => {
+    const source = new FakeSource({
+      a: [1, 2].map((time) => record('a', time)),
+      b: [3, 4].map((time) => record('b', time)),
+    });
+    let releaseB!: () => void;
+    const fetchPage = source.fetchPage.bind(source);
+    source.fetchPage = async (deviceId, request) => {
+      if (deviceId === 'a') throw new Error('permission_denied');
+      await new Promise<void>((resolve) => { releaseB = resolve; });
+      return fetchPage(deviceId, request);
+    };
+    const pager = new RecordsPager(source, { pageSize: 5 });
+    pager.start({ deviceIds: ['a', 'b'] });
+
+    let settled = false;
+    const failed = pager.loadMore().catch(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve));
+    // Device a failed, but device b is still being read: the run is not over yet.
+    expect(settled).toBe(false);
+
+    releaseB();
+    await failed;
+    expect(settled).toBe(true);
+
+    source.fetchPage = fetchPage;
+    await pager.loadMore();
+    expect(times(pager.loaded)).toEqual([4, 3, 2, 1]);
+  });
+
   it('has nothing to load without devices', async () => {
     const pager = new RecordsPager(new FakeSource({}), { pageSize: 5 });
     pager.start({ deviceIds: [] });

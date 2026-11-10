@@ -187,9 +187,14 @@ export class RecordsPager<T extends PagedRecord> {
       }
 
       if (budget <= 0) break;
-      const counts = await Promise.all(blockers.map((feed) => this.fill(feed, generation)));
+      // Every read settles before this run ends, so a retry can never read a device that is
+      // still being read (which would buffer the same records twice).
+      const results = await Promise.allSettled(blockers.map((feed) => this.fill(feed, generation)));
       if (generation !== this.generation) return;
-      budget -= counts.reduce((sum, count) => sum + count, 0);
+      for (const result of results) {
+        if (result.status === 'rejected') throw result.reason;
+        budget -= result.value;
+      }
     }
   }
 
