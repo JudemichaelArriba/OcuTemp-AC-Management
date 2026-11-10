@@ -53,7 +53,7 @@ import {
   toOverrideHistoryRow,
 } from '../../helpers/device-records.helper';
 
-export type RecordsTab = 'occupancy' | 'overrides';
+type RecordsTab = 'occupancy' | 'overrides';
 
 const SEARCH_DEBOUNCE_MS = 200;
 /** Text search cannot run on the server, so matches are found by reading in larger chunks. */

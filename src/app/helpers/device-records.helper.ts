@@ -76,7 +76,7 @@ export const RECORD_DATE_PRESETS: DropDownOption[] = [
 
 /** Value of the room filter that keeps every room's device. */
 export const ALL_ROOMS = 'all';
-export const UNASSIGNED_ROOM_LABEL = 'Unassigned';
+const UNASSIGNED_ROOM_LABEL = 'Unassigned';
 
 type RecordRoomSource = Pick<Room, 'uid' | 'roomName' | 'device' | 'deleted' | 'deletedDevice'>;
 
@@ -326,7 +326,7 @@ export function describeOccupancyDetection(entry: OccupancyLogEntry): string {
   }
 }
 
-export function classifyOverrideAction(action: string | undefined): OverrideActionKind {
+function classifyOverrideAction(action: string | undefined): OverrideActionKind {
   return action === 'override' || action === 'clear' || action === 'forcedOff' ? action : 'other';
 }
 
