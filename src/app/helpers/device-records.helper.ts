@@ -5,26 +5,31 @@ import {
 } from '../models/esp.model';
 import { Room } from '../models/room.model';
 import { DropDownOption } from '../components/shared/drop-down/drop-down';
-import { LOG_DATE_PRESETS, manilaDayKey, parseLogTimestamp } from './log-date-filter.helper';
+import {
+  LOG_DATE_PRESETS,
+  LogKeyRange,
+  keyRangeForDateRange,
+  manilaDayKey,
+  parseLogTimestamp,
+} from './log-date-filter.helper';
 
 /**
- * Display helpers for the Energy Reports "Records" section (occupancy log, override history
- * across every room's device).
+ * Display helpers for the Energy Reports "Records" section: the occupancy log and override
+ * history of every room's device.
  *
- * Both record sets are small enough to stream whole and filter in the browser. Dates are
- * filtered and displayed in the facility timezone (Asia/Manila), so the table, the count
- * and the PDF export agree with each other on any device, whatever its own timezone.
+ * Records are paged on the server by push key (see `records-pager.ts`), so a period is
+ * applied as push-key bounds, the same way the decision log does it. Days are counted in the
+ * facility timezone (Asia/Manila) and times are shown in it, so the table and the PDF agree
+ * on any device, whatever its own timezone.
  */
 
-export const RECORDS_PAGE_SIZE = 25;
+export const RECORDS_PAGE_SIZE = 10;
 
 const MANILA_TZ = 'Asia/Manila';
 const MANILA_OFFSET = '+08:00'; // Manila has no DST
 const DAY_MS = 86_400_000;
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-/** Placeholder for a field an entry does not carry. */
-export const EMPTY_RECORD_CELL = '—';
-const EMPTY_CELL = EMPTY_RECORD_CELL;
+const EMPTY_CELL = '—';
 
 const DATE_TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
   timeZone: MANILA_TZ,
@@ -69,27 +74,21 @@ export const RECORD_DATE_PRESETS: DropDownOption[] = [
   { value: 'custom', label: 'Custom range' },
 ];
 
-export type OccupancyDetection = 'pir' | 'mlx' | 'both' | 'unknown';
-
-export type OverrideActionKind = 'override' | 'clear' | 'forcedOff' | 'other';
-
-/** Value of the room filter that keeps every room. */
+/** Value of the room filter that keeps every room's device. */
 export const ALL_ROOMS = 'all';
 export const UNASSIGNED_ROOM_LABEL = 'Unassigned';
 
 type RecordRoomSource = Pick<Room, 'uid' | 'roomName' | 'device' | 'deleted' | 'deletedDevice'>;
 
-/** The room a record belongs to. `roomUid` is empty when no room can be matched. */
-export interface RecordRoom {
-  readonly roomUid: string;
-  readonly roomName: string;
-}
-
 /** Room names by room uid and by the device a room uses (or used before it was deleted). */
 export interface RecordRoomLookup {
-  readonly byUid: ReadonlyMap<string, RecordRoom>;
-  readonly byDevice: ReadonlyMap<string, RecordRoom>;
+  readonly byUid: ReadonlyMap<string, string>;
+  readonly byDevice: ReadonlyMap<string, string>;
 }
+
+export type OccupancyDetection = 'pir' | 'mlx' | 'both' | 'unknown';
+
+export type OverrideActionKind = 'override' | 'clear' | 'forcedOff' | 'other';
 
 /** Fields every records table row shows, whatever the record type. */
 export interface RecordRowBase {
@@ -98,7 +97,6 @@ export interface RecordRowBase {
   readonly date: string;
   readonly time: string;
   readonly dateTime: string;
-  readonly roomUid: string;
   readonly room: string;
   readonly device: string;
 }
@@ -148,18 +146,18 @@ function dayStartTime(dayKey: string): number {
   return DAY_KEY_PATTERN.test(dayKey) ? Date.parse(`${dayKey}T00:00:00.000${MANILA_OFFSET}`) : NaN;
 }
 
+/** `dayKey` shifted by `deltaDays`, still a `YYYY-MM-DD` key. */
+function shiftDayKey(dayKey: string, deltaDays: number): string {
+  const shifted = Date.parse(`${dayKey}T00:00:00.000Z`) + deltaDays * DAY_MS;
+  return new Date(shifted).toISOString().slice(0, 10);
+}
+
 /**
  * Some engines separate the time and AM/PM with a narrow no-break space, which the PDF's
  * built-in fonts cannot draw. Plain spaces render the same everywhere.
  */
 function plainSpaces(text: string): string {
   return text.replace(/[  ]/g, ' ');
-}
-
-/** `dayKey` shifted by `deltaDays`, still a `YYYY-MM-DD` key. */
-function shiftDayKey(dayKey: string, deltaDays: number): string {
-  const shifted = Date.parse(`${dayKey}T00:00:00.000Z`) + deltaDays * DAY_MS;
-  return new Date(shifted).toISOString().slice(0, 10);
 }
 
 /**
@@ -193,47 +191,20 @@ export function isRecordDateRangeValid(range: RecordDateRange): boolean {
 }
 
 /**
- * Keeps records whose timestamp falls on a day inside `range` (both days inclusive).
- * With no bounds every record is kept; once a bound is set, records without a usable
- * timestamp are dropped because they cannot be placed in any period. An invalid range
- * matches nothing.
+ * Push-key bounds covering the days of `range`, both days inclusive, for a server-side
+ * `orderByKey()` query. Undefined when no bound is set. The range must be valid.
  */
-export function filterRecordsByDateRange<T>(
-  records: readonly T[],
-  getTimestamp: (record: T) => string | undefined,
-  range: RecordDateRange
-): T[] {
-  if (!hasRecordDateFilter(range)) return [...records];
-  if (!isRecordDateRangeValid(range)) return [];
-
-  const from = range.startDate ? dayStartTime(range.startDate) : -Infinity;
-  const until = range.endDate ? dayStartTime(range.endDate) + DAY_MS : Infinity;
-
-  return records.filter((record) => {
-    const time = recordTime(getTimestamp(record));
-    return time >= from && time < until;
+export function recordKeyRange(range: RecordDateRange): LogKeyRange | undefined {
+  if (!hasRecordDateFilter(range)) return undefined;
+  return keyRangeForDateRange({
+    start: range.startDate ? new Date(dayStartTime(range.startDate)).toISOString() : undefined,
+    end: range.endDate ? new Date(dayStartTime(range.endDate) + DAY_MS).toISOString() : undefined,
   });
 }
 
-/**
- * Newest first by timestamp. Ties fall back to the push key (itself chronological), and
- * records without a usable timestamp sort last.
- */
-export function sortRecordsNewestFirst<T extends { readonly id: string }>(
-  records: readonly T[],
-  getTimestamp: (record: T) => string | undefined
-): T[] {
-  return records
-    .map((record) => ({ record, time: recordTime(getTimestamp(record)) }))
-    .sort((a, b) => {
-      const aValid = !Number.isNaN(a.time);
-      const bValid = !Number.isNaN(b.time);
-      if (aValid !== bValid) return aValid ? -1 : 1;
-      if (aValid && a.time !== b.time) return b.time - a.time;
-      if (a.record.id === b.record.id) return 0;
-      return a.record.id < b.record.id ? 1 : -1;
-    })
-    .map(({ record }) => record);
+/** True when records written from now on can still fall inside `range`. */
+export function isRecordRangeOpenEnded(range: RecordDateRange, now: Date = new Date()): boolean {
+  return range.endDate === '' || range.endDate >= manilaDayKey(now);
 }
 
 /** `Aug 27, 2026, 3:05 PM` in Manila time. */
@@ -242,7 +213,7 @@ export function formatRecordDateTime(raw: string | undefined): string {
   return Number.isNaN(time) ? 'Unknown time' : plainSpaces(DATE_TIME_FORMAT.format(time));
 }
 
-/** The date and the time of day as separate strings, for a two-line table cell. */
+/** The date and the time of day as separate strings, for the table's date cell. */
 function formatRecordDateParts(raw: string | undefined): { date: string; time: string } {
   const time = recordTime(raw);
   if (Number.isNaN(time)) return { date: 'Unknown time', time: '' };
@@ -265,6 +236,65 @@ export function formatRecordDateRange(range: RecordDateRange): string {
   if (startDate) return `From ${formatDayKey(startDate)}`;
   if (endDate) return `Up to ${formatDayKey(endDate)}`;
   return 'All dates';
+}
+
+/**
+ * Indexes rooms for record lookups. A device maps to the live room that uses it now, or
+ * failing that to the deleted room that last used it.
+ */
+export function buildRecordRoomLookup(rooms: readonly RecordRoomSource[]): RecordRoomLookup {
+  const byUid = new Map<string, string>();
+  const byDevice = new Map<string, string>();
+
+  for (const room of rooms) {
+    if (room.deleted !== true) continue;
+    const name = `${room.roomName} (deleted)`;
+    byUid.set(room.uid, name);
+    if (room.deletedDevice) byDevice.set(room.deletedDevice, name);
+  }
+  for (const room of rooms) {
+    if (room.deleted === true) continue;
+    byUid.set(room.uid, room.roomName);
+    if (room.device) byDevice.set(room.device, room.roomName);
+  }
+  return { byUid, byDevice };
+}
+
+/** The room named by the record itself when it has one, otherwise the device's room. */
+export function resolveRecordRoomName(
+  lookup: RecordRoomLookup,
+  deviceId: string,
+  roomUid?: string
+): string {
+  return (roomUid ? lookup.byUid.get(roomUid) : undefined)
+    ?? lookup.byDevice.get(deviceId)
+    ?? UNASSIGNED_ROOM_LABEL;
+}
+
+/** Every device a room uses or used before deletion: the devices whose records are shown. */
+export function recordDeviceIds(rooms: readonly RecordRoomSource[]): string[] {
+  const ids = new Set<string>();
+  for (const room of rooms) {
+    const deviceId = (room.deleted === true ? room.deletedDevice : room.device)?.trim();
+    if (deviceId) ids.add(deviceId);
+  }
+  return [...ids].sort();
+}
+
+/**
+ * Room filter options. Records are stored per device, so each option stands for one device
+ * (its value) and is labelled with the room that device belongs to.
+ */
+export function buildRecordRoomOptions(rooms: readonly RecordRoomSource[]): DropDownOption[] {
+  const lookup = buildRecordRoomLookup(rooms);
+  const options = recordDeviceIds(rooms)
+    .map((deviceId) => ({
+      value: deviceId,
+      label: resolveRecordRoomName(lookup, deviceId),
+      hint: deviceId,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  return [{ value: ALL_ROOMS, label: 'All rooms' }, ...options];
 }
 
 /**
@@ -313,119 +343,42 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/**
- * Indexes rooms for record lookups. A device maps to the live room that uses it now, or
- * failing that to the deleted room that last used it.
- */
-export function buildRecordRoomLookup(rooms: readonly RecordRoomSource[]): RecordRoomLookup {
-  const byUid = new Map<string, RecordRoom>();
-  const byDevice = new Map<string, RecordRoom>();
-
-  for (const room of rooms) {
-    if (room.deleted !== true) continue;
-    const entry = { roomUid: room.uid, roomName: `${room.roomName} (deleted)` };
-    byUid.set(room.uid, entry);
-    if (room.deletedDevice) byDevice.set(room.deletedDevice, entry);
-  }
-  for (const room of rooms) {
-    if (room.deleted === true) continue;
-    const entry = { roomUid: room.uid, roomName: room.roomName };
-    byUid.set(room.uid, entry);
-    if (room.device) byDevice.set(room.device, entry);
-  }
-  return { byUid, byDevice };
-}
-
-/** The room named by the record itself when it has one, otherwise the device's room. */
-export function resolveRecordRoom(
-  lookup: RecordRoomLookup,
-  deviceId: string,
-  roomUid?: string
-): RecordRoom {
-  return (roomUid ? lookup.byUid.get(roomUid) : undefined)
-    ?? lookup.byDevice.get(deviceId)
-    ?? { roomUid: '', roomName: UNASSIGNED_ROOM_LABEL };
-}
-
-/** Every device a room uses or used before deletion: the devices whose records are shown. */
-export function recordDeviceIds(rooms: readonly RecordRoomSource[]): string[] {
-  const ids = new Set<string>();
-  for (const room of rooms) {
-    const deviceId = (room.deleted === true ? room.deletedDevice : room.device)?.trim();
-    if (deviceId) ids.add(deviceId);
-  }
-  return [...ids].sort();
-}
-
-/** Room filter options: every room by name, after an "All rooms" entry. */
-export function buildRecordRoomOptions(rooms: readonly RecordRoomSource[]): DropDownOption[] {
-  const lookup = buildRecordRoomLookup(rooms);
-  const options = [...lookup.byUid.values()]
-    .map((room) => ({ value: room.roomUid, label: room.roomName }))
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
-  return [{ value: ALL_ROOMS, label: 'All rooms' }, ...options];
-}
-
-/**
- * Narrows table rows to one room (or `ALL_ROOMS`) and to a search query. `searchText`
- * returns the text of a row the query is matched against, case-insensitively.
- */
-export function filterRecordRows<TRow extends RecordRowBase>(
-  rows: readonly TRow[],
-  roomUid: string,
-  query: string,
-  searchText: (row: TRow) => string
-): TRow[] {
-  const needle = query.trim().toLowerCase();
-  return rows.filter((row) =>
-    (roomUid === ALL_ROOMS || row.roomUid === roomUid)
-    && (!needle || searchText(row).toLowerCase().includes(needle)));
-}
-
-export function toOccupancyLogRows(
-  records: readonly DeviceRecord<OccupancyLogEntry>[],
+export function toOccupancyLogRow(
+  record: DeviceRecord<OccupancyLogEntry>,
   lookup: RecordRoomLookup
-): OccupancyLogRow[] {
-  return records.map((record) => {
-    const room = resolveRecordRoom(lookup, record.deviceId);
-    return {
-      id: record.id,
-      ...formatRecordDateParts(record.timestamp),
-      dateTime: formatRecordDateTime(record.timestamp),
-      roomUid: room.roomUid,
-      room: room.roomName,
-      device: record.deviceId,
-      detection: classifyOccupancyDetection(record),
-      detectedBy: describeOccupancyDetection(record),
-      pirEdge: record.pirEdge === true,
-      pirLevel: record.pirLevel === true,
-      mlxHit: record.mlxHit === true,
-    };
-  });
+): OccupancyLogRow {
+  return {
+    id: record.id,
+    ...formatRecordDateParts(record.timestamp),
+    dateTime: formatRecordDateTime(record.timestamp),
+    room: resolveRecordRoomName(lookup, record.deviceId),
+    device: record.deviceId,
+    detection: classifyOccupancyDetection(record),
+    detectedBy: describeOccupancyDetection(record),
+    pirEdge: record.pirEdge === true,
+    pirLevel: record.pirLevel === true,
+    mlxHit: record.mlxHit === true,
+  };
 }
 
-export function toOverrideHistoryRows(
-  records: readonly DeviceRecord<OverrideHistoryEntry>[],
+export function toOverrideHistoryRow(
+  record: DeviceRecord<OverrideHistoryEntry>,
   lookup: RecordRoomLookup
-): OverrideHistoryRow[] {
-  return records.map((record) => {
-    const role = record.requestedByRole?.trim();
-    const room = resolveRecordRoom(lookup, record.deviceId, record.roomUid);
-    return {
-      id: record.id,
-      ...formatRecordDateParts(record.requestedAt),
-      dateTime: formatRecordDateTime(record.requestedAt),
-      roomUid: room.roomUid,
-      room: room.roomName,
-      device: record.deviceId,
-      user: record.requestedByName?.trim() || 'Unknown user',
-      role: role ? capitalize(role) : EMPTY_CELL,
-      actionKind: classifyOverrideAction(record.action),
-      action: describeOverrideAction(record.action),
-      targetTemp: typeof record.targetTemp === 'number' ? `${record.targetTemp}°C` : EMPTY_CELL,
-      activeUntil: record.overrideUntil ? formatRecordDateTime(record.overrideUntil) : EMPTY_CELL,
-    };
-  });
+): OverrideHistoryRow {
+  const role = record.requestedByRole?.trim();
+  return {
+    id: record.id,
+    ...formatRecordDateParts(record.requestedAt),
+    dateTime: formatRecordDateTime(record.requestedAt),
+    room: resolveRecordRoomName(lookup, record.deviceId, record.roomUid),
+    device: record.deviceId,
+    user: record.requestedByName?.trim() || 'Unknown user',
+    role: role ? capitalize(role) : EMPTY_CELL,
+    actionKind: classifyOverrideAction(record.action),
+    action: describeOverrideAction(record.action),
+    targetTemp: typeof record.targetTemp === 'number' ? `${record.targetTemp}°C` : EMPTY_CELL,
+    activeUntil: record.overrideUntil ? formatRecordDateTime(record.overrideUntil) : EMPTY_CELL,
+  };
 }
 
 const yesNo = (value: boolean): string => (value ? 'Yes' : 'No');
@@ -479,30 +432,6 @@ export function buildOverrideDetails(row: OverrideHistoryRow): RecordDetails {
       },
     ],
   };
-}
-
-/** Total pages for `total` rows; never less than 1 so an empty list still has a page. */
-export function recordPageCount(total: number, pageSize: number = RECORDS_PAGE_SIZE): number {
-  return Math.max(1, Math.ceil(total / pageSize));
-}
-
-/** `page` pulled back into range, e.g. after a filter or a live update shrinks the list. */
-export function clampRecordPage(
-  page: number,
-  total: number,
-  pageSize: number = RECORDS_PAGE_SIZE
-): number {
-  return Math.min(Math.max(1, Math.floor(page) || 1), recordPageCount(total, pageSize));
-}
-
-/** Rows for a 1-based `page`. */
-export function pageOfRecords<T>(
-  rows: readonly T[],
-  page: number,
-  pageSize: number = RECORDS_PAGE_SIZE
-): T[] {
-  const start = (page - 1) * pageSize;
-  return rows.slice(start, start + pageSize);
 }
 
 function slugify(text: string): string {

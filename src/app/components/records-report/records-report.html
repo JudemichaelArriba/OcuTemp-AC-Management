@@ -8,12 +8,6 @@
         <div class="w-1.5 h-6 bg-blue-600 rounded-full"></div>
         <h2 id="records-report-title" class="text-lg font-black text-slate-900 uppercase tracking-tight">Records
         </h2>
-        @if (!isLoading && !active.failed && hasDevices) {
-        <span class="flex items-center gap-1.5 ml-1" title="New records appear here on their own">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse motion-reduce:animate-none"></span>
-          <span class="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Live</span>
-        </span>
-        }
       </div>
 
       <div role="tablist" aria-label="Record type"
@@ -26,14 +20,8 @@
         <button type="button" role="tab" [id]="'records-report-tab-' + tab.id"
           [attr.aria-selected]="activeTab === tab.id" aria-controls="records-report-panel" (click)="selectTab(tab.id)"
           [class]="activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-slate-800'"
-          class="relative z-10 flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 rounded-lg text-[9px] sm:text-[10px] font-black tracking-widest uppercase whitespace-nowrap transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
-          <span>{{ tab.label }}</span>
-          @let count = tabCount(tab.id);
-          @if (count !== null) {
-          <span class="px-1.5 py-px rounded-full text-[9px] tabular-nums transition-colors duration-300"
-            [class]="activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-500'">{{ count
-            }}</span>
-          }
+          class="relative z-10 px-3 sm:px-5 py-2.5 rounded-lg text-center text-[9px] sm:text-[10px] font-black tracking-widest uppercase whitespace-nowrap transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+          {{ tab.label }}
         </button>
         }
       </div>
@@ -125,7 +113,7 @@
         </thead>
 
         <tbody class="divide-y divide-slate-50">
-          @if (active.failed) {
+          @if (active.state === 'failed') {
           <tr>
             <td colspan="8" class="px-8 py-20 text-center" role="alert">
               <div class="flex flex-col items-center gap-4">
@@ -152,7 +140,7 @@
             <td class="px-8 py-5" colspan="5"><div class="h-6 bg-slate-100 rounded-lg w-40"></div></td>
           </tr>
           }
-          } @else if (active.rowCount === 0) {
+          } @else if (active.loadedCount === 0) {
           <tr>
             <td colspan="8" class="px-8 py-20 text-center">
               <div class="flex flex-col items-center gap-4">
@@ -164,14 +152,21 @@
                 @if (!hasDevices) {
                 <p class="text-xs font-medium text-slate-400">No room has a device linked yet. Link one from Room
                   Management to start collecting records.</p>
-                } @else if (active.storedCount === 0) {
-                <p class="text-xs font-medium text-slate-400">{{ active.emptyHint }}</p>
+                } @else if (isSearching && active.hasMore) {
+                <p class="text-xs font-medium text-slate-400">No match in the newest {{ active.scanned }} records.
+                </p>
+                <button type="button" (click)="nextPage()" [disabled]="!canGoNext"
+                  class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 active:scale-95 transition-all shadow-sm disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+                  {{ active.loadingMore ? 'Searching...' : 'Search older records' }}
+                </button>
                 } @else if (isFiltered) {
                 <p class="text-xs font-medium text-slate-400">Nothing matches the current search and filters.</p>
                 <button type="button" (click)="clearFilters()"
                   class="px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 active:scale-95 transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
                   Clear filters
                 </button>
+                } @else {
+                <p class="text-xs font-medium text-slate-400">{{ active.emptyHint }}</p>
                 }
               </div>
             </td>
@@ -180,15 +175,14 @@
           @for (row of occupancy.pageRows; track row.id) {
           <tr (click)="openOccupancy(row)" (keydown.enter)="openOccupancy(row)" tabindex="0"
             [attr.aria-label]="'View details: ' + row.room + ', ' + row.dateTime"
-            class="cursor-pointer transition-colors duration-700 group focus:outline-none focus-visible:bg-blue-50"
-            [class]="freshIds.has(row.id) ? 'bg-emerald-50' : 'hover:bg-blue-50/50'">
+            class="cursor-pointer hover:bg-blue-50/50 transition-all duration-150 group focus:outline-none focus-visible:bg-blue-50">
             <td class="px-6 py-4 whitespace-nowrap">
               <span class="text-sm font-bold text-slate-900 tabular-nums">{{ row.date }}</span>
               <span class="text-sm font-medium text-slate-400 tabular-nums ml-2">{{ row.time }}</span>
             </td>
             <td class="px-6 py-4 text-sm font-bold text-slate-900 break-words">{{ row.room }}</td>
-            <td class="hidden md:table-cell px-6 py-4 text-sm text-slate-600 font-medium whitespace-nowrap">{{ row.device }}
-            </td>
+            <td class="hidden md:table-cell px-6 py-4 text-sm text-slate-600 font-medium whitespace-nowrap">{{
+              row.device }}</td>
             <td class="px-6 py-4">
               <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap"
                 [class]="detectionChips[row.detection].classes">
@@ -208,15 +202,14 @@
           @for (row of overrides.pageRows; track row.id) {
           <tr (click)="openOverride(row)" (keydown.enter)="openOverride(row)" tabindex="0"
             [attr.aria-label]="'View details: ' + row.action + ', ' + row.room + ', ' + row.dateTime"
-            class="cursor-pointer transition-colors duration-700 group focus:outline-none focus-visible:bg-blue-50"
-            [class]="freshIds.has(row.id) ? 'bg-emerald-50' : 'hover:bg-blue-50/50'">
+            class="cursor-pointer hover:bg-blue-50/50 transition-all duration-150 group focus:outline-none focus-visible:bg-blue-50">
             <td class="px-6 py-4 whitespace-nowrap">
               <span class="text-sm font-bold text-slate-900 tabular-nums">{{ row.date }}</span>
               <span class="text-sm font-medium text-slate-400 tabular-nums ml-2">{{ row.time }}</span>
             </td>
             <td class="px-6 py-4 text-sm font-bold text-slate-900 break-words">{{ row.room }}</td>
-            <td class="hidden md:table-cell px-6 py-4 text-sm text-slate-600 font-medium whitespace-nowrap">{{ row.device }}
-            </td>
+            <td class="hidden md:table-cell px-6 py-4 text-sm text-slate-600 font-medium whitespace-nowrap">{{
+              row.device }}</td>
             <td class="px-6 py-4">
               <span class="block text-sm font-bold text-slate-900 break-words">{{ row.user }}</span>
               <span class="block text-[11px] font-bold text-slate-400 uppercase">{{ row.role }}</span>
@@ -252,29 +245,34 @@
           <span class="material-symbols-outlined text-blue-600 text-[18px]!" aria-hidden="true">receipt_long</span>
         </span>
         <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-          @if (isLoading || active.failed) {
-          Total records <span class="text-blue-600 ml-1 text-sm">--</span>
+          @if (active.state !== 'ready' || !roomsLoaded) {
+          Records <span class="text-blue-600 ml-1 text-sm">--</span>
+          } @else if (active.loadedCount === 0) {
+          <span class="text-blue-600 text-sm tabular-nums">{{ countLabel }}</span>
           } @else {
-          <span class="text-blue-600 mr-1 text-sm tabular-nums">{{ countLabel }}</span>
-          @if (active.rowCount > 0) {
-          <span class="tabular-nums">showing {{ firstRowNumber }}&ndash;{{ lastRowNumber }}</span>
-          }
+          Showing <span class="tabular-nums">{{ firstRowNumber }}&ndash;{{ lastRowNumber }}</span> of
+          <span class="text-blue-600 ml-1 text-sm tabular-nums">{{ countLabel }}</span>
           }
         </p>
       </div>
 
       <div class="flex items-center gap-2">
-        <button type="button" (click)="previousPage()" [disabled]="active.page <= 1" aria-label="Previous page"
+        <button type="button" (click)="previousPage()" [disabled]="!canGoPrevious" aria-label="Previous page"
           class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 border border-slate-200 bg-white hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
           <span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_left</span>
         </button>
         <div
-          class="px-5 h-10 flex items-center justify-center rounded-xl text-xs font-black bg-blue-600 text-white shadow-xl shadow-blue-200 tabular-nums whitespace-nowrap">
-          {{ active.page }} / {{ pageCount }}
+          class="px-5 h-10 flex items-center justify-center rounded-xl text-xs font-black bg-blue-600 text-white shadow-xl shadow-blue-200 tabular-nums"
+          [attr.aria-label]="'Page ' + active.page">
+          {{ active.page }}
         </div>
-        <button type="button" (click)="nextPage()" [disabled]="active.page >= pageCount" aria-label="Next page"
+        <button type="button" (click)="nextPage()" [disabled]="!canGoNext" aria-label="Next page"
           class="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 border border-slate-200 bg-white hover:border-blue-400 hover:text-blue-600 transition-all shadow-sm disabled:opacity-40 disabled:pointer-events-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40">
+          @if (active.loadingMore) {
+          <span class="w-4 h-4 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></span>
+          } @else {
           <span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+          }
         </button>
       </div>
     </div>
