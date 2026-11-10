@@ -86,8 +86,8 @@ export class PdfExportService {
     }
 
     /**
-     * Exports one room's records as a single table. The title carries the room name and the
-     * selected period, and the table holds exactly the rows passed in `options.body`.
+     * Exports records as a single table. The title carries the room label (one room or
+     * `All rooms`) and the selected period; the table holds exactly the rows in `options.body`.
      */
     async generateRecordsReport(options: RecordsReportOptions): Promise<void> {
         this._logoBase64 = await this.loadImageAsBase64('/logo.png').catch(() => null);
