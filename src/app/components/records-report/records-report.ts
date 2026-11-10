@@ -243,6 +243,11 @@ export class RecordsReport implements OnChanges, OnDestroy {
     return { startDate: this.startDate, endDate: this.endDate };
   }
 
+  /** Table columns of the active tab, for the cells that span the whole row. */
+  get columnCount(): number {
+    return this.activeTab === 'occupancy' ? 5 : 8;
+  }
+
   get isSearching(): boolean {
     return this.appliedQuery !== '';
   }
