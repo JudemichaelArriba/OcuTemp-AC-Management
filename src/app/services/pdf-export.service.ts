@@ -28,6 +28,21 @@ interface KpiCard {
     sublabel: string;
 }
 
+/** A single-table records export. `body` rows must line up with the `head` columns. */
+export interface RecordsReportOptions {
+    /** e.g. `Occupancy Log`. */
+    recordType: string;
+    roomName: string;
+    deviceId: string;
+    /** Human label for the selected period, e.g. `Aug 27, 2026 – Oct 7, 2026`. */
+    rangeLabel: string;
+    head: string[];
+    body: string[][];
+    /** Column indexes kept on one line (dates), sized to their content. */
+    noWrapColumns?: number[];
+    fileName: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PdfExportService {
     private readonly W  = 210;
@@ -68,6 +83,108 @@ export class PdfExportService {
 
         doc.save(`energy-report-${todayKey}.pdf`);
         this._logoBase64 = null;
+    }
+
+    /**
+     * Exports one room's records as a single table. The title carries the room name and the
+     * selected period, and the table holds exactly the rows passed in `options.body`.
+     */
+    async generateRecordsReport(options: RecordsReportOptions): Promise<void> {
+        this._logoBase64 = await this.loadImageAsBase64('/logo.png').catch(() => null);
+
+        try {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const title = `${options.roomName} — ${options.recordType}`;
+            doc.setProperties({ title: `${title} (${options.rangeLabel})` });
+
+            const tableY = this.buildRecordsHeader(doc, title, options);
+
+            const columnStyles: NonNullable<UserOptions['columnStyles']> = {};
+            for (const index of options.noWrapColumns ?? []) {
+                columnStyles[index] = { cellWidth: 'wrap' };
+            }
+            columnStyles[0] = { ...columnStyles[0], fontStyle: 'bold', textColor: [30, 41, 59] };
+
+            autoTable(doc, {
+                startY: tableY,
+                head: [options.head],
+                body: options.body,
+                ...this.baseTableOptions(),
+                columnStyles,
+                margin: { top: 20, left: this.M, right: this.M, bottom: 20 },
+            } as UserOptions);
+
+            this.stampPageNumbers(doc);
+            doc.save(options.fileName);
+        } finally {
+            this._logoBase64 = null;
+        }
+    }
+
+    /** Draws the records title band and summary lines; returns the y where the table starts. */
+    private buildRecordsHeader(doc: jsPDF, title: string, options: RecordsReportOptions): number {
+        const LOGO_SIZE = 12;
+        const LOGO_Y    = 6;
+        const TITLE_Y   = 32;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(18);
+        const titleLines: string[] = doc.splitTextToSize(title, this.CW);
+        const titleLineH = doc.getLineHeight() / doc.internal.scaleFactor;
+        const rangeY     = TITLE_Y + (titleLines.length - 1) * titleLineH + 9;
+        const bandH      = rangeY + 9;
+
+        doc.setFillColor(37, 99, 235);
+        doc.rect(0, 0, this.W, bandH, 'F');
+        doc.setFillColor(29, 78, 216);
+        doc.rect(0, bandH - 3, this.W, 3, 'F');
+
+        if (this._logoBase64) {
+            doc.addImage(this._logoBase64, 'PNG', this.M, LOGO_Y, LOGO_SIZE, LOGO_SIZE);
+        }
+        const brandTextX = this._logoBase64 ? this.M + LOGO_SIZE + 3 : this.M;
+
+        doc.setFontSize(12);
+        doc.setTextColor(255, 255, 255);
+        doc.text('OCUTEMP', brandTextX, LOGO_Y + LOGO_SIZE / 2 + 2.2);
+
+        doc.setFontSize(18);
+        doc.text(titleLines, this.M, TITLE_Y);
+
+        doc.setFontSize(12);
+        doc.setTextColor(219, 234, 254);
+        doc.text(options.rangeLabel, this.M, rangeY);
+
+        const count   = options.body.length;
+        const genDate = new Date().toLocaleString('en-US', {
+            timeZone: 'Asia/Manila',
+            year:     'numeric',
+            month:    'long',
+            day:      'numeric',
+            hour:     '2-digit',
+            minute:   '2-digit',
+        }).replace(/[  ]/g, ' ');
+
+        const summaryY = bandH + 8;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(30, 41, 59);
+        doc.text(
+            `${count} ${count === 1 ? 'record' : 'records'}  ·  Device ${options.deviceId}`,
+            this.M,
+            summaryY
+        );
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text(
+            `Generated: ${genDate}  ·  All times in Asia/Manila (PHT, UTC+8)`,
+            this.M,
+            summaryY + 5
+        );
+
+        return summaryY + 10;
     }
 
     private buildCoverPage(
