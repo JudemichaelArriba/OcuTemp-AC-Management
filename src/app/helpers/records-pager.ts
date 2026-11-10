@@ -80,6 +80,8 @@ interface Feed<T> {
   exhausted: boolean;
   /** True once the device has been read; only then is its newest key known for a live tail. */
   fetched: boolean;
+  /** A page read of this device is in flight; its tail must stay closed until it ends. */
+  reading: boolean;
   stopTail?: () => void;
 }
 
@@ -132,6 +134,7 @@ export class RecordsPager<T extends PagedRecord> {
       newestKey: '',
       exhausted: false,
       fetched: false,
+      reading: false,
     }));
   }
 
@@ -227,13 +230,16 @@ export class RecordsPager<T extends PagedRecord> {
       ? this.options.filteredChunkSize ?? this.options.pageSize
       : this.options.pageSize;
     let page: RecordPage<T>;
+    feed.reading = true;
     try {
       page = await this.source.fetchPage(feed.deviceId, { limit, before: feed.cursor, keyRange });
     } catch (error) {
+      feed.reading = false;
       // The read is over; keep following a device that was already being followed.
       if (generation === this.generation) this.openTail(feed);
       throw error;
     }
+    feed.reading = false;
     if (generation !== this.generation) return 0;
 
     const records = page.records;
@@ -251,7 +257,7 @@ export class RecordsPager<T extends PagedRecord> {
   }
 
   private openTail(feed: Feed<T>): void {
-    if (!this.query.live || this.liveSuspended || !feed.fetched || feed.stopTail) return;
+    if (!this.query.live || this.liveSuspended || !feed.fetched || feed.reading || feed.stopTail) return;
     if (!this.source.streamFrom) return;
 
     const generation = this.generation;

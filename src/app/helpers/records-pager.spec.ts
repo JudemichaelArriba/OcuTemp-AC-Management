@@ -314,6 +314,22 @@ describe('RecordsPager', () => {
       expect(source.tails.size).toBe(0);
     });
 
+    it('does not reopen a tail on resume while its device is being read', async () => {
+      const source = new FakeSource({ a: range(1, 30).map((time) => record('a', time)) });
+      const pager = new RecordsPager(source, { pageSize: 5 });
+      pager.start({ deviceIds: ['a'], live: true });
+      await pager.loadMore();
+
+      pager.suspendLive();
+      const reading = pager.loadMore();
+      pager.resumeLive();
+      expect(source.tails.has('a')).toBe(false);
+
+      await reading;
+      expect(source.overlaps).toEqual([]);
+      expect(source.tails.get('a')?.fromKey).toBe(key(30));
+    });
+
     it('keeps following a device after a later read of it fails', async () => {
       const source = new FakeSource({ a: range(1, 30).map((time) => record('a', time)) });
       const pager = new RecordsPager(source, { pageSize: 5 });
